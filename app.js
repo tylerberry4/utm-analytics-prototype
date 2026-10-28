@@ -88,6 +88,8 @@
     trigger: 'all', filters: [], metric: 'clicks', interval: 'day',
     sort: { key: 'clicks', dir: -1 }, showAll: false,
     tabs: { utm: 'campaign', loc: 'map', dev: 'device', ref: 'referrer' },
+    // Links page
+    from: 'overview', lq: '', groupBy: 'none', lsort: { key: 'created', dir: -1 }, sel: new Set(), collapsed: new Set(),
   };
 
   const METRICS = [
@@ -107,6 +109,10 @@
     const unfiltered = state.filters.length ? D.query({ range: state.range, trigger: state.trigger, filters: state.view === 'link' ? [{ dim: 'link', op: 'is', values: [state.slug] }] : [] }) : cur;
     const priorBySlug = Object.fromEntries(prior.rows.map(r => [r.link.slug, r]));
     Q = { cur, prior, unfiltered, priorBySlug, filters };
+    if (state.view === 'links') {
+      Q.links = D.query({ range: ALL_RANGE, trigger: 'all', filters: state.filters });
+      Q.linksAll = state.filters.length ? D.query({ range: ALL_RANGE, trigger: 'all', filters: [] }) : Q.links;
+    }
     return Q;
   }
   function delta(cur, prev) { if (!prev) return null; return (cur - prev) / prev; }
@@ -174,7 +180,8 @@
       const vals = f.values.length > 2 ? `${esc(f.values[0])} <span class="op">+${f.values.length - 1} more</span>` : f.values.map(esc).join('<span class="op"> or </span>');
       return `<span class="chip"><span class="k">${esc(d.label)}</span><span class="op">${f.op}</span><span class="v"><button data-edit-filter="${i}" title="Edit">${vals}</button></span><button class="x" data-remove-filter="${i}" aria-label="Remove filter">${I.close}</button></span>`;
     }).join('');
-    return `<div class="chips">${chips}<button class="clear" id="clear-filters">Clear all</button><span class="context num">Showing <b>${fmt.n(cur)}</b> of ${fmt.n(total)} clicks (${fmt.pct(total ? cur / total : 0)})</span></div>`;
+    const ctx = state.view === 'links' ? `Showing <b>${Q.links.rows.length}</b> of ${Q.linksAll.rows.length} links` : `Showing <b>${fmt.n(cur)}</b> of ${fmt.n(total)} clicks (${fmt.pct(total ? cur / total : 0)})`;
+    return `<div class="chips">${chips}<button class="clear" id="clear-filters">Clear all</button><span class="context num">${ctx}</span></div>`;
   }
 
   /* ---------- KPI + chart ---------- */
@@ -363,7 +370,7 @@
     const b = Q.cur.breakdown;
     const utms = ['source', 'medium', 'campaign', 'content', 'term'].filter(k => link[k]).map(k => `<button class="utm-chip" data-utm="${k}" data-val="${esc(link[k])}" title="Filter analytics by this value"><span class="k">utm_${k}</span>${esc(link[k])}</button>`).join('');
     const hasQR = link.qr > 0;
-    const head = `<div class="crumbs"><a href="#" id="back">${I.arrowL}Analytics</a><span>/</span><span class="cur">${esc(link.slug)}</span></div>
+    const head = `<div class="crumbs"><a href="#" id="back">${I.arrowL}${state.from === 'links' ? 'Links' : 'Analytics'}</a><span>/</span><span class="cur">${esc(link.slug)}</span></div>
       <section class="card"><div class="link-head"><span class="type">${hasQR ? I.qr : I.links}</span><div class="info">
         <div class="t"><h2>${esc(link.title)}</h2><span class="status-pill">Active</span></div>
         <div class="urls"><span class="short">${esc(link.slug)}</span><button class="icon-btn" data-copy="https://${esc(link.slug)}" title="Copy short link">${I.copy}</button><span class="arrow">→</span><span class="dest">${esc(link.dest)}${esc(utmQuery(link))}</span><button class="icon-btn" data-copy="https://${esc(link.dest)}${esc(utmQuery(link))}" title="Copy destination">${I.external}</button></div>
@@ -376,6 +383,150 @@
       <p class="footnote">Clicks are successful redirects; suspected bots are excluded. Unique clicks reset each calendar month. Times in UTC.</p>`;
   }
 
+  /* ---------- Links page ---------- */
+  // Whole history: the Links table shows lifetime clicks, not the analytics date range.
+  const ALL_RANGE = (() => { const end = D.stripTime(D.TODAY); const start = new Date(end); start.setDate(start.getDate() - (D.DAYS - 1)); return { start, end }; })();
+  const TEMPLATES = { paid_social: 'Paid social', social: 'Organic social', cpc: 'Paid search', email: 'Email', print: 'Print · QR', referral: 'Partner', audio: 'Podcast', video: 'Creator' };
+  const templateOf = l => TEMPLATES[l.medium] || '—';
+  const initials = name => name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  const GROUPS = [['none', 'No grouping'], ['campaign', 'Campaign'], ['source', 'Source'], ['medium', 'Medium'], ['by', 'Created by'], ['template', 'Template']];
+  const LSORTS = [['created', 'Newest first'], ['clicks', 'Most clicks'], ['recent', 'Most clicks · 30 days'], ['link', 'Short link A–Z']];
+  const groupValue = (l, g) => g === 'by' ? l.by : g === 'template' ? templateOf(l) : (l[g] || 'Not tagged');
+
+  // Rows for the table: lifetime totals + last-30-day slice, filtered by the shared chips and the search box.
+  function linkRows() {
+    const q = state.lq.trim().toLowerCase();
+    const rows = Q.links.rows.map(r => {
+      const last30 = r.series.slice(-30), prev30 = r.series.slice(-60, -30);
+      const recent = last30.reduce((a, p) => a + p.clicks, 0), before = prev30.reduce((a, p) => a + p.clicks, 0);
+      return { ...r, last30, recent, recentDelta: delta(recent, before) };
+    }).filter(r => !q || [r.link.slug, r.link.dest, r.link.title, r.link.campaign, r.link.source, r.link.medium, ...r.link.tags].some(s => s && s.toLowerCase().includes(q)));
+    const { key, dir } = state.lsort;
+    rows.sort((a, b) => {
+      let v = 0;
+      if (key === 'created') v = a.link.created < b.link.created ? -1 : a.link.created > b.link.created ? 1 : 0;
+      else if (key === 'link') v = a.link.slug.localeCompare(b.link.slug);
+      else if (key === 'campaign') v = (a.link.campaign || 'zz').localeCompare(b.link.campaign || 'zz');
+      else v = a[key] - b[key];
+      return v * dir;
+    });
+    return rows;
+  }
+
+  function linkRowHTML(r, i) {
+    const l = r.link, hasQR = l.qr > 0, on = state.sel.has(l.slug);
+    const typeTip = hasQR ? `Has a QR code · ${Math.round((r.clicks ? r.qr / r.clicks : 0) * 100)}% of clicks from scans` : 'Link only · no QR code';
+    const created = new Date(l.created);
+    return `<div class="lrow ${on ? 'sel' : ''}" data-link="${esc(l.slug)}" role="row" tabindex="0" style="animation-delay:${Math.min(i, 12) * 20}ms">
+      <button class="cb ${on ? 'on' : ''}" data-sel="${esc(l.slug)}" role="checkbox" aria-checked="${on}" aria-label="Select ${esc(l.slug)}">${I.check}</button>
+      <div class="lk"><span class="type ${hasQR ? 'qr' : ''}" data-tip="${typeTip}">${hasQR ? I.qr : I.links}</span>
+        <div class="txt"><span class="lk-name">${esc(l.slug)}${l.tags.length ? l.tags.map(t => `<span class="tag">${esc(t)}</span>`).join('') : ''}</span><span class="lk-dest" title="${esc(l.dest)}${esc(utmQuery(l))}">${esc(l.dest)}<span class="qs">${esc(utmQuery(l))}</span></span></div></div>
+      <div class="camp">${l.campaign ? `<button class="utm-chip sm" data-utm="campaign" data-val="${esc(l.campaign)}" title="Filter by this campaign">${esc(l.campaign)}</button>` : '<span class="untagged">Not tagged</span>'}<span class="sm-muted">${esc(l.source)} · ${esc(l.medium)}</span></div>
+      <div class="clk"><span class="spark">${sparkline(r.last30, 'clicks')}</span><span class="n"><b class="num">${fmt.n(r.clicks)}</b><span class="sm-muted num">${r.recentDelta == null ? '<span class="d new">New</span> · all in 30d' : `${fmt.n(r.recent)} <span class="d ${r.recentDelta > 0.005 ? 'up' : r.recentDelta < -0.005 ? 'down' : ''}">${(r.recentDelta > 0 ? '+' : '') + Math.round(r.recentDelta * 100)}%</span> 30d`}</span></span></div>
+      <div class="who"><span class="av" title="${esc(l.by)}">${initials(l.by)}</span><span class="txt"><span>${fmt.d(created, { month: 'short', day: 'numeric', year: 'numeric' })}</span><span class="sm-muted">${esc(l.by)}</span></span></div>
+      <div><span class="tpl">${esc(templateOf(l))}</span></div>
+      <div class="acts">
+        <button class="icon-btn" data-copy="https://${esc(l.slug)}" title="Copy short link">${I.copy}</button>
+        <button class="icon-btn" data-row-qr="${esc(l.slug)}" title="${hasQR ? 'QR code' : 'Create QR code'}">${I.qr}</button>
+        <button class="icon-btn" data-row-analytics="${esc(l.slug)}" title="Analytics">${I.analytics}</button>
+        <button class="icon-btn" data-row-more="${esc(l.slug)}" title="More" aria-haspopup="menu">${I.more}</button>
+      </div></div>`;
+  }
+
+  function linksTableHTML() {
+    const rows = linkRows(), total = Q.links.rows.length;
+    const sortBtn = (key, label, cls = '') => `<button data-lsort="${key}" class="${state.lsort.key === key ? 'on' : ''} ${state.lsort.key === key && state.lsort.dir === 1 ? 'asc' : ''} ${cls}">${label}${I.sort}</button>`;
+    const allOn = rows.length && rows.every(r => state.sel.has(r.link.slug));
+    const head = `<div class="lrow head" role="row"><button class="cb ${allOn ? 'on' : ''}" id="sel-all" role="checkbox" aria-checked="${allOn}" aria-label="Select all">${I.check}</button>
+      <div>${sortBtn('link', 'Link')}</div><div>${sortBtn('campaign', 'Campaign')}</div><div>${sortBtn('clicks', 'Clicks')}</div><div>${sortBtn('created', 'Created')}</div><div>Template</div><div></div></div>`;
+    let body;
+    if (!rows.length) body = `<div class="empty" style="min-height:200px"><strong>No links match</strong>${state.lq ? 'Try a different search' : 'Try fewer filters'}, or create a new link.<div style="margin-top:10px;display:flex;gap:8px"><button class="btn" id="clear-search">Clear search &amp; filters</button><button class="btn primary" id="create-btn-empty">Create link</button></div></div>`;
+    else if (state.groupBy === 'none') body = rows.map(linkRowHTML).join('');
+    else {
+      const groups = new Map();
+      rows.forEach(r => { const g = groupValue(r.link, state.groupBy); if (!groups.has(g)) groups.set(g, []); groups.get(g).push(r); });
+      body = [...groups.entries()].sort((a, b) => b[1].reduce((x, r) => x + r.clicks, 0) - a[1].reduce((x, r) => x + r.clicks, 0)).map(([g, rs]) => {
+        const open = !state.collapsed.has(g), clicks = rs.reduce((a, r) => a + r.clicks, 0);
+        return `<div class="grp ${open ? 'open' : ''}"><button class="grp-h" data-group="${esc(g)}" aria-expanded="${open}"><span class="chev">${I.chevR}</span><span class="g">${esc(g)}</span><span class="sm-muted">${rs.length} link${rs.length === 1 ? '' : 's'} · ${fmt.n(clicks)} clicks</span></button>${open ? rs.map(linkRowHTML).join('') : ''}</div>`;
+      }).join('');
+    }
+    return `<section class="card" id="links-table"><div class="ltable">${head}${body}</div>
+      <div class="tbl-foot"><span>Showing ${rows.length} of ${total} link${total === 1 ? '' : 's'}${state.lq ? ` matching “${esc(state.lq)}”` : ''}</span><span class="grow"></span><span>Lifetime clicks · 25 per page</span></div></section>`;
+  }
+
+  function bulkBarHTML() {
+    const n = state.sel.size; if (!n) return '';
+    return `<div class="bulk" role="toolbar" aria-label="Selected links"><span class="cnt"><b>${n}</b> selected</span>
+      <button data-bulk="copy">${I.copy}Copy links</button><button data-bulk="csv">${I.download}Export CSV</button><button data-bulk="tag">${I.tag}Add tag</button><button data-bulk="archive">${I.reset}Archive</button><button data-bulk="delete" class="danger">${I.close}Delete</button>
+      <button class="x" data-bulk="clear" aria-label="Clear selection">${I.close}</button></div>`;
+  }
+
+  function linksHTML() {
+    const n = Q.links.rows.length, all = Q.linksAll.rows.length;
+    const g = GROUPS.find(x => x[0] === state.groupBy), s = LSORTS.find(x => x[0] === state.lsort.key);
+    const nf = state.filters.length;
+    return `<div class="view"><div class="page-head"><div class="title"><h1>Links</h1><span class="status" tabindex="0" data-tip="${all} links in this workspace · updated 4 min ago">${all} links</span></div>
+        <div class="actions"><button class="btn" id="import-btn">${I.download}Import CSV</button><button class="btn primary" id="create-btn"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Create link</button></div></div></div>
+      <div class="toolbar links-tb"><div class="search lq">${I.search}<input id="lq" placeholder="Search links, destinations, campaigns…" value="${esc(state.lq)}" aria-label="Search links"><button class="icon-btn" id="lq-clear" aria-label="Clear search" ${state.lq ? '' : 'hidden'}>${I.close}</button></div>
+        <div class="controls">
+          <button class="tb-btn" id="filter-btn" aria-haspopup="menu" aria-expanded="false">${I.filter}Filter${nf ? `<span class="badge">${nf}</span>` : ''}</button>
+          <button class="tb-btn" id="group-btn" aria-haspopup="menu" aria-expanded="false"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h6"/></svg>${state.groupBy === 'none' ? 'Group' : g[1]}<span class="chev">${I.chev}</span></button>
+          <button class="tb-btn" id="lsort-btn" aria-haspopup="menu" aria-expanded="false">${I.sort}${s[1]}<span class="chev">${I.chev}</span></button>
+          <button class="tb-btn icon" id="links-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button></div></div>
+      ${chipsHTML()}${linksTableHTML()}${bulkBarHTML()}`;
+  }
+
+  function groupMenu(anchor) {
+    openPop(anchor, `<div class="menu" style="width:200px"><div class="group">Group by</div>${GROUPS.map(([k, l]) => `<button class="mi ${state.groupBy === k ? 'on' : ''}" data-g="${k}"><span class="check">${I.check}</span><span class="grow">${l}</span></button>`).join('')}</div>`, {
+      onMount(el) { el.addEventListener('click', e => { const b = e.target.closest('[data-g]'); if (!b) return; state.groupBy = b.dataset.g; state.collapsed.clear(); closePop(); render(); }); },
+    });
+  }
+  function lsortMenu(anchor) {
+    openPop(anchor, `<div class="menu" style="width:220px"><div class="group">Sort by</div>${LSORTS.map(([k, l]) => `<button class="mi ${state.lsort.key === k ? 'on' : ''}" data-s="${k}"><span class="check">${I.check}</span><span class="grow">${l}</span></button>`).join('')}</div>`, {
+      onMount(el) { el.addEventListener('click', e => { const b = e.target.closest('[data-s]'); if (!b) return; const k = b.dataset.s; state.lsort = { key: k, dir: k === 'link' ? 1 : -1 }; closePop(); render(); }); },
+    });
+  }
+  function linksMoreMenu(anchor) {
+    openPop(anchor, `<div class="menu" style="width:230px">
+      <button class="mi" data-act="links-csv">${I.download}<span class="grow">Export all as CSV</span></button>
+      <button class="mi" data-act="columns">${I.sliders}<span class="grow">Columns…</span></button>
+      <div class="sep"></div>
+      <button class="mi" data-act="archived">${I.reset}<span class="grow">Show archived links</span></button>
+      <button class="mi" data-act="about">${I.info}<span class="grow">Tips &amp; shortcuts</span></button></div>`, { align: 'right', onMount(el) { el.addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (!b) return; closePop(); action(b.dataset.act); }); } });
+  }
+  function rowMenu(anchor, slug) {
+    const l = D.LINKS.find(x => x.slug === slug);
+    openPop(anchor, `<div class="menu" style="width:220px"><div class="group" style="font-family:var(--font-mono);text-transform:none;letter-spacing:0">${esc(slug)}</div>
+      <button class="mi" data-r="analytics">${I.analytics}<span class="grow">View analytics</span></button>
+      <button class="mi" data-r="edit">${I.edit}<span class="grow">Edit link</span></button>
+      <button class="mi" data-r="copy-dest">${I.copy}<span class="grow">Copy destination URL</span></button>
+      <button class="mi" data-r="open">${I.external}<span class="grow">Open destination</span></button>
+      <div class="sep"></div>
+      <button class="mi" data-r="dup"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 16V6a2 2 0 0 1 2-2h10"/></svg><span class="grow">Duplicate</span></button>
+      <button class="mi" data-r="archive">${I.reset}<span class="grow">Archive</span></button>
+      <button class="mi danger" data-r="delete">${I.close}<span class="grow">Delete</span></button></div>`, { align: 'right', onMount(el) {
+        el.addEventListener('click', e => { const b = e.target.closest('[data-r]'); if (!b) return; closePop(); const r = b.dataset.r;
+          if (r === 'analytics') goLink(slug); else if (r === 'copy-dest') copyText(`https://${l.dest}${utmQuery(l)}`, 'Destination copied'); else if (r === 'open') toast(`Would open ${l.dest} in a new tab`);
+          else if (r === 'delete') confirmDelete([slug]); else toast(`${b.textContent.trim()} is outside this prototype`); });
+      } });
+  }
+  function confirmDelete(slugs) {
+    openModal(`<div class="modal-h"><h3>Delete ${slugs.length === 1 ? 'this link' : `${slugs.length} links`}?</h3><button class="close" aria-label="Close">${I.close}</button></div>
+      <div class="modal-b about"><p>${slugs.length === 1 ? `<b>${esc(slugs[0])}</b> will stop redirecting` : 'These links will stop redirecting'} and their click history will be removed from Analytics. This can't be undone.</p>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px"><button class="btn close">Cancel</button><button class="btn primary danger" id="del-ok">Delete</button></div></div>`, { width: 440, onMount(s) {
+        $('#del-ok', s).addEventListener('click', () => { closeModal(); state.sel.clear(); toast(`Deleted ${slugs.length} link${slugs.length === 1 ? '' : 's'} (prototype only — data is unchanged)`); render(); });
+      } });
+  }
+  function bulk(act) {
+    const slugs = [...state.sel];
+    if (act === 'clear') { state.sel.clear(); render(); return; }
+    if (act === 'copy') { copyText(slugs.map(s => 'https://' + s).join('\n'), `Copied ${slugs.length} links`); return; }
+    if (act === 'csv') { toast(`Exported ${slugs.length} links as CSV`); return; }
+    if (act === 'delete') { confirmDelete(slugs); return; }
+    toast(`${act === 'tag' ? 'Add tag' : 'Archive'} is outside this prototype`);
+  }
+  function goLinks(opts = {}) { state.view = 'links'; state.slug = null; if (!opts.keepFilters) { state.filters = []; } state.sel.clear(); render({ top: true }); }
+
   /* ---------- Render + post-render effects ---------- */
   const prevCounts = {};
   function render(opts = {}) {
@@ -384,7 +535,7 @@
     const view = $('#view');
     const y = window.scrollY;
     if (opts.busy) { view.classList.add('busy'); setTimeout(() => view.classList.remove('busy'), 500); }
-    view.innerHTML = state.view === 'link' ? linkHTML() : overviewHTML();
+    view.innerHTML = state.view === 'link' ? linkHTML() : state.view === 'links' ? linksHTML() : overviewHTML();
     if (opts.top) window.scrollTo({ top: 0, behavior: 'instant' }); else window.scrollTo(0, y);
     requestAnimationFrame(() => {
       $$('[data-w]', view).forEach(el => { el.style.width = el.dataset.w + '%'; });
@@ -398,9 +549,10 @@
       });
       drawChart();
     });
-    $$('.nav a').forEach(a => a.classList.toggle('active', a.dataset.nav === 'analytics'));
-    $('#topbar-title').textContent = state.view === 'link' ? state.slug : 'Acme Marketing';
-    try { location.hash = state.view === 'link' ? 'link-' + state.slug.replace(/[^a-z0-9]+/gi, '-') : 'overview'; } catch (e) { /* ignore */ }
+    const section = state.view === 'links' || (state.view === 'link' && state.from === 'links') ? 'links' : 'analytics';
+    $$('.nav a').forEach(a => a.classList.toggle('active', a.dataset.nav === section));
+    $('#topbar-title').textContent = state.view === 'link' ? state.slug : state.view === 'links' ? 'Links' : 'Acme Marketing';
+    try { location.hash = state.view === 'link' ? 'link-' + state.slug.replace(/[^a-z0-9]+/gi, '-') : state.view; } catch (e) { /* ignore */ }
   }
   window.addEventListener('resize', (() => { let t; return () => { clearTimeout(t); t = setTimeout(drawChart, 120); }; })());
 
@@ -453,7 +605,7 @@
     const existing = editIndex > -1 ? state.filters[editIndex] : null;
     let op = existing ? existing.op : 'is';
     const sel = new Set(existing ? existing.values : []);
-    const ctx = { range: state.range, trigger: state.trigger, filters: state.view === 'link' ? [...state.filters, { dim: 'link', op: 'is', values: [state.slug] }] : state.filters };
+    const ctx = { range: state.view === 'links' ? ALL_RANGE : state.range, trigger: state.trigger, filters: state.view === 'link' ? [...state.filters, { dim: 'link', op: 'is', values: [state.slug] }] : state.filters };
     const values = dim === 'trigger' ? [{ label: 'Link click', value: Q.unfiltered.totals.linkClicks, share: 0 }, { label: 'QR scan', value: Q.unfiltered.totals.qr, share: 0 }] : D.valuesFor(dim, ctx);
     const list = q => {
       const ql = q.toLowerCase();
@@ -553,6 +705,8 @@
       case 'copy-link': copyText(location.href, 'Link copied'); break;
       case 'reset': Object.assign(state, { view: 'overview', slug: null, preset: 'month', range: PRESETS[4].get(), compare: true, trigger: 'all', filters: [], metric: 'clicks', interval: 'day', sort: { key: 'clicks', dir: -1 }, showAll: false, tabs: { utm: 'campaign', loc: 'map', dev: 'device', ref: 'referrer' } }); render({ busy: true, top: true }); toast('Prototype reset'); break;
       case 'about': tipsModal(); break;
+      case 'links-csv': toast(`Exported ${Q.links ? Q.links.rows.length : D.LINKS.length} links as CSV`); break;
+      case 'columns': case 'archived': toast(`${act === 'columns' ? 'Column settings' : 'Archived links'} are outside this prototype`); break;
     }
   }
   function exportCSV() {
@@ -619,6 +773,9 @@
       <li>Click a tile at the top (Total, Unique…) to switch what the chart shows. Hover the chart for exact numbers.</li>
       <li>Click a link in <b>Top links</b> to see its own report, UTM tags and QR code.</li>
       <li>Use ↗ on a card to see the full list with search.</li></ul>
+      <h4>Links page</h4><ul>
+      <li>Search, Filter and Group by work together. Click a row to open that link's analytics; hover a row for copy, QR and more.</li>
+      <li>Tick links to copy, export, tag or delete them in one go.</li></ul>
       <h4>Keyboard shortcuts</h4><p>With the date menu open: <kbd>D</kbd> Today · <kbd>E</kbd> Yesterday · <kbd>W</kbd> Last 7 days · <kbd>T</kbd> Last 30 days · <kbd>M</kbd> This month · <kbd>L</kbd> Last month · <kbd>Q</kbd> Last 90 days. <kbd>Esc</kbd> closes any menu.</p></div>`, { width: 560 });
   }
 
@@ -635,8 +792,9 @@
     if (i > -1) state.filters[i] = { dim, op: 'is', values: [val] }; else state.filters.push({ dim, op: 'is', values: [val] });
     render({ busy: true }); toast(`Filtered: ${D.DIM[dim].label} is ${val}`);
   }
-  function goLink(slug) { state.view = 'link'; state.slug = slug; render({ top: true }); }
+  function goLink(slug) { if (state.view !== 'link') state.from = state.view; state.view = 'link'; state.slug = slug; render({ top: true }); }
   function goOverview() { state.view = 'overview'; state.slug = null; render({ top: true }); }
+  function goBack() { if (state.from === 'links') goLinks({ keepFilters: true }); else goOverview(); }
 
   /* ---------- Global event delegation ---------- */
   $('#view').addEventListener('click', e => {
@@ -655,19 +813,43 @@
     if ((el = hit('[data-metric]'))) { state.metric = el.dataset.metric; $$('[data-metric]').forEach(k => { k.classList.toggle('on', k === el); k.setAttribute('aria-selected', k === el); }); drawChart(); return; }
     if ((el = hit('[data-sort]'))) { const k = el.dataset.sort; if (state.sort.key === k) state.sort.dir *= -1; else state.sort = { key: k, dir: k === 'link' ? 1 : -1 }; swapSection($('#top-links'), tableHTML()); return; }
     if (hit('#show-all')) { state.showAll = !state.showAll; swapSection($('#top-links'), tableHTML()); return; }
-    if (hit('#open-links')) { e.preventDefault(); toast(`Would open the Links table with ${Q.cur.rows.length} links in scope`); return; }
+    if (hit('#open-links')) { e.preventDefault(); goLinks({ keepFilters: true }); return; }
+    if ((el = hit('[data-utm]'))) { toggleFilter(el.dataset.utm, el.dataset.val); return; }
+    if ((el = hit('[data-copy]'))) { copyText(el.dataset.copy, 'Copied to clipboard'); return; }
+    // Links page
+    if (hit('#create-btn') || hit('#create-btn-empty')) { toast('Create link opens the link builder (outside this prototype)'); return; }
+    if (hit('#import-btn')) { toast('Import links via CSV is outside this prototype'); return; }
+    if (hit('#group-btn')) { groupMenu(hit('#group-btn')); return; }
+    if (hit('#lsort-btn')) { lsortMenu(hit('#lsort-btn')); return; }
+    if (hit('#links-more')) { linksMoreMenu(hit('#links-more')); return; }
+    if (hit('#lq-clear') || hit('#clear-search')) { state.lq = ''; if (hit('#clear-search')) state.filters = []; render(); return; }
+    if ((el = hit('[data-lsort]'))) { const k = el.dataset.lsort; if (state.lsort.key === k) state.lsort.dir *= -1; else state.lsort = { key: k, dir: k === 'link' || k === 'campaign' ? 1 : -1 }; swapSection($('#links-table'), linksTableHTML()); return; }
+    if ((el = hit('[data-sel]'))) { const sl = el.dataset.sel; if (state.sel.has(sl)) state.sel.delete(sl); else state.sel.add(sl); refreshSelection(); return; }
+    if (hit('#sel-all')) { const rows = linkRows(); const all = rows.every(r => state.sel.has(r.link.slug)); rows.forEach(r => all ? state.sel.delete(r.link.slug) : state.sel.add(r.link.slug)); refreshSelection(); return; }
+    if ((el = hit('[data-group]'))) { const g = el.dataset.group; if (state.collapsed.has(g)) state.collapsed.delete(g); else state.collapsed.add(g); swapSection($('#links-table'), linksTableHTML()); return; }
+    if ((el = hit('[data-bulk]'))) { bulk(el.dataset.bulk); return; }
+    if ((el = hit('[data-row-qr]'))) { qrModal(D.LINKS.find(l => l.slug === el.dataset.rowQr)); return; }
+    if ((el = hit('[data-row-analytics]'))) { goLink(el.dataset.rowAnalytics); return; }
+    if ((el = hit('[data-row-more]'))) { rowMenu(el, el.dataset.rowMore); return; }
     if ((el = hit('[data-link]'))) { goLink(el.dataset.link); return; }
     if ((el = hit('[data-tab]'))) { const cardEl = el.closest('[data-card]'); const id = cardEl.dataset.card; if (state.tabs[id] === el.dataset.tab) return; state.tabs[id] = el.dataset.tab; swapSection(cardEl, cardFor(id)); return; }
     if ((el = hit('[data-expand]'))) { expandModal(el.dataset.expand); return; }
     if ((el = hit('[data-country]'))) { if (+el.dataset.val > 0) toggleFilter('country', el.dataset.country); return; }
     if ((el = hit('.row[data-dim]'))) { toggleFilter(el.dataset.dim, el.dataset.val); return; }
-    if (hit('#back')) { e.preventDefault(); goOverview(); return; }
-    if ((el = hit('[data-utm]'))) { toggleFilter(el.dataset.utm, el.dataset.val); return; }
-    if ((el = hit('[data-copy]'))) { copyText(el.dataset.copy, 'Copied to clipboard'); return; }
+    if (hit('#back')) { e.preventDefault(); goBack(); return; }
     if (hit('#qr-btn')) { qrModal(D.LINKS.find(l => l.slug === state.slug)); return; }
     if (hit('#edit-btn')) { toast('Edit link opens the link settings (not in this prototype)'); return; }
   });
-  $('#view').addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.row, .trow.data')) { e.preventDefault(); e.target.click(); } });
+  $('#view').addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.row, .trow.data, .lrow')) { e.preventDefault(); e.target.click(); } });
+  // Links search: redraw only the table, keep the caret where it is
+  $('#view').addEventListener('input', (() => { let t; return e => { if (e.target.id !== 'lq') return; state.lq = e.target.value; const c = $('#lq-clear'); if (c) c.hidden = !state.lq; clearTimeout(t); t = setTimeout(() => swapSection($('#links-table'), linksTableHTML()), 120); }; })());
+  // Selection: update checkboxes + bulk bar in place, no re-render
+  function refreshSelection() {
+    $$('.lrow[data-link]').forEach(r => { const on = state.sel.has(r.dataset.link); r.classList.toggle('sel', on); const cb = $('.cb', r); cb.classList.toggle('on', on); cb.setAttribute('aria-checked', on); });
+    const rows = linkRows(), all = rows.length && rows.every(r => state.sel.has(r.link.slug)); const sa = $('#sel-all'); if (sa) { sa.classList.toggle('on', all); sa.setAttribute('aria-checked', all); }
+    const old = $('.bulk'); const html = bulkBarHTML();
+    if (old && !html) old.remove(); else if (!old && html) $('#view').insertAdjacentHTML('beforeend', html); else if (old) old.querySelector('.cnt b').textContent = state.sel.size;
+  }
 
   // Map hover tooltip
   $('#view').addEventListener('mousemove', e => {
@@ -681,7 +863,7 @@
   /* ---------- Shell ---------- */
   const NAV = [['links', 'Links'], ['qr', 'QR codes'], ['analytics', 'Analytics'], ['templates', 'Templates'], ['parameters', 'Parameters'], ['attributes', 'Attributes'], ['shorteners', 'Link shorteners'], ['rules', 'Rules'], ['members', 'Workspace members'], ['support', 'Support']];
   $('#nav').innerHTML = NAV.map(([k, l]) => `<a href="#" data-nav="${k}" class="${k === 'analytics' ? 'active' : ''}" title="${l}">${I[k]}<span class="nav-label">${l}</span></a>`).join('');
-  $('#nav').addEventListener('click', e => { const a = e.target.closest('a'); if (!a) return; e.preventDefault(); if (a.dataset.nav === 'analytics') goOverview(); else toast(`${a.title} is outside this prototype`); });
+  $('#nav').addEventListener('click', e => { const a = e.target.closest('a'); if (!a) return; e.preventDefault(); if (a.dataset.nav === 'analytics') goOverview(); else if (a.dataset.nav === 'links') goLinks(); else toast(`${a.title} is outside this prototype`); });
   $('#collapse-btn').addEventListener('click', () => { const c = $('#shell').classList.toggle('collapsed'); try { localStorage.setItem('utm-sidebar', c ? '1' : ''); } catch (e) { /* ignore */ } setTimeout(drawChart, 420); });
   try { if (localStorage.getItem('utm-sidebar') === '1') $('#shell').classList.add('collapsed'); } catch (e) { /* ignore */ }
   const topMenu = (btn, items) => openPop(btn, `<div class="menu" style="width:220px">${items.map(i => i === '-' ? '<div class="sep"></div>' : `<button class="mi"><span class="grow">${i}</span></button>`).join('')}</div>`, { align: 'right', onMount(el) { el.addEventListener('click', e => { const b = e.target.closest('.mi'); if (b) { closePop(); toast(`${b.textContent.trim()} is outside this prototype`); } }); } });
@@ -701,6 +883,7 @@
   /* ---------- Boot ---------- */
   (function boot() {
     const h = (location.hash || '').replace('#', '');
+    if (h === 'links') state.view = 'links';
     if (h.startsWith('link-')) { const slug = D.LINKS.find(l => l.slug.replace(/[^a-z0-9]+/gi, '-') === h.slice(5)); if (slug) { state.view = 'link'; state.slug = slug.slug; } }
     render();
   })();
