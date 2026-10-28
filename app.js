@@ -281,9 +281,10 @@
       const pr = Q.priorBySlug[r.link.slug];
       const qrShare = r.clicks ? r.qr / r.clicks : 0;
       const top = Object.entries(r.link.geo).sort((a, b) => b[1] - a[1])[0];
-      const isQR = r.link.qr >= .5;
+      const hasQR = r.link.qr > 0;
+      const typeTip = hasQR ? `Has a QR code · ${Math.round(qrShare * 100)}% of clicks from scans` : 'Link only · no QR code';
       return `<div class="trow data" data-link="${esc(r.link.slug)}" role="link" tabindex="0" style="animation-delay:${Math.min(i, 10) * 25}ms">
-        <div class="lk"><span class="type ${isQR ? 'qr' : ''}">${isQR ? I.qr : I.links}</span><div class="txt"><span class="lk-name">${esc(r.link.slug)}</span><span class="lk-dest">${esc(r.link.dest)}${utmQuery(r.link)}</span></div></div>
+        <div class="lk"><span class="type ${hasQR ? 'qr' : ''}" data-tip="${typeTip}" aria-label="${typeTip}">${hasQR ? I.qr : I.links}</span><div class="txt"><span class="lk-name">${esc(r.link.slug)}</span><span class="lk-dest">${esc(r.link.dest)}${utmQuery(r.link)}</span></div></div>
         <div class="spark">${sparkline(r.series, 'clicks')}</div>
         <div class="r num" style="font-weight:600;color:var(--text-strong)">${fmt.n(r.clicks)}</div>
         <div class="r num">${fmt.n(r.unique)}</div>
@@ -293,7 +294,7 @@
         <span class="chev">${I.chevR}</span></div>`;
     }).join('');
     const sub = `Ranked by ${esc(cols.find(c => c[0] === key)?.[1].toLowerCase() || 'clicks')} · ${esc(rangeLabel())}${state.filters.length ? ' · filtered' : ''}`;
-    return `<section class="card">
+    return `<section class="card" id="top-links">
       <div class="tbl-head"><div class="grow"><h2>Top links</h2><div class="sub">${sub}</div></div><a class="link-out" href="#" id="open-links">Open in Links table ${I.external}</a></div>
       <div class="table"><div class="trow head">${head}</div>${body || `<div class="empty" style="min-height:120px"><strong>No links match</strong>Try a wider date range or fewer filters.</div>`}</div>
       <div class="tbl-foot"><span>${rows.length > limit ? `Showing top ${limit} of ${rows.length} links` : `Showing all ${rows.length} links`} · Click a row for link details</span>${rows.length > 7 ? `<button id="show-all">${state.showAll ? 'Show top 7' : `Show all ${rows.length}`}</button>` : ''}</div></section>`;
@@ -325,14 +326,26 @@
   }
 
   /* ---------- Views ---------- */
+  // One builder per tabbed card, so a tab switch can redraw just that card.
+  function cardFor(id) {
+    const b = Q.cur.breakdown, t = state.tabs[id];
+    const tabs = (list) => list.map(([key, label]) => ({ key, label }));
+    switch (id) {
+      case 'utm': return listCard('utm', tabs([['campaign', 'Campaign'], ['source', 'Source'], ['medium', 'Medium'], ['content', 'Content'], ['term', 'Term']]), [D.DIM[t].label, 'Clicks'], b(t), t);
+      case 'loc': return locationsCard(b);
+      case 'dev': return listCard('dev', tabs([['device', 'Device'], ['browser', 'Browser'], ['os', 'OS']]), [D.DIM[t].label + ' type', 'Clicks'], b(t), t);
+      case 'ref': return listCard('ref', tabs([['referrer', 'Referrers'], ['trigger', 'Trigger']]), [t === 'trigger' ? 'Trigger' : 'Referrer', 'Clicks'], b(t), t);
+    }
+  }
+  // Swap one section in place and replay only its own entry animation.
+  function swapSection(oldEl, html) {
+    const tmp = document.createElement('div'); tmp.innerHTML = html.trim();
+    const el = tmp.firstElementChild; el.classList.add('swap'); oldEl.replaceWith(el);
+    requestAnimationFrame(() => $$('[data-w]', el).forEach(x => { x.style.width = x.dataset.w + '%'; }));
+    return el;
+  }
   function overviewHTML() {
-    const b = Q.cur.breakdown;
-    const utmTabs = [['campaign', 'Campaign'], ['source', 'Source'], ['medium', 'Medium'], ['content', 'Content'], ['term', 'Term']].map(([key, label]) => ({ key, label }));
-    const utm = listCard('utm', utmTabs, [D.DIM[state.tabs.utm].label, 'Clicks'], b(state.tabs.utm), state.tabs.utm);
-    const loc = locationsCard(b);
-    const devTabs = [['device', 'Device'], ['browser', 'Browser'], ['os', 'OS']].map(([key, label]) => ({ key, label }));
-    const dev = listCard('dev', devTabs, [D.DIM[state.tabs.dev].label + ' type', 'Clicks'], b(state.tabs.dev), state.tabs.dev);
-    const ref = listCard('ref', [{ key: 'referrer', label: 'Referrers' }, { key: 'trigger', label: 'Trigger' }], [state.tabs.ref === 'trigger' ? 'Trigger' : 'Referrer', 'Clicks'], b(state.tabs.ref), state.tabs.ref);
+    const [utm, loc, dev, ref] = ['utm', 'loc', 'dev', 'ref'].map(cardFor);
     return `<div class="view">${toolbarHTML('Analytics')}</div>
       ${chipsHTML()}${kpiChartHTML()}${tableHTML()}
       <div class="grid-2">${utm}${loc}</div><div class="grid-2">${dev}${ref}</div>
@@ -349,18 +362,15 @@
     if (!link) { state.view = 'overview'; return overviewHTML(); }
     const b = Q.cur.breakdown;
     const utms = ['source', 'medium', 'campaign', 'content', 'term'].filter(k => link[k]).map(k => `<button class="utm-chip" data-utm="${k}" data-val="${esc(link[k])}" title="Filter analytics by this value"><span class="k">utm_${k}</span>${esc(link[k])}</button>`).join('');
-    const isQR = link.qr >= .5;
+    const hasQR = link.qr > 0;
     const head = `<div class="crumbs"><a href="#" id="back">${I.arrowL}Analytics</a><span>/</span><span class="cur">${esc(link.slug)}</span></div>
-      <section class="card"><div class="link-head"><span class="type">${isQR ? I.qr : I.links}</span><div class="info">
+      <section class="card"><div class="link-head"><span class="type">${hasQR ? I.qr : I.links}</span><div class="info">
         <div class="t"><h2>${esc(link.title)}</h2><span class="status-pill">Active</span></div>
         <div class="urls"><span class="short">${esc(link.slug)}</span><button class="icon-btn" data-copy="https://${esc(link.slug)}" title="Copy short link">${I.copy}</button><span class="arrow">→</span><span class="dest">${esc(link.dest)}${esc(utmQuery(link))}</span><button class="icon-btn" data-copy="https://${esc(link.dest)}${esc(utmQuery(link))}" title="Copy destination">${I.external}</button></div>
         <div class="utms">${utms}</div>
         <div class="meta">Created ${fmt.d(new Date(link.created), { month: 'short', day: 'numeric', year: 'numeric' })} by ${esc(link.by)} · ${link.qr > 0 ? 'QR code attached' : 'No QR code'} · Tags: ${link.tags.map(esc).join(', ')}</div></div>
         <div class="actions"><button class="btn" id="qr-btn">${I.qr}QR code</button><button class="btn" id="edit-btn">${I.edit}Edit link</button></div></div></section>`;
-    const loc = locationsCard(b);
-    const devTabs = [['device', 'Device'], ['browser', 'Browser'], ['os', 'OS']].map(([key, label]) => ({ key, label }));
-    const dev = listCard('dev', devTabs, [D.DIM[state.tabs.dev].label + ' type', 'Clicks'], b(state.tabs.dev), state.tabs.dev);
-    const ref = listCard('ref', [{ key: 'referrer', label: 'Referrers' }, { key: 'trigger', label: 'Trigger' }], [state.tabs.ref === 'trigger' ? 'Trigger' : 'Referrer', 'Clicks'], b(state.tabs.ref), state.tabs.ref);
+    const [loc, dev, ref] = ['loc', 'dev', 'ref'].map(cardFor);
     return `<div class="view">${head}</div>${toolbarHTML('Performance')}${chipsHTML()}${kpiChartHTML()}
       <div class="grid-2">${loc}${dev}</div>${ref}
       <p class="footnote">Clicks are successful redirects; suspected bots are excluded. Unique clicks reset each calendar month. Times in UTC.</p>`;
@@ -643,11 +653,11 @@
     if ((el = hit('[data-edit-filter]'))) { const i = +el.dataset.editFilter; valuePicker(el.closest('.chip'), state.filters[i].dim, i); return; }
     if (hit('#clear-filters')) { state.filters = []; render({ busy: true }); toast('Filters cleared'); return; }
     if ((el = hit('[data-metric]'))) { state.metric = el.dataset.metric; $$('[data-metric]').forEach(k => { k.classList.toggle('on', k === el); k.setAttribute('aria-selected', k === el); }); drawChart(); return; }
-    if ((el = hit('[data-sort]'))) { const k = el.dataset.sort; if (state.sort.key === k) state.sort.dir *= -1; else state.sort = { key: k, dir: k === 'link' ? 1 : -1 }; render(); return; }
-    if (hit('#show-all')) { state.showAll = !state.showAll; render(); return; }
+    if ((el = hit('[data-sort]'))) { const k = el.dataset.sort; if (state.sort.key === k) state.sort.dir *= -1; else state.sort = { key: k, dir: k === 'link' ? 1 : -1 }; swapSection($('#top-links'), tableHTML()); return; }
+    if (hit('#show-all')) { state.showAll = !state.showAll; swapSection($('#top-links'), tableHTML()); return; }
     if (hit('#open-links')) { e.preventDefault(); toast(`Would open the Links table with ${Q.cur.rows.length} links in scope`); return; }
     if ((el = hit('[data-link]'))) { goLink(el.dataset.link); return; }
-    if ((el = hit('[data-tab]'))) { const cardEl = el.closest('[data-card]'); state.tabs[cardEl.dataset.card] = el.dataset.tab; render(); return; }
+    if ((el = hit('[data-tab]'))) { const cardEl = el.closest('[data-card]'); const id = cardEl.dataset.card; if (state.tabs[id] === el.dataset.tab) return; state.tabs[id] = el.dataset.tab; swapSection(cardEl, cardFor(id)); return; }
     if ((el = hit('[data-expand]'))) { expandModal(el.dataset.expand); return; }
     if ((el = hit('[data-country]'))) { if (+el.dataset.val > 0) toggleFilter('country', el.dataset.country); return; }
     if ((el = hit('.row[data-dim]'))) { toggleFilter(el.dataset.dim, el.dataset.val); return; }
