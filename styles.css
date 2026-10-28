@@ -2,8 +2,7 @@
    UTM Analytics prototype v4 — styles
    Layout: fixed UTM shell (sidebar + top bar in Oxygen) around an
    analytics surface set in Inter. Light theme only: the product has
-   no dark mode. Accent is switchable: indigo (Plausible-like) or
-   UTM purple via [data-accent="utm"].
+   no dark mode. Accent is UTM purple.
 ================================================================== */
 
 :root {
@@ -22,13 +21,12 @@
   --canvas: #f9fafb; --card: #ffffff; --hover: #f3f4f6; --sunken: #f9fafb;
   --text-strong: #111827; --text: #1f2937; --text-muted: #6b7280; --text-faint: #9ca3af;
   --border: #e5e7eb; --border-strong: #d1d5db; --grid: #f3f4f6;
-  --accent: #6366f1; --accent-strong: #4f46e5; --accent-subtle: #eef2ff; --accent-faint: #f5f6ff; --accent-rgb: 99,102,241;
+  --accent: #8a64c0; --accent-strong: #6f4ba6; --accent-subtle: #ede4f9; --accent-faint: #f6f1fc; --accent-rgb: 138,100,192;
   --up: #10b981; --up-bg: #ecfdf5; --down: #ef4444; --down-bg: #fef2f2; --flat: #6b7280;
   --qr: #f59e0b; --qr-bg: #fffbeb;
   --bar-blue: #eff6ff; --bar-orange: #fff7ed; --bar-green: #f0fdf4; --bar-red: #fef2f2; --bar-indigo: #eef2ff; --bar-amber: #fffbeb;
   --sidebar-w: 272px; --sidebar-w-collapsed: 76px; --topbar-h: 72px; --radius: 8px; --radius-lg: 12px;
 }
-[data-accent="utm"] { --accent: #8a64c0; --accent-strong: #6f4ba6; --accent-subtle: #ede4f9; --accent-faint: #f6f1fc; --accent-rgb: 138,100,192; }
 
 *, *::before, *::after { box-sizing: border-box; }
 html, body { height: 100%; }
@@ -100,7 +98,9 @@ svg { display: block; }
 .toolbar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 .toolbar .title { display: flex; align-items: baseline; gap: 12px; flex: 1; min-width: 0; }
 .toolbar h1 { font-size: 20px; font-weight: 600; color: var(--text-strong); margin: 0; letter-spacing: -.01em; }
-.status { display: inline-flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 13px; }
+.status { position: relative; display: inline-flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 13px; cursor: default; }
+.status::after { content: attr(data-tip); position: absolute; left: -8px; top: calc(100% + 8px); z-index: 20; background: var(--text-strong); color: #fff; font-size: 12px; padding: 6px 10px; border-radius: 6px; box-shadow: var(--shadow-md); white-space: nowrap; pointer-events: none; opacity: 0; transform: translateY(-2px); transition: opacity var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease); }
+.status:hover::after, .status:focus-visible::after { opacity: 1; transform: none; }
 .status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--up); box-shadow: 0 0 0 0 rgba(16,185,129,.4); animation: pulse 2.4s ease-out infinite; }
 @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(16,185,129,.45); } 70% { box-shadow: 0 0 0 6px rgba(16,185,129,0); } 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); } }
 .controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

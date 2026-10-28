@@ -88,10 +88,7 @@
     trigger: 'all', filters: [], metric: 'clicks', interval: 'day',
     sort: { key: 'clicks', dir: -1 }, showAll: false,
     tabs: { utm: 'campaign', loc: 'map', dev: 'device', ref: 'referrer' },
-    accent: 'indigo',
   };
-  try { const a = localStorage.getItem('utm-accent'); if (a) state.accent = a; } catch (e) { /* ignore */ }
-  document.documentElement.dataset.accent = state.accent === 'utm' ? 'utm' : '';
 
   const METRICS = [
     { key: 'clicks', label: 'Total clicks', only: null },
@@ -151,15 +148,16 @@
   }
 
   /* ---------- Toolbar ---------- */
-  function toolbarHTML(title, status) {
+  function toolbarHTML(title) {
+    const status = 'Updated 4 min ago · suspected bots excluded';
     const n = state.filters.length;
     return `<div class="toolbar">
-      <div class="title"><h1>${esc(title)}</h1><span class="status">${esc(status)}</span></div>
+      <div class="title"><h1>${esc(title)}</h1><span class="status" tabindex="0" data-tip="${esc(status)}" aria-label="${esc(status)}">4 min ago</span></div>
       <div class="controls">
         <div class="seg" role="radiogroup" aria-label="Trigger">
           <button data-trigger="all" class="${state.trigger === 'all' ? 'on' : ''}">All</button>
           <button data-trigger="link" class="${state.trigger === 'link' ? 'on' : ''}">${I.links}Links</button>
-          <button data-trigger="qr" class="${state.trigger === 'qr' ? 'on' : ''}">${I.qr}QR scans</button>
+          <button data-trigger="qr" class="${state.trigger === 'qr' ? 'on' : ''}">${I.qr}QR</button>
         </div>
         <button class="tb-btn" id="filter-btn" aria-haspopup="menu" aria-expanded="false">${I.filter}Filter${n ? `<span class="badge">${n}</span>` : ''}</button>
         <button class="tb-btn" id="date-btn" aria-haspopup="dialog" aria-expanded="false">${I.calendar}<span>${esc(rangeLabel())}</span><span class="chev">${I.chev}</span></button>
@@ -335,7 +333,7 @@
     const devTabs = [['device', 'Device'], ['browser', 'Browser'], ['os', 'OS']].map(([key, label]) => ({ key, label }));
     const dev = listCard('dev', devTabs, [D.DIM[state.tabs.dev].label + ' type', 'Clicks'], b(state.tabs.dev), state.tabs.dev);
     const ref = listCard('ref', [{ key: 'referrer', label: 'Referrers' }, { key: 'trigger', label: 'Trigger' }], [state.tabs.ref === 'trigger' ? 'Trigger' : 'Referrer', 'Clicks'], b(state.tabs.ref), state.tabs.ref);
-    return `<div class="view">${toolbarHTML('Analytics', 'Updated 4 min ago · suspected bots excluded')}</div>
+    return `<div class="view">${toolbarHTML('Analytics')}</div>
       ${chipsHTML()}${kpiChartHTML()}${tableHTML()}
       <div class="grid-2">${utm}${loc}</div><div class="grid-2">${dev}${ref}</div>
       <p class="footnote">Clicks are successful redirects; suspected bots are excluded. Unique clicks reset each calendar month. Times in UTC.</p>`;
@@ -363,7 +361,7 @@
     const devTabs = [['device', 'Device'], ['browser', 'Browser'], ['os', 'OS']].map(([key, label]) => ({ key, label }));
     const dev = listCard('dev', devTabs, [D.DIM[state.tabs.dev].label + ' type', 'Clicks'], b(state.tabs.dev), state.tabs.dev);
     const ref = listCard('ref', [{ key: 'referrer', label: 'Referrers' }, { key: 'trigger', label: 'Trigger' }], [state.tabs.ref === 'trigger' ? 'Trigger' : 'Referrer', 'Clicks'], b(state.tabs.ref), state.tabs.ref);
-    return `<div class="view">${head}</div>${toolbarHTML('Performance', 'This link only · updated 4 min ago · suspected bots excluded')}${chipsHTML()}${kpiChartHTML()}
+    return `<div class="view">${head}</div>${toolbarHTML('Performance')}${chipsHTML()}${kpiChartHTML()}
       <div class="grid-2">${loc}${dev}</div>${ref}
       <p class="footnote">Clicks are successful redirects; suspected bots are excluded. Unique clicks reset each calendar month. Times in UTC.</p>`;
   }
@@ -532,12 +530,9 @@
     openPop(anchor, `<div class="menu" style="width:240px">
       <button class="mi" data-act="csv">${I.download}<span class="grow">Export CSV</span></button>
       <button class="mi" data-act="copy-link">${I.copy}<span class="grow">Copy link to this view</span></button>
-      <div class="sep"></div><div class="group">Accent colour</div>
-      <button class="mi ${state.accent !== 'utm' ? 'on' : ''}" data-act="accent-indigo"><span class="check">${I.check}</span><span class="grow">Indigo</span><span style="width:12px;height:12px;border-radius:50%;background:#6366f1"></span></button>
-      <button class="mi ${state.accent === 'utm' ? 'on' : ''}" data-act="accent-utm"><span class="check">${I.check}</span><span class="grow">UTM purple</span><span style="width:12px;height:12px;border-radius:50%;background:#8a64c0"></span></button>
       <div class="sep"></div>
       <button class="mi" data-act="reset">${I.reset}<span class="grow">Reset prototype</span></button>
-      <button class="mi" data-act="about">${I.info}<span class="grow">About this prototype</span></button></div>`, { align: 'right', onMount(el) { el.addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (!b) return; closePop(); action(b.dataset.act); }); } });
+      <button class="mi" data-act="about">${I.info}<span class="grow">Tips &amp; shortcuts</span></button></div>`, { align: 'right', onMount(el) { el.addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (!b) return; closePop(); action(b.dataset.act); }); } });
   }
   function intervalMenu(anchor) {
     openPop(anchor, `<div class="menu" style="width:140px">${['day', 'week'].map(k => `<button class="mi ${state.interval === k ? 'on' : ''}" data-int="${k}"><span class="check">${I.check}</span><span class="grow">${k === 'day' ? 'Day' : 'Week'}</span></button>`).join('')}</div>`, { align: 'right', onMount(el) { el.addEventListener('click', e => { const b = e.target.closest('[data-int]'); if (b) { state.interval = b.dataset.int; closePop(); render(); } }); } });
@@ -546,13 +541,10 @@
     switch (act) {
       case 'csv': exportCSV(); break;
       case 'copy-link': copyText(location.href, 'Link copied'); break;
-      case 'accent-indigo': setAccent('indigo'); break;
-      case 'accent-utm': setAccent('utm'); break;
       case 'reset': Object.assign(state, { view: 'overview', slug: null, preset: 'month', range: PRESETS[4].get(), compare: true, trigger: 'all', filters: [], metric: 'clicks', interval: 'day', sort: { key: 'clicks', dir: -1 }, showAll: false, tabs: { utm: 'campaign', loc: 'map', dev: 'device', ref: 'referrer' } }); render({ busy: true, top: true }); toast('Prototype reset'); break;
-      case 'about': aboutModal(); break;
+      case 'about': tipsModal(); break;
     }
   }
-  function setAccent(a) { state.accent = a; document.documentElement.dataset.accent = a === 'utm' ? 'utm' : ''; try { localStorage.setItem('utm-accent', a); } catch (e) { /* ignore */ } drawChart(); toast(a === 'utm' ? 'Accent: UTM purple' : 'Accent: Indigo'); }
   function exportCSV() {
     const rows = Q.cur.rows.map(r => [r.link.slug, r.link.dest, Math.round(r.clicks), Math.round(r.unique), Math.round(r.linkClicks), Math.round(r.qr)]);
     const csv = [['short_link', 'destination', 'clicks', 'unique', 'link_clicks', 'qr_scans'], ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
@@ -601,17 +593,23 @@
       },
     });
   }
-  function aboutModal() {
-    openModal(`<div class="modal-h"><h3>About this prototype</h3><button class="close" aria-label="Close">${I.close}</button></div><div class="modal-b about">
-      <p>UTM.io Analytics, prototype v4 (2026-10-28). All data is synthetic but consistent: every number is recomputed from one dataset when you change the range, the trigger or a filter. “Today” is fixed at Oct 28, 2026.</p>
-      <h4>What works</h4><ul>
-      <li><b>All / Links / QR scans</b> switches every number, including the link table and cards.</li>
-      <li><b>Filter</b> → grouped dimensions → value picker with counts, search, <i>is / is not</i>. Click any row in a card, a country on the map, or a UTM chip on a link page to filter too. Click a chip's value to edit it.</li>
-      <li><b>Date</b> → presets (keyboard: <kbd>D</kbd> <kbd>E</kbd> <kbd>W</kbd> <kbd>T</kbd> <kbd>M</kbd> <kbd>L</kbd> <kbd>Q</kbd>) or pick a custom range on the calendar. Compare toggles the prior-period line and all deltas.</li>
-      <li><b>KPI tiles</b> switch the chart. Hover the chart for exact values. Day / Week interval.</li>
-      <li><b>Top links</b>: sort by column, show all, click a row to open the link. The link page has copy buttons, a QR modal and the same filters.</li>
-      <li><b>Expand</b> (↗) on a card shows the full list with search.</li></ul>
-      <h4>Not wired</h4><ul><li>Sidebar navigation, Manage, user menu, Edit link, “Open in Links table”, Pro date ranges.</li></ul></div>`, { width: 560 });
+  function tipsModal() {
+    openModal(`<div class="modal-h"><h3>Tips &amp; shortcuts</h3><button class="close" aria-label="Close">${I.close}</button></div><div class="modal-b about">
+      <h4>What the numbers mean</h4><ul>
+      <li><b>Clicks</b> are visits through your short links. Suspected bots are left out.</li>
+      <li><b>Unique clicks</b> count each person once per calendar month, so they're most accurate for <i>This month</i> or <i>Last month</i>.</li>
+      <li><b>QR</b> counts scans of your QR codes. <b>Links</b> counts everything else.</li>
+      <li>Times are in UTC. Today's numbers are still coming in, so the chart shows today as a dotted line.</li></ul>
+      <h4>Narrow it down</h4><ul>
+      <li>Use <b>All / Links / QR</b> to see only link clicks or only QR scans.</li>
+      <li>Click any row in a card (a campaign, a country, a device) to filter the whole page by it. Click it again to remove the filter.</li>
+      <li><b>Filter</b> lets you pick any detail, choose <i>is</i> or <i>is not</i>, and select several values at once. Click a filter chip to change it.</li></ul>
+      <h4>Compare and dig in</h4><ul>
+      <li>Turn on <b>Compare</b> in the date menu to see the previous period as a dashed line and a % change on every number.</li>
+      <li>Click a tile at the top (Total, Unique…) to switch what the chart shows. Hover the chart for exact numbers.</li>
+      <li>Click a link in <b>Top links</b> to see its own report, UTM tags and QR code.</li>
+      <li>Use ↗ on a card to see the full list with search.</li></ul>
+      <h4>Keyboard shortcuts</h4><p>With the date menu open: <kbd>D</kbd> Today · <kbd>E</kbd> Yesterday · <kbd>W</kbd> Last 7 days · <kbd>T</kbd> Last 30 days · <kbd>M</kbd> This month · <kbd>L</kbd> Last month · <kbd>Q</kbd> Last 90 days. <kbd>Esc</kbd> closes any menu.</p></div>`, { width: 560 });
   }
 
   /* ---------- Toast ---------- */
@@ -688,7 +686,7 @@
   document.addEventListener('keydown', e => { if (e.key === 'Escape') setDrawer(false); });
   $('#ext-btn').addEventListener('click', () => toast('Chrome extension link is outside this prototype'));
   $('#plan-btn').addEventListener('click', () => toast('Plan management is outside this prototype'));
-  $('#help-btn').addEventListener('click', () => aboutModal());
+  $('#help-btn').addEventListener('click', () => tipsModal());
 
   /* ---------- Boot ---------- */
   (function boot() {
