@@ -375,7 +375,7 @@
         <div class="t"><h2>${esc(link.title)}</h2><span class="status-pill">Active</span></div>
         <div class="urls"><span class="short">${esc(link.slug)}</span><button class="icon-btn" data-copy="https://${esc(link.slug)}" title="Copy short link">${I.copy}</button><span class="arrow">→</span><span class="dest">${esc(link.dest)}${esc(utmQuery(link))}</span><button class="icon-btn" data-copy="https://${esc(link.dest)}${esc(utmQuery(link))}" title="Copy destination">${I.external}</button></div>
         <div class="utms">${utms}</div>
-        <div class="meta">Created ${fmt.d(new Date(link.created), { month: 'short', day: 'numeric', year: 'numeric' })} by ${esc(link.by)} · ${link.qr > 0 ? 'QR code attached' : 'No QR code'} · Tags: ${link.tags.map(esc).join(', ')}</div></div>
+        <div class="meta">Created ${fmt.d(new Date(link.created), { month: 'short', day: 'numeric', year: 'numeric' })} by <span class="by">${avatar(link.by, 'xs')}${esc(link.by)}</span> · ${link.qr > 0 ? 'QR code attached' : 'No QR code'} · Tags: ${link.tags.map(esc).join(', ')}</div></div>
         <div class="actions"><button class="btn" id="qr-btn">${I.qr}QR code</button><button class="btn" id="edit-btn">${I.edit}Edit link</button></div></div></section>`;
     const [loc, dev, ref] = ['loc', 'dev', 'ref'].map(cardFor);
     return `<div class="view">${head}</div>${toolbarHTML('Performance')}${chipsHTML()}${kpiChartHTML()}
@@ -389,6 +389,10 @@
   const TEMPLATES = { paid_social: 'Paid social', social: 'Organic social', cpc: 'Paid search', email: 'Email', print: 'Print · QR', referral: 'Partner', audio: 'Podcast', video: 'Creator' };
   const templateOf = l => TEMPLATES[l.medium] || '—';
   const initials = name => name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  const AVATARS = { 'Dana Whitfield': 'dana', 'Marcus Lee': 'marcus', 'Priya Natarajan': 'priya' };
+  const avatar = (name, size = '') => AVATARS[name]
+    ? `<img class="av ${size}" src="assets/avatars/${AVATARS[name]}.jpg" alt="" title="${esc(name)}">`
+    : `<span class="av ${size}" title="${esc(name)}">${initials(name)}</span>`;
   const GROUPS = [['none', 'No grouping'], ['campaign', 'Campaign'], ['source', 'Source'], ['medium', 'Medium'], ['by', 'Created by'], ['template', 'Template']];
   const LSORTS = [['created', 'Newest first'], ['clicks', 'Most clicks'], ['recent', 'Most clicks · 30 days'], ['link', 'Short link A–Z']];
   const groupValue = (l, g) => g === 'by' ? l.by : g === 'template' ? templateOf(l) : (l[g] || 'Not tagged');
@@ -423,7 +427,7 @@
         <div class="txt"><span class="lk-name">${esc(l.slug)}${l.tags.length ? l.tags.map(t => `<span class="tag">${esc(t)}</span>`).join('') : ''}</span><span class="lk-dest" title="${esc(l.dest)}${esc(utmQuery(l))}">${esc(l.dest)}<span class="qs">${esc(utmQuery(l))}</span></span></div></div>
       <div class="camp">${l.campaign ? `<button class="utm-chip sm" data-utm="campaign" data-val="${esc(l.campaign)}" title="Filter by this campaign">${esc(l.campaign)}</button>` : '<span class="untagged">Not tagged</span>'}<span class="sm-muted">${esc(l.source)} · ${esc(l.medium)}</span></div>
       <div class="clk"><span class="spark">${sparkline(r.last30, 'clicks')}</span><span class="n"><b class="num">${fmt.n(r.clicks)}</b><span class="sm-muted num">${r.recentDelta == null ? '<span class="d new">New</span> · all in 30d' : `${fmt.n(r.recent)} <span class="d ${r.recentDelta > 0.005 ? 'up' : r.recentDelta < -0.005 ? 'down' : ''}">${(r.recentDelta > 0 ? '+' : '') + Math.round(r.recentDelta * 100)}%</span> 30d`}</span></span></div>
-      <div class="who"><span class="av" title="${esc(l.by)}">${initials(l.by)}</span><span class="txt"><span>${fmt.d(created, { month: 'short', day: 'numeric', year: 'numeric' })}</span><span class="sm-muted">${esc(l.by)}</span></span></div>
+      <div class="who">${avatar(l.by)}<span class="txt"><span>${fmt.d(created, { month: 'short', day: 'numeric', year: 'numeric' })}</span><span class="sm-muted">${esc(l.by)}</span></span></div>
       <div><span class="tpl">${esc(templateOf(l))}</span></div>
       <div class="acts">
         <button class="icon-btn" data-copy="https://${esc(l.slug)}" title="Copy short link">${I.copy}</button>
@@ -447,7 +451,7 @@
       rows.forEach(r => { const g = groupValue(r.link, state.groupBy); if (!groups.has(g)) groups.set(g, []); groups.get(g).push(r); });
       body = [...groups.entries()].sort((a, b) => b[1].reduce((x, r) => x + r.clicks, 0) - a[1].reduce((x, r) => x + r.clicks, 0)).map(([g, rs]) => {
         const open = !state.collapsed.has(g), clicks = rs.reduce((a, r) => a + r.clicks, 0);
-        return `<div class="grp ${open ? 'open' : ''}"><button class="grp-h" data-group="${esc(g)}" aria-expanded="${open}"><span class="chev">${I.chevR}</span><span class="g">${esc(g)}</span><span class="sm-muted">${rs.length} link${rs.length === 1 ? '' : 's'} · ${fmt.n(clicks)} clicks</span></button>${open ? rs.map(linkRowHTML).join('') : ''}</div>`;
+        return `<div class="grp ${open ? 'open' : ''}"><button class="grp-h" data-group="${esc(g)}" aria-expanded="${open}"><span class="chev">${I.chevR}</span>${state.groupBy === 'by' ? avatar(g, 'xs') : ''}<span class="g">${esc(g)}</span><span class="sm-muted">${rs.length} link${rs.length === 1 ? '' : 's'} · ${fmt.n(clicks)} clicks</span></button>${open ? rs.map(linkRowHTML).join('') : ''}</div>`;
       }).join('');
     }
     return `<section class="card" id="links-table"><div class="ltable">${head}${body}</div>
