@@ -389,7 +389,7 @@
   const TEMPLATES = { paid_social: 'Paid social', social: 'Organic social', cpc: 'Paid search', email: 'Email', print: 'Print · QR', referral: 'Partner', audio: 'Podcast', video: 'Creator' };
   const templateOf = l => TEMPLATES[l.medium] || '—';
   const initials = name => name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
-  const AVATARS = { 'Dana Whitfield': 'dana', 'Marcus Lee': 'marcus', 'Priya Natarajan': 'priya' };
+  const AVATARS = { 'Dana Whitfield': 'dana', 'Marcus Lee': 'marcus' };
   const avatar = (name, size = '') => AVATARS[name]
     ? `<img class="av ${size}" src="assets/avatars/${AVATARS[name]}.jpg" alt="" title="${esc(name)}">`
     : `<span class="av ${size}" title="${esc(name)}">${initials(name)}</span>`;
