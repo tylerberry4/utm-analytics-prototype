@@ -88,9 +88,11 @@
     trigger: 'all', filters: [], metric: 'clicks', interval: 'day',
     sort: { key: 'clicks', dir: -1 }, showAll: false,
     tabs: { utm: 'campaign', loc: 'map', dev: 'device', ref: 'referrer' },
-    // Links page
+    // Links page (lq / lsort / sel are shared by the QR codes, Templates and Shorteners pages)
     from: 'overview', lq: '', groupBy: 'none', lsort: { key: 'created', dir: -1 }, sel: new Set(), collapsed: new Set(),
+    disabledDomains: new Set(),
   };
+  const LIST_VIEWS = ['links', 'qr', 'templates', 'shorteners'];
 
   const METRICS = [
     { key: 'clicks', label: 'Total clicks', only: null },
@@ -109,7 +111,7 @@
     const unfiltered = state.filters.length ? D.query({ range: state.range, trigger: state.trigger, filters: state.view === 'link' ? [{ dim: 'link', op: 'is', values: [state.slug] }] : [] }) : cur;
     const priorBySlug = Object.fromEntries(prior.rows.map(r => [r.link.slug, r]));
     Q = { cur, prior, unfiltered, priorBySlug, filters };
-    if (state.view === 'links') {
+    if (LIST_VIEWS.includes(state.view)) {
       Q.links = D.query({ range: ALL_RANGE, trigger: 'all', filters: state.filters });
       Q.linksAll = state.filters.length ? D.query({ range: ALL_RANGE, trigger: 'all', filters: [] }) : Q.links;
     }
@@ -180,7 +182,7 @@
       const vals = f.values.length > 2 ? `${esc(f.values[0])} <span class="op">+${f.values.length - 1} more</span>` : f.values.map(esc).join('<span class="op"> or </span>');
       return `<span class="chip"><span class="k">${esc(d.label)}</span><span class="op">${f.op}</span><span class="v"><button data-edit-filter="${i}" title="Edit">${vals}</button></span><button class="x" data-remove-filter="${i}" aria-label="Remove filter">${I.close}</button></span>`;
     }).join('');
-    const ctx = state.view === 'links' ? `Showing <b>${Q.links.rows.length}</b> of ${Q.linksAll.rows.length} links` : `Showing <b>${fmt.n(cur)}</b> of ${fmt.n(total)} clicks (${fmt.pct(total ? cur / total : 0)})`;
+    const ctx = state.view === 'links' ? `Showing <b>${Q.links.rows.length}</b> of ${Q.linksAll.rows.length} links` : state.view === 'qr' ? `Showing <b>${qrRows().length}</b> of ${Q.linksAll.rows.filter(r => r.link.qr > 0).length} QR codes` : `Showing <b>${fmt.n(cur)}</b> of ${fmt.n(total)} clicks (${fmt.pct(total ? cur / total : 0)})`;
     return `<div class="chips">${chips}<button class="clear" id="clear-filters">Clear all</button><span class="context num">${ctx}</span></div>`;
   }
 
@@ -460,8 +462,10 @@
 
   function bulkBarHTML() {
     const n = state.sel.size; if (!n) return '';
-    return `<div class="bulk" role="toolbar" aria-label="Selected links"><span class="cnt"><b>${n}</b> selected</span>
-      <button data-bulk="copy">${I.copy}Copy links</button><button data-bulk="csv">${I.download}Export CSV</button><button data-bulk="tag">${I.tag}Add tag</button><button data-bulk="archive">${I.reset}Archive</button><button data-bulk="delete" class="danger">${I.close}Delete</button>
+    const acts = state.view === 'qr'
+      ? `<button data-bulk="png">${I.download}Download PNGs</button><button data-bulk="copy">${I.copy}Copy links</button><button data-bulk="csv">${I.download}Export CSV</button><button data-bulk="design">${I.swatch}Change design</button><button data-bulk="delete" class="danger">${I.close}Delete</button>`
+      : `<button data-bulk="copy">${I.copy}Copy links</button><button data-bulk="csv">${I.download}Export CSV</button><button data-bulk="tag">${I.tag}Add tag</button><button data-bulk="archive">${I.reset}Archive</button><button data-bulk="delete" class="danger">${I.close}Delete</button>`;
+    return `<div class="bulk" role="toolbar" aria-label="Selected items"><span class="cnt"><b>${n}</b> selected</span>${acts}
       <button class="x" data-bulk="clear" aria-label="Clear selection">${I.close}</button></div>`;
   }
 
@@ -485,9 +489,9 @@
       onMount(el) { el.addEventListener('click', e => { const b = e.target.closest('[data-g]'); if (!b) return; state.groupBy = b.dataset.g; state.collapsed.clear(); closePop(); render(); }); },
     });
   }
-  function lsortMenu(anchor) {
-    openPop(anchor, `<div class="menu" style="width:220px"><div class="group">Sort by</div>${LSORTS.map(([k, l]) => `<button class="mi ${state.lsort.key === k ? 'on' : ''}" data-s="${k}"><span class="check">${I.check}</span><span class="grow">${l}</span></button>`).join('')}</div>`, {
-      onMount(el) { el.addEventListener('click', e => { const b = e.target.closest('[data-s]'); if (!b) return; const k = b.dataset.s; state.lsort = { key: k, dir: k === 'link' ? 1 : -1 }; closePop(); render(); }); },
+  function lsortMenu(anchor, sorts = LSORTS) {
+    openPop(anchor, `<div class="menu" style="width:220px"><div class="group">Sort by</div>${sorts.map(([k, l]) => `<button class="mi ${state.lsort.key === k ? 'on' : ''}" data-s="${k}"><span class="check">${I.check}</span><span class="grow">${l}</span></button>`).join('')}</div>`, {
+      onMount(el) { el.addEventListener('click', e => { const b = e.target.closest('[data-s]'); if (!b) return; const k = b.dataset.s; state.lsort = { key: k, dir: ['link', 'name', 'domain'].includes(k) ? 1 : -1 }; closePop(); render(); }); },
     });
   }
   function linksMoreMenu(anchor) {
@@ -525,11 +529,330 @@
     const slugs = [...state.sel];
     if (act === 'clear') { state.sel.clear(); render(); return; }
     if (act === 'copy') { copyText(slugs.map(s => 'https://' + s).join('\n'), `Copied ${slugs.length} links`); return; }
-    if (act === 'csv') { toast(`Exported ${slugs.length} links as CSV`); return; }
+    if (act === 'csv') { toast(`Exported ${slugs.length} ${state.view === 'qr' ? 'QR codes' : 'links'} as CSV`); return; }
+    if (act === 'png') { toast(`Downloading ${slugs.length} QR codes as PNG`); return; }
+    if (act === 'design') { qrDesignsModal(slugs); return; }
     if (act === 'delete') { confirmDelete(slugs); return; }
     toast(`${act === 'tag' ? 'Add tag' : 'Archive'} is outside this prototype`);
   }
-  function goLinks(opts = {}) { state.view = 'links'; state.slug = null; if (!opts.keepFilters) { state.filters = []; } state.sel.clear(); render({ top: true }); }
+  function goLinks(opts = {}) { state.view = 'links'; state.slug = null; if (!opts.keepFilters) { state.filters = []; } state.sel.clear(); state.lq = ''; state.lsort = { key: 'created', dir: -1 }; render({ top: true }); }
+  // Other list pages: fresh search, sort and selection each time you arrive.
+  function goPage(view, opts = {}) {
+    state.view = view; state.slug = null; state.sel.clear(); state.lq = opts.q || '';
+    if (!opts.keepFilters) state.filters = [];
+    state.lsort = view === 'qr' ? { key: 'clicks', dir: -1 } : view === 'templates' ? { key: 'uses', dir: -1 } : { key: 'links', dir: -1 };
+    render({ top: true });
+  }
+
+  /* ---------- QR codes page ---------- */
+  // A QR code is a link that has scans. Design = the QR template applied to it.
+  const QR_DESIGNS = [
+    { id: 'default', name: 'Default', fg: '#111827', bg: '#ffffff', desc: 'Black on white, no logo' },
+    { id: 'brand', name: 'Acme brand', fg: '#8a64c0', bg: '#ffffff', logo: true, desc: 'Purple modules, logo in the centre' },
+    { id: 'dark', name: 'Dark', fg: '#ffffff', bg: '#111827', desc: 'White on dark, for packaging' },
+  ];
+  const QR_DESIGN_OF = { 'acme.co/fall-sale': 'brand', 'acme.co/bf-teaser': 'dark', 'acme.co/q4-launch': 'default', 'acme.co/store-poster': 'brand', 'acme.co/fall-qr': 'brand', 'acme.co/event-badge': 'dark' };
+  const designOf = slug => QR_DESIGNS.find(d => d.id === (QR_DESIGN_OF[slug] || 'default'));
+  const QSORTS = [['clicks', 'Most scans'], ['recent', 'Most scans · 30 days'], ['created', 'Newest first'], ['link', 'Short link A–Z']];
+
+  // Decorative QR-like module grid (not a real encoding), seeded by the slug so each code looks different but stable.
+  function qrSVG(slug, design, size = 40) {
+    const n = 21; let seed = 7; for (const ch of slug) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
+    const r = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+    let d = '';
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) { const inF = (x < 8 && y < 8) || (x > 12 && y < 8) || (x < 8 && y > 12); const inLogo = design.logo && x > 7 && x < 13 && y > 7 && y < 13; if (!inF && !inLogo && r() < .45) d += `M${x} ${y}h1v1h-1z`; }
+    const finder = (x, y) => `<rect x="${x}" y="${y}" width="7" height="7" fill="${design.fg}"/><rect x="${x + 1}" y="${y + 1}" width="5" height="5" fill="${design.bg}"/><rect x="${x + 2}" y="${y + 2}" width="3" height="3" fill="${design.fg}"/>`;
+    return `<svg class="qr-svg" viewBox="0 0 ${n} ${n}" width="${size}" height="${size}" shape-rendering="crispEdges" aria-hidden="true"><rect width="${n}" height="${n}" fill="${design.bg}"/><path d="${d}" fill="${design.fg}"/>${finder(0, 0)}${finder(14, 0)}${finder(0, 14)}${design.logo ? `<rect x="8" y="8" width="5" height="5" rx="1" fill="${design.bg}"/><path d="M9.2 12 10.5 8.8 11.8 12M9.8 10.6h1.4" fill="none" stroke="${design.fg}" stroke-width=".7" stroke-linecap="round" stroke-linejoin="round"/>` : ''}</svg>`;
+  }
+  function qrRows() {
+    const q = state.lq.trim().toLowerCase();
+    const rows = Q.links.rows.filter(r => r.link.qr > 0).map(r => {
+      const last30 = r.series.slice(-30), prev30 = r.series.slice(-60, -30);
+      const recent = last30.reduce((a, p) => a + p.qr, 0), before = prev30.reduce((a, p) => a + p.qr, 0);
+      return { ...r, last30, recent, recentDelta: delta(recent, before), design: designOf(r.link.slug) };
+    }).filter(r => !q || [r.link.slug, r.link.dest, r.link.title, r.link.campaign, r.link.source, r.link.medium, r.design.name, ...r.link.tags].some(s => s && s.toLowerCase().includes(q)));
+    const { key, dir } = state.lsort;
+    rows.sort((a, b) => {
+      let v = 0;
+      if (key === 'created') v = a.link.created < b.link.created ? -1 : a.link.created > b.link.created ? 1 : 0;
+      else if (key === 'link') v = a.link.slug.localeCompare(b.link.slug);
+      else if (key === 'campaign') v = (a.link.campaign || 'zz').localeCompare(b.link.campaign || 'zz');
+      else if (key === 'clicks') v = a.qr - b.qr;
+      else v = a[key] - b[key];
+      return v * dir;
+    });
+    return rows;
+  }
+  function qrRowHTML(r, i) {
+    const l = r.link, on = state.sel.has(l.slug), created = new Date(l.created);
+    const share = r.clicks ? r.qr / r.clicks : 0;
+    return `<div class="lrow qrow ${on ? 'sel' : ''}" data-qr-open="${esc(l.slug)}" role="row" tabindex="0" style="animation-delay:${Math.min(i, 12) * 20}ms">
+      <button class="cb ${on ? 'on' : ''}" data-sel="${esc(l.slug)}" role="checkbox" aria-checked="${on}" aria-label="Select ${esc(l.slug)}">${I.check}</button>
+      <div class="lk"><span class="qr-thumb">${qrSVG(l.slug, r.design)}</span>
+        <div class="txt"><span class="lk-name">${esc(l.title)}${l.tags.length ? l.tags.map(t => `<span class="tag">${esc(t)}</span>`).join('') : ''}</span><span class="lk-dest"><span class="short">${esc(l.slug)}</span> → ${esc(l.dest)}</span></div></div>
+      <div class="camp">${l.campaign ? `<button class="utm-chip sm" data-utm="campaign" data-val="${esc(l.campaign)}" title="Filter by this campaign">${esc(l.campaign)}</button>` : '<span class="untagged">Not tagged</span>'}<span class="sm-muted">${esc(l.source)} · ${esc(l.medium)}</span></div>
+      <div class="clk"><span class="spark qr">${sparkline(r.last30, 'qr')}</span><span class="n"><b class="num">${fmt.n(r.qr)}</b><span class="sm-muted num">${r.recentDelta == null ? '<span class="d new">New</span> · all in 30d' : `${fmt.n(r.recent)} <span class="d ${r.recentDelta > 0.005 ? 'up' : r.recentDelta < -0.005 ? 'down' : ''}">${(r.recentDelta > 0 ? '+' : '') + Math.round(r.recentDelta * 100)}%</span> 30d`}</span></span></div>
+      <div class="who">${avatar(l.by)}<span class="txt"><span>${fmt.d(created, { month: 'short', day: 'numeric', year: 'numeric' })}</span><span class="sm-muted">${esc(l.by)}</span></span></div>
+      <div><span class="tpl design" title="${esc(r.design.desc)}"><i style="background:${r.design.fg};box-shadow:0 0 0 1px ${r.design.bg === '#ffffff' ? 'var(--border)' : r.design.bg}"></i>${esc(r.design.name)}</span><span class="sm-muted" style="display:block;margin-top:3px">${Math.round(share * 100)}% of clicks</span></div>
+      <div class="acts">
+        <button class="icon-btn" data-qr-dl="${esc(l.slug)}" title="Download PNG">${I.download}</button>
+        <button class="icon-btn" data-copy="https://${esc(l.slug)}" title="Copy short link">${I.copy}</button>
+        <button class="icon-btn" data-row-analytics="${esc(l.slug)}" title="Analytics">${I.analytics}</button>
+        <button class="icon-btn" data-qr-more="${esc(l.slug)}" title="More" aria-haspopup="menu">${I.more}</button>
+      </div></div>`;
+  }
+  function qrTableHTML() {
+    const rows = qrRows(), total = Q.linksAll.rows.filter(r => r.link.qr > 0).length;
+    const sortBtn = (key, label) => `<button data-lsort="${key}" class="${state.lsort.key === key ? 'on' : ''} ${state.lsort.key === key && state.lsort.dir === 1 ? 'asc' : ''}">${label}${I.sort}</button>`;
+    const allOn = rows.length && rows.every(r => state.sel.has(r.link.slug));
+    const head = `<div class="lrow qrow head" role="row"><button class="cb ${allOn ? 'on' : ''}" id="sel-all" role="checkbox" aria-checked="${allOn}" aria-label="Select all">${I.check}</button>
+      <div>${sortBtn('link', 'QR code')}</div><div>${sortBtn('campaign', 'Campaign')}</div><div>${sortBtn('clicks', 'Scans')}</div><div>${sortBtn('created', 'Created')}</div><div>Design</div><div></div></div>`;
+    const body = rows.length ? rows.map(qrRowHTML).join('')
+      : `<div class="empty" style="min-height:200px"><strong>No QR codes match</strong>${state.lq ? 'Try a different search' : 'Try fewer filters'}, or create one from any link.<div style="margin-top:10px;display:flex;gap:8px"><button class="btn" id="clear-search">Clear search &amp; filters</button><button class="btn primary" id="create-qr-empty">Create QR code</button></div></div>`;
+    return `<section class="card" id="list-table"><div class="ltable">${head}${body}</div>
+      <div class="tbl-foot"><span>Showing ${rows.length} of ${total} QR code${total === 1 ? '' : 's'}${state.lq ? ` matching “${esc(state.lq)}”` : ''}</span><span class="grow"></span><span>Lifetime scans · Click a row to preview and download</span></div></section>`;
+  }
+  function qrHTML() {
+    const all = Q.linksAll.rows.filter(r => r.link.qr > 0), scans = all.reduce((a, r) => a + r.qr, 0);
+    const s = QSORTS.find(x => x[0] === state.lsort.key) || QSORTS[0], nf = state.filters.length;
+    return `<div class="view"><div class="page-head"><div class="title"><h1>QR codes</h1><span class="status" tabindex="0" data-tip="${all.length} QR codes · ${fmt.full(scans)} scans all time · updated 4 min ago">${all.length} codes · ${fmt.n(scans)} scans</span></div>
+        <div class="actions"><button class="btn" id="qr-designs-btn">${I.swatch}QR designs</button><button class="btn primary" id="create-qr-btn"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Create QR code</button></div></div></div>
+      <div class="toolbar links-tb"><div class="search lq">${I.search}<input id="lq" placeholder="Search QR codes, links, campaigns…" value="${esc(state.lq)}" aria-label="Search QR codes"><button class="icon-btn" id="lq-clear" aria-label="Clear search" ${state.lq ? '' : 'hidden'}>${I.close}</button></div>
+        <div class="controls">
+          <button class="tb-btn" id="filter-btn" aria-haspopup="menu" aria-expanded="false">${I.filter}Filter${nf ? `<span class="badge">${nf}</span>` : ''}</button>
+          <button class="tb-btn" id="lsort-btn" aria-haspopup="menu" aria-expanded="false">${I.sort}${s[1]}<span class="chev">${I.chev}</span></button>
+          <button class="tb-btn icon" id="list-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button></div></div>
+      ${chipsHTML()}${qrTableHTML()}${bulkBarHTML()}`;
+  }
+  function qrDesignsModal(slugs) {
+    const picking = !!(slugs && slugs.length);
+    const counts = Object.fromEntries(QR_DESIGNS.map(d => [d.id, D.LINKS.filter(l => l.qr > 0 && designOf(l.slug).id === d.id).length]));
+    openModal(`<div class="modal-h"><h3>${picking ? `Change design for ${slugs.length} QR code${slugs.length === 1 ? '' : 's'}` : 'QR designs'}<span class="sub">${picking ? 'Pick a design' : 'Templates every QR code in this workspace can use'}</span></h3><button class="close" aria-label="Close">${I.close}</button></div>
+      <div class="modal-b"><div class="design-grid">${QR_DESIGNS.map(d => `<button class="design-card" data-design="${d.id}"><span class="prev" style="background:${d.bg}">${qrSVG('acme.co/' + d.id, d, 88)}</span><span class="name">${esc(d.name)}${d.id === 'brand' ? '<span class="tag">Default</span>' : ''}</span><span class="sm-muted">${esc(d.desc)}</span><span class="sm-muted">${counts[d.id]} QR code${counts[d.id] === 1 ? '' : 's'}</span></button>`).join('')}
+        <button class="design-card new" id="design-new"><span class="prev"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span><span class="name">New design</span><span class="sm-muted">Colours, logo, corners and error correction</span></button></div>
+      ${picking ? '' : '<p class="footnote" style="margin:14px 0 0">Workspace admins can set the default design and whether members may customise it, under Rules.</p>'}</div>`, { width: 640, onMount(s) {
+        s.addEventListener('click', e => { const b = e.target.closest('[data-design]'); if (b) { closeModal(); if (picking) { slugs.forEach(sl => { QR_DESIGN_OF[sl] = b.dataset.design; }); state.sel.clear(); render(); toast(`Applied “${QR_DESIGNS.find(d => d.id === b.dataset.design).name}” to ${slugs.length} QR code${slugs.length === 1 ? '' : 's'}`); } else toast('The QR design editor is outside this prototype'); }
+          if (e.target.closest('#design-new')) { closeModal(); toast('The QR design editor is outside this prototype'); } });
+      } });
+  }
+  function qrMenu(anchor, slug) {
+    const l = D.LINKS.find(x => x.slug === slug);
+    openPop(anchor, `<div class="menu" style="width:230px"><div class="group" style="font-family:var(--font-mono);text-transform:none;letter-spacing:0">${esc(slug)}</div>
+      <button class="mi" data-r="preview">${I.qr}<span class="grow">Preview &amp; download</span></button>
+      <button class="mi" data-r="design">${I.swatch}<span class="grow">Change design</span></button>
+      <button class="mi" data-r="analytics">${I.analytics}<span class="grow">View scan analytics</span></button>
+      <button class="mi" data-r="edit">${I.edit}<span class="grow">Edit link</span></button>
+      <div class="sep"></div>
+      <button class="mi danger" data-r="delete">${I.close}<span class="grow">Delete QR code</span></button></div>`, { align: 'right', onMount(el) {
+        el.addEventListener('click', e => { const b = e.target.closest('[data-r]'); if (!b) return; closePop(); const r = b.dataset.r;
+          if (r === 'preview') qrModal(l); else if (r === 'design') qrDesignsModal([slug]); else if (r === 'analytics') goLink(slug); else if (r === 'delete') confirmDelete([slug]); else toast(`${b.textContent.trim()} is outside this prototype`); });
+      } });
+  }
+
+  /* ---------- Templates page ---------- */
+  // A UTM template = the parameter defaults the link builder fills in. {{…}} values are asked for at build time.
+  const TEMPLATE_LIST = [
+    { key: 'paid_social', name: 'Paid social', slug: 'paid-social', desc: 'Meta, LinkedIn and TikTok ads', source: '{{platform}}', medium: 'paid_social', campaign: '{{campaign}}', content: '{{creative}}', term: '', by: 'Dana Whitfield', created: '2026-06-12', shortener: 'acme.co' },
+    { key: 'social', name: 'Organic social', slug: 'organic-social', desc: 'Posts from our own accounts', source: '{{platform}}', medium: 'social', campaign: '{{campaign}}', content: 'organic_post', term: '', by: 'Marcus Lee', created: '2026-06-12', shortener: 'acme.co' },
+    { key: 'cpc', name: 'Paid search', slug: 'paid-search', desc: 'Google and Bing search campaigns', source: 'google', medium: 'cpc', campaign: '{{campaign}}', content: '{{ad_group}}', term: '{{keyword}}', by: 'Priya Natarajan', created: '2026-07-02', shortener: 'acme.co' },
+    { key: 'email', name: 'Email', slug: 'email', desc: 'Newsletter and lifecycle sends', source: 'newsletter', medium: 'email', campaign: '{{campaign}}', content: '{{position}}', term: '', by: 'Dana Whitfield', created: '2026-06-20', shortener: 'acme.co' },
+    { key: 'print', name: 'Print · QR', slug: 'print-qr', desc: 'Posters, packaging and badges', source: '{{placement}}', medium: 'print', campaign: '{{campaign}}', content: '', term: '', by: 'Priya Natarajan', created: '2026-08-01', shortener: 'acme.co', qr: 'brand' },
+    { key: 'referral', name: 'Partner', slug: 'partner', desc: 'Referral links for partners', source: '{{partner}}', medium: 'referral', campaign: 'partner_referral', content: '', term: '', by: 'Marcus Lee', created: '2026-08-10', shortener: 'utm.io' },
+    { key: 'audio', name: 'Podcast', slug: 'podcast', desc: 'Host-read ads and show notes', source: '{{show}}', medium: 'audio', campaign: '{{campaign}}', content: '', term: '', by: 'Marcus Lee', created: '2026-09-02', shortener: 'acme.co' },
+    { key: 'video', name: 'Creator', slug: 'creator', desc: 'YouTube and creator sponsorships', source: 'youtube', medium: 'video', campaign: '{{campaign}}', content: '{{creator}}', term: '', by: 'Dana Whitfield', created: '2026-09-15', shortener: 'acme.co' },
+  ];
+  const TSORTS = [['uses', 'Most used'], ['clicks', 'Most clicks'], ['created', 'Newest first'], ['name', 'Name A–Z']];
+  const UTM_KEYS = ['source', 'medium', 'campaign', 'content', 'term'];
+  const isDyn = v => /^\{\{.*\}\}$/.test(v);
+  const paramChip = (k, v) => v ? `<span class="utm-chip ${isDyn(v) ? 'dyn' : ''}" title="${isDyn(v) ? 'Asked for when the link is built' : 'Fixed value'}"><span class="k">utm_${k}</span>${esc(isDyn(v) ? v.slice(2, -2) : v)}</span>` : '';
+  function templateRows() {
+    const q = state.lq.trim().toLowerCase();
+    const rows = TEMPLATE_LIST.map(t => {
+      const links = Q.linksAll.rows.filter(r => r.link.medium === t.key);
+      return { t, uses: links.length, clicks: links.reduce((a, r) => a + r.clicks, 0) };
+    }).filter(({ t }) => !q || [t.name, t.slug, t.desc, t.by, ...UTM_KEYS.map(k => t[k])].some(s => s && s.toLowerCase().includes(q)));
+    const { key, dir } = state.lsort;
+    rows.sort((a, b) => { let v = 0; if (key === 'name') v = a.t.name.localeCompare(b.t.name); else if (key === 'created') v = a.t.created < b.t.created ? -1 : a.t.created > b.t.created ? 1 : 0; else v = a[key] - b[key]; return v * dir; });
+    return rows;
+  }
+  function templateRowHTML({ t, uses, clicks }, i) {
+    return `<div class="lrow trow-t" data-tpl="${esc(t.key)}" role="row" tabindex="0" style="animation-delay:${Math.min(i, 12) * 20}ms">
+      <div class="lk"><span class="type">${I.templates}</span><div class="txt"><span class="lk-name">${esc(t.name)}${t.qr ? `<span class="tag">QR</span>` : ''}</span><span class="lk-dest"><span class="code">${esc(t.slug)}</span> ${esc(t.desc)}</span></div></div>
+      <div class="params">${UTM_KEYS.map(k => paramChip(k, t[k])).join('')}</div>
+      <div class="uses">${uses ? `<button class="n" data-tpl-links="${esc(t.key)}" title="Show these links"><b class="num">${uses}</b> link${uses === 1 ? '' : 's'}</button><span class="sm-muted num">${fmt.n(clicks)} clicks</span>` : '<span class="untagged">Not used yet</span>'}</div>
+      <div class="who">${avatar(t.by)}<span class="txt"><span>${fmt.d(new Date(t.created), { month: 'short', day: 'numeric', year: 'numeric' })}</span><span class="sm-muted">${esc(t.by)}</span></span></div>
+      <div class="acts">
+        <button class="icon-btn" data-tpl-use="${esc(t.key)}" title="Build a link with this template">${I.links}</button>
+        <button class="icon-btn" data-tpl-edit="${esc(t.key)}" title="Edit">${I.edit}</button>
+        <button class="icon-btn" data-tpl-more="${esc(t.key)}" title="More" aria-haspopup="menu">${I.more}</button>
+      </div></div>`;
+  }
+  function templatesTableHTML() {
+    const rows = templateRows();
+    const sortBtn = (key, label) => `<button data-lsort="${key}" class="${state.lsort.key === key ? 'on' : ''} ${state.lsort.key === key && state.lsort.dir === 1 ? 'asc' : ''}">${label}${I.sort}</button>`;
+    const head = `<div class="lrow trow-t head" role="row"><div>${sortBtn('name', 'Template')}</div><div>Parameters <span class="sm-muted" style="font-weight:400">· dashed = asked for in the builder</span></div><div>${sortBtn('uses', 'Used by')}</div><div>${sortBtn('created', 'Created')}</div><div></div></div>`;
+    const body = rows.length ? rows.map(templateRowHTML).join('')
+      : `<div class="empty" style="min-height:200px"><strong>No templates match</strong>Try a different search, or create a new template.<div style="margin-top:10px;display:flex;gap:8px"><button class="btn" id="clear-search">Clear search</button><button class="btn primary" id="create-tpl-empty">Create template</button></div></div>`;
+    return `<section class="card" id="list-table"><div class="ltable">${head}${body}</div>
+      <div class="tbl-foot"><span>Showing ${rows.length} of ${TEMPLATE_LIST.length} templates${state.lq ? ` matching “${esc(state.lq)}”` : ''}</span><span class="grow"></span><span>Click a row to see the full template</span></div></section>`;
+  }
+  function templatesHTML() {
+    const s = TSORTS.find(x => x[0] === state.lsort.key) || TSORTS[0];
+    return `<div class="view"><div class="page-head"><div class="title"><h1>Templates</h1><span class="status" tabindex="0" data-tip="${TEMPLATE_LIST.length} UTM templates · template selection is required in the link builder">${TEMPLATE_LIST.length} templates · required in builder</span></div>
+        <div class="actions"><button class="btn" id="import-tpl-btn">${I.download}Import CSV</button><button class="btn primary" id="create-tpl-btn"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Create template</button></div></div></div>
+      <div class="toolbar links-tb"><div class="search lq">${I.search}<input id="lq" placeholder="Search templates, parameters, people…" value="${esc(state.lq)}" aria-label="Search templates"><button class="icon-btn" id="lq-clear" aria-label="Clear search" ${state.lq ? '' : 'hidden'}>${I.close}</button></div>
+        <div class="controls">
+          <button class="tb-btn" id="lsort-btn" aria-haspopup="menu" aria-expanded="false">${I.sort}${s[1]}<span class="chev">${I.chev}</span></button>
+          <button class="tb-btn icon" id="list-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button></div></div>
+      ${templatesTableHTML()}`;
+  }
+  function templateModal(key) {
+    const t = TEMPLATE_LIST.find(x => x.key === key); const row = templateRows().find(r => r.t.key === key) || { uses: 0, clicks: 0 };
+    const example = `https://${t.shortener}/{{slug}}  →  acme.com/…?${UTM_KEYS.filter(k => t[k]).map(k => `utm_${k}=${isDyn(t[k]) ? '…' : t[k]}`).join('&')}`;
+    openModal(`<div class="modal-h"><h3>${esc(t.name)}<span class="sub"><span class="code">${esc(t.slug)}</span></span></h3><button class="close" aria-label="Close">${I.close}</button></div>
+      <div class="modal-b"><p class="sm-muted" style="white-space:normal;margin:4px 0 14px">${esc(t.desc)}. Created ${fmt.d(new Date(t.created), { month: 'short', day: 'numeric', year: 'numeric' })} by ${esc(t.by)}.</p>
+        <dl class="tpl-dl">${UTM_KEYS.map(k => `<dt>utm_${k}</dt><dd>${t[k] ? (isDyn(t[k]) ? `<span class="utm-chip dyn">${esc(t[k].slice(2, -2))}</span><span class="sm-muted" style="margin-left:8px">asked for in the builder</span>` : `<b>${esc(t[k])}</b>`) : '<span class="untagged">not set</span>'}</dd>`).join('')}
+        <dt>Shortener</dt><dd>${esc(t.shortener)}</dd><dt>QR design</dt><dd>${t.qr ? esc(QR_DESIGNS.find(d => d.id === t.qr).name) : '<span class="untagged">workspace default</span>'}</dd></dl>
+        <div class="tpl-example"><span class="sm-muted">Example</span><code>${esc(example)}</code></div>
+        <div class="tpl-foot"><span class="sm-muted">${row.uses ? `Used by <b>${row.uses}</b> link${row.uses === 1 ? '' : 's'} · ${fmt.n(row.clicks)} clicks` : 'Not used by any link yet'}</span><span class="grow"></span>${row.uses ? `<button class="btn" id="tpl-links">${I.links}View links</button>` : ''}<button class="btn" id="tpl-edit">${I.edit}Edit</button><button class="btn primary" id="tpl-use">Build a link</button></div></div>`, { width: 600, onMount(s) {
+        const tl = $('#tpl-links', s); if (tl) tl.addEventListener('click', () => { closeModal(); goLinks(); state.lq = t.medium; render(); });
+        $('#tpl-edit', s).addEventListener('click', () => { closeModal(); toast('Template editing is outside this prototype'); });
+        $('#tpl-use', s).addEventListener('click', () => { closeModal(); toast(`Link builder would open with “${t.name}” applied (outside this prototype)`); });
+      } });
+  }
+  function templateMenu(anchor, key) {
+    const t = TEMPLATE_LIST.find(x => x.key === key);
+    openPop(anchor, `<div class="menu" style="width:230px"><div class="group">${esc(t.name)}</div>
+      <button class="mi" data-r="open">${I.templates}<span class="grow">View template</span></button>
+      <button class="mi" data-r="use">${I.links}<span class="grow">Build a link with it</span></button>
+      <button class="mi" data-r="links">${I.analytics}<span class="grow">Show its links</span></button>
+      <div class="sep"></div>
+      <button class="mi" data-r="dup"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 16V6a2 2 0 0 1 2-2h10"/></svg><span class="grow">Duplicate</span></button>
+      <button class="mi" data-r="default">${I.check}<span class="grow">Make workspace default</span></button>
+      <button class="mi danger" data-r="delete">${I.close}<span class="grow">Delete</span></button></div>`, { align: 'right', onMount(el) {
+        el.addEventListener('click', e => { const b = e.target.closest('[data-r]'); if (!b) return; closePop(); const r = b.dataset.r;
+          if (r === 'open') templateModal(key); else if (r === 'links') { goLinks(); state.lq = t.medium; render(); } else if (r === 'delete') confirmDeleteTemplate(t); else toast(`${b.textContent.trim()} is outside this prototype`); });
+      } });
+  }
+  function confirmDeleteTemplate(t) {
+    const uses = D.LINKS.filter(l => l.medium === t.key).length;
+    openModal(`<div class="modal-h"><h3>Delete “${esc(t.name)}”?</h3><button class="close" aria-label="Close">${I.close}</button></div>
+      <div class="modal-b about"><p>${uses ? `<b>${uses}</b> existing link${uses === 1 ? ' keeps' : 's keep'} their parameters; only the template goes away.` : 'This template is not used by any link.'} Members won't be able to pick it in the link builder any more.</p>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px"><button class="btn close">Cancel</button><button class="btn primary danger" id="del-ok">Delete template</button></div></div>`, { width: 440, onMount(s) { $('#del-ok', s).addEventListener('click', () => { closeModal(); toast(`Deleted “${t.name}” (prototype only — data is unchanged)`); }); } });
+  }
+
+  /* ---------- Link shorteners page ---------- */
+  const SHORTENERS = [
+    { domain: 'utm.io', kind: 'UTM.io shared domain', status: 'active', redirect: '', note: 'Available to every workspace', default: false, locked: true },
+    { domain: 'acme.co', kind: 'Custom domain', status: 'verified', redirect: 'acme.com', note: 'DNS verified Jun 3, 2026', default: true },
+    { domain: 'go.acme.com', kind: 'Custom domain', status: 'pending', redirect: 'acme.com', note: 'Waiting for the CNAME record', default: false },
+    { domain: 'bit.ly', kind: 'Bitly integration', status: 'connected', redirect: '', note: 'Connected as acme-marketing', default: false },
+  ];
+  const SH_STATUS = { active: ['Active', ''], verified: ['Verified', ''], pending: ['Needs DNS', 'warn'], connected: ['Connected', ''], off: ['Disabled', 'off'] };
+  const SSORTS = [['links', 'Most links'], ['clicks', 'Most clicks'], ['domain', 'Domain A–Z']];
+  function shortenerRows() {
+    const q = state.lq.trim().toLowerCase();
+    const rows = SHORTENERS.map(s => {
+      const links = Q.linksAll.rows.filter(r => r.link.slug.split('/')[0] === s.domain);
+      return { s, links: links.length, clicks: links.reduce((a, r) => a + r.clicks, 0), off: state.disabledDomains.has(s.domain) };
+    }).filter(({ s }) => !q || [s.domain, s.kind, s.redirect, SH_STATUS[s.status][0]].some(x => x && x.toLowerCase().includes(q)));
+    const { key, dir } = state.lsort;
+    rows.sort((a, b) => { const v = key === 'domain' ? a.s.domain.localeCompare(b.s.domain) : a[key] - b[key]; return v * dir; });
+    return rows;
+  }
+  function shortenerRowHTML({ s, links, clicks, off }, i) {
+    const st = off ? SH_STATUS.off : SH_STATUS[s.status];
+    return `<div class="lrow srow ${off ? 'off' : ''}" data-domain="${esc(s.domain)}" role="row" tabindex="0" style="animation-delay:${Math.min(i, 12) * 20}ms">
+      <div class="lk"><span class="type">${I.shorteners}</span><div class="txt"><span class="lk-name"><span class="short">${esc(s.domain)}</span>${s.default ? '<span class="tag">Default</span>' : ''}</span><span class="lk-dest">${esc(s.kind)} · ${esc(s.note)}</span></div></div>
+      <div>${s.status === 'pending' && !off ? `<button class="status-pill ${st[1]}" data-dns="${esc(s.domain)}" title="Show DNS instructions">${st[0]}</button>` : `<span class="status-pill ${st[1]}">${st[0]}</span>`}</div>
+      <div class="redir">${s.redirect ? `<span class="sm-muted">Root goes to</span><span>${esc(s.redirect)}</span>` : '<span class="untagged">No root redirect</span>'}</div>
+      <div class="uses">${links ? `<button class="n" data-dom-links="${esc(s.domain)}" title="Show these links"><b class="num">${links}</b> link${links === 1 ? '' : 's'}</button><span class="sm-muted num">${fmt.n(clicks)} clicks</span>` : '<span class="untagged">No links yet</span>'}</div>
+      <div><label class="switch ${off ? '' : 'on'}" data-toggle-dom="${esc(s.domain)}" title="${off ? 'Enable' : 'Disable'} for new links"><i></i><span class="sm-muted">${off ? 'Off' : 'On'}</span></label></div>
+      <div class="acts">
+        <button class="icon-btn" data-dom-edit="${esc(s.domain)}" title="Settings">${I.sliders}</button>
+        ${s.locked ? '' : `<button class="icon-btn" data-dom-delete="${esc(s.domain)}" title="Remove">${I.close}</button>`}
+      </div></div>`;
+  }
+  function shortenersTableHTML() {
+    const rows = shortenerRows();
+    const sortBtn = (key, label) => `<button data-lsort="${key}" class="${state.lsort.key === key ? 'on' : ''} ${state.lsort.key === key && state.lsort.dir === 1 ? 'asc' : ''}">${label}${I.sort}</button>`;
+    const head = `<div class="lrow srow head" role="row"><div>${sortBtn('domain', 'Shortener')}</div><div>Status</div><div>Default redirect</div><div>${sortBtn('links', 'Used by')}</div><div>New links</div><div></div></div>`;
+    const body = rows.length ? rows.map(shortenerRowHTML).join('') : `<div class="empty" style="min-height:160px"><strong>No shorteners match</strong>Try a different search.<div style="margin-top:10px"><button class="btn" id="clear-search">Clear search</button></div></div>`;
+    return `<section class="card" id="list-table"><div class="ltable">${head}${body}</div>
+      <div class="tbl-foot"><span>${SHORTENERS.length} shorteners · the default is pre-selected in the link builder</span><span class="grow"></span><span>Turning one off keeps existing links working</span></div></section>`;
+  }
+  function shortenersHTML() {
+    const s = SSORTS.find(x => x[0] === state.lsort.key) || SSORTS[0];
+    return `<div class="view"><div class="page-head"><div class="title"><h1>Link shorteners</h1><span class="status" tabindex="0" data-tip="${SHORTENERS.length} shorteners · ${SHORTENERS.filter(x => x.status === 'pending').length} waiting for DNS">${SHORTENERS.length} domains · 1 needs DNS</span></div>
+        <div class="actions"><button class="btn" id="cleaner-btn">${I.sliders}UTM Page Cleaner</button><button class="btn primary" id="add-dom-btn"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Add shortener</button></div></div></div>
+      <div class="toolbar links-tb"><div class="search lq">${I.search}<input id="lq" placeholder="Search domains…" value="${esc(state.lq)}" aria-label="Search shorteners"><button class="icon-btn" id="lq-clear" aria-label="Clear search" ${state.lq ? '' : 'hidden'}>${I.close}</button></div>
+        <div class="controls">
+          <button class="tb-btn" id="lsort-btn" aria-haspopup="menu" aria-expanded="false">${I.sort}${s[1]}<span class="chev">${I.chev}</span></button>
+          <button class="tb-btn icon" id="list-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button></div></div>
+      ${shortenersTableHTML()}
+      <p class="footnote">Short links keep redirecting even if you turn a shortener off; it only disappears from the link builder. Custom domains need a CNAME record pointing at <span class="code">redirect.utm.io</span>.</p>`;
+  }
+  function dnsModal(domain) {
+    openModal(`<div class="modal-h"><h3>Connect ${esc(domain)}<span class="sub">DNS not found yet</span></h3><button class="close" aria-label="Close">${I.close}</button></div>
+      <div class="modal-b about"><p>Add this record at your DNS provider, then check again. Changes usually show up within an hour.</p>
+        <dl class="tpl-dl dns"><dt>Type</dt><dd><b>CNAME</b></dd><dt>Host</dt><dd><b>${esc(domain.split('.')[0])}</b><button class="icon-btn" data-copy="${esc(domain.split('.')[0])}" title="Copy">${I.copy}</button></dd><dt>Points to</dt><dd><b>redirect.utm.io</b><button class="icon-btn" data-copy="redirect.utm.io" title="Copy">${I.copy}</button></dd><dt>TTL</dt><dd>Automatic</dd></dl>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px"><button class="btn close">Close</button><button class="btn primary" id="dns-check">${I.reset}Check again</button></div></div>`, { width: 480, onMount(s) {
+        s.addEventListener('click', e => { const c = e.target.closest('[data-copy]'); if (c) copyText(c.dataset.copy, 'Copied'); });
+        $('#dns-check', s).addEventListener('click', () => { closeModal(); toast(`Still waiting for the CNAME on ${domain}`); });
+      } });
+  }
+  function addShortenerModal() {
+    openModal(`<div class="modal-h"><h3>Add a link shortener</h3><button class="close" aria-label="Close">${I.close}</button></div>
+      <div class="modal-b about"><div class="choice-list">
+        <label class="choice on"><input type="radio" name="kind" value="custom" checked><span class="t"><b>Custom domain</b><span class="sm-muted" style="white-space:normal">Use your own domain, e.g. go.acme.com. Needs a CNAME record.</span></span></label>
+        <label class="choice"><input type="radio" name="kind" value="bitly"><span class="t"><b>Bitly</b><span class="sm-muted" style="white-space:normal">Connect a Bitly account and use its domains.</span></span></label></div>
+        <div class="field"><label for="dom-in">Domain</label><div class="search" style="margin:0"><input id="dom-in" placeholder="go.acme.com" autocomplete="off"></div></div>
+        <div class="field"><label for="redir-in">Where should the root (<span class="code">go.acme.com/</span>) go?</label><div class="search" style="margin:0"><input id="redir-in" placeholder="https://acme.com" autocomplete="off"></div></div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px"><button class="btn close">Cancel</button><button class="btn primary" id="dom-add" disabled>Add domain</button></div></div>`, { width: 480, onMount(s) {
+        const inp = $('#dom-in', s), add = $('#dom-add', s);
+        inp.addEventListener('input', () => { add.disabled = !/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(inp.value.trim()); });
+        $$('.choice', s).forEach(c => c.addEventListener('click', () => $$('.choice', s).forEach(x => x.classList.toggle('on', x === c))));
+        add.addEventListener('click', () => { const d = inp.value.trim().toLowerCase(); closeModal(); if (!SHORTENERS.some(x => x.domain === d)) SHORTENERS.push({ domain: d, kind: 'Custom domain', status: 'pending', redirect: ($('#redir-in', s).value || '').replace(/^https?:\/\//, ''), note: 'Added just now', default: false }); render(); dnsModal(d); });
+        setTimeout(() => inp.focus(), 50);
+      } });
+  }
+  function shortenerMenu(anchor, domain) {
+    const s = SHORTENERS.find(x => x.domain === domain);
+    openPop(anchor, `<div class="menu" style="width:230px"><div class="group" style="text-transform:none;letter-spacing:0">${esc(domain)}</div>
+      <button class="mi ${s.default ? 'on' : ''}" data-r="default"><span class="check">${I.check}</span><span class="grow">Default for new links</span></button>
+      <button class="mi" data-r="redirect">${I.referrer}<span class="grow">Change root redirect</span></button>
+      ${s.status === 'pending' ? `<button class="mi" data-r="dns">${I.info}<span class="grow">DNS instructions</span></button>` : ''}
+      <div class="sep"></div>
+      ${s.locked ? '' : `<button class="mi danger" data-r="delete">${I.close}<span class="grow">Remove shortener</span></button>`}</div>`, { align: 'right', onMount(el) {
+        el.addEventListener('click', e => { const b = e.target.closest('[data-r]'); if (!b) return; closePop(); const r = b.dataset.r;
+          if (r === 'default') { SHORTENERS.forEach(x => { x.default = x.domain === domain; }); render(); toast(`${domain} is now the default shortener`); }
+          else if (r === 'dns') dnsModal(domain);
+          else if (r === 'delete') confirmRemoveShortener(s);
+          else toast(`${b.textContent.trim()} is outside this prototype`); });
+      } });
+  }
+  function confirmRemoveShortener(s) {
+    const n = D.LINKS.filter(l => l.slug.split('/')[0] === s.domain).length;
+    openModal(`<div class="modal-h"><h3>Remove ${esc(s.domain)}?</h3><button class="close" aria-label="Close">${I.close}</button></div>
+      <div class="modal-b about"><p>${n ? `<b>${n}</b> link${n === 1 ? '' : 's'} use this domain and would <b>stop redirecting</b>. Turn the shortener off instead if you only want to hide it from the link builder.` : 'No links use this domain yet.'}</p>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px"><button class="btn close">Cancel</button>${n ? `<button class="btn" id="dom-off">Turn off instead</button>` : ''}<button class="btn primary danger" id="del-ok">Remove</button></div></div>`, { width: 460, onMount(m) {
+        $('#del-ok', m).addEventListener('click', () => { closeModal(); const i = SHORTENERS.indexOf(s); if (i > -1) SHORTENERS.splice(i, 1); render(); toast(`Removed ${s.domain} (prototype only)`); });
+        const off = $('#dom-off', m); if (off) off.addEventListener('click', () => { closeModal(); state.disabledDomains.add(s.domain); render(); toast(`${s.domain} turned off for new links`); });
+      } });
+  }
+
+  // Which table a list page draws, so search and sort can redraw just that card.
+  const LIST_TABLE = { links: linksTableHTML, qr: qrTableHTML, templates: templatesTableHTML, shorteners: shortenersTableHTML };
+  const listTableEl = () => $('#links-table') || $('#list-table');
+  function listMoreMenu(anchor) {
+    const what = state.view === 'qr' ? 'QR codes' : state.view === 'templates' ? 'templates' : 'shorteners';
+    openPop(anchor, `<div class="menu" style="width:230px">
+      <button class="mi" data-act="list-csv">${I.download}<span class="grow">Export ${what} as CSV</span></button>
+      ${state.view === 'qr' ? `<button class="mi" data-act="qr-designs">${I.swatch}<span class="grow">QR designs…</span></button>` : state.view === 'templates' ? `<button class="mi" data-act="tpl-import">${I.download}<span class="grow">Import templates via CSV</span></button>` : `<button class="mi" data-act="cleaner">${I.sliders}<span class="grow">UTM Page Cleaner…</span></button>`}
+      <div class="sep"></div>
+      <button class="mi" data-act="about">${I.info}<span class="grow">Tips &amp; shortcuts</span></button></div>`, { align: 'right', onMount(el) { el.addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (!b) return; closePop(); const a = b.dataset.act;
+        if (a === 'list-csv') toast(`Exported ${what} as CSV`); else if (a === 'qr-designs') qrDesignsModal(); else if (a === 'about') tipsModal(); else toast(`${b.textContent.trim()} is outside this prototype`); }); } });
+  }
 
   /* ---------- Render + post-render effects ---------- */
   const prevCounts = {};
@@ -539,7 +862,8 @@
     const view = $('#view');
     const y = window.scrollY;
     if (opts.busy) { view.classList.add('busy'); setTimeout(() => view.classList.remove('busy'), 500); }
-    view.innerHTML = state.view === 'link' ? linkHTML() : state.view === 'links' ? linksHTML() : overviewHTML();
+    const VIEWS = { link: linkHTML, links: linksHTML, qr: qrHTML, templates: templatesHTML, shorteners: shortenersHTML };
+    view.innerHTML = (VIEWS[state.view] || overviewHTML)();
     if (opts.top) window.scrollTo({ top: 0, behavior: 'instant' }); else window.scrollTo(0, y);
     requestAnimationFrame(() => {
       $$('[data-w]', view).forEach(el => { el.style.width = el.dataset.w + '%'; });
@@ -553,9 +877,10 @@
       });
       drawChart();
     });
-    const section = state.view === 'links' || (state.view === 'link' && state.from === 'links') ? 'links' : 'analytics';
+    const section = state.view === 'link' ? (LIST_VIEWS.includes(state.from) ? state.from : 'analytics') : LIST_VIEWS.includes(state.view) ? state.view : 'analytics';
     $$('.nav a').forEach(a => a.classList.toggle('active', a.dataset.nav === section));
-    $('#topbar-title').textContent = state.view === 'link' ? state.slug : state.view === 'links' ? 'Links' : 'Acme Marketing';
+    const TITLES = { links: 'Links', qr: 'QR codes', templates: 'Templates', shorteners: 'Link shorteners' };
+    $('#topbar-title').textContent = state.view === 'link' ? state.slug : TITLES[state.view] || 'Acme Marketing';
     try { location.hash = state.view === 'link' ? 'link-' + state.slug.replace(/[^a-z0-9]+/gi, '-') : state.view; } catch (e) { /* ignore */ }
   }
   window.addEventListener('resize', (() => { let t; return () => { clearTimeout(t); t = setTimeout(drawChart, 120); }; })());
@@ -780,6 +1105,10 @@
       <h4>Links page</h4><ul>
       <li>Search, Filter and Group by work together. Click a row to open that link's analytics; hover a row for copy, QR and more.</li>
       <li>Tick links to copy, export, tag or delete them in one go.</li></ul>
+      <h4>QR codes, Templates, Link shorteners</h4><ul>
+      <li><b>QR codes</b> lists every link that has a code, with scans and its design. Click a row to preview and download; tick rows to change the design in bulk.</li>
+      <li><b>Templates</b> shows each template's parameters. Dashed chips are asked for in the link builder. Click "N links" to see the links built from it.</li>
+      <li><b>Link shorteners</b>: switch a domain off to hide it from the builder without breaking links. "Needs DNS" shows the record to add.</li></ul>
       <h4>Keyboard shortcuts</h4><p>With the date menu open: <kbd>D</kbd> Today · <kbd>E</kbd> Yesterday · <kbd>W</kbd> Last 7 days · <kbd>T</kbd> Last 30 days · <kbd>M</kbd> This month · <kbd>L</kbd> Last month · <kbd>Q</kbd> Last 90 days. <kbd>Esc</kbd> closes any menu.</p></div>`, { width: 560 });
   }
 
@@ -798,7 +1127,7 @@
   }
   function goLink(slug) { if (state.view !== 'link') state.from = state.view; state.view = 'link'; state.slug = slug; render({ top: true }); }
   function goOverview() { state.view = 'overview'; state.slug = null; render({ top: true }); }
-  function goBack() { if (state.from === 'links') goLinks({ keepFilters: true }); else goOverview(); }
+  function goBack() { if (state.from === 'links') goLinks({ keepFilters: true }); else if (LIST_VIEWS.includes(state.from)) goPage(state.from, { keepFilters: true }); else goOverview(); }
 
   /* ---------- Global event delegation ---------- */
   $('#view').addEventListener('click', e => {
@@ -826,15 +1155,39 @@
     if (hit('#group-btn')) { groupMenu(hit('#group-btn')); return; }
     if (hit('#lsort-btn')) { lsortMenu(hit('#lsort-btn')); return; }
     if (hit('#links-more')) { linksMoreMenu(hit('#links-more')); return; }
+    if (hit('#list-more')) { listMoreMenu(hit('#list-more')); return; }
     if (hit('#lq-clear') || hit('#clear-search')) { state.lq = ''; if (hit('#clear-search')) state.filters = []; render(); return; }
-    if ((el = hit('[data-lsort]'))) { const k = el.dataset.lsort; if (state.lsort.key === k) state.lsort.dir *= -1; else state.lsort = { key: k, dir: k === 'link' || k === 'campaign' ? 1 : -1 }; swapSection($('#links-table'), linksTableHTML()); return; }
+    if ((el = hit('[data-lsort]'))) { const k = el.dataset.lsort; if (state.lsort.key === k) state.lsort.dir *= -1; else state.lsort = { key: k, dir: ['link', 'campaign', 'name', 'domain'].includes(k) ? 1 : -1 }; swapSection(listTableEl(), LIST_TABLE[state.view]()); return; }
     if ((el = hit('[data-sel]'))) { const sl = el.dataset.sel; if (state.sel.has(sl)) state.sel.delete(sl); else state.sel.add(sl); refreshSelection(); return; }
-    if (hit('#sel-all')) { const rows = linkRows(); const all = rows.every(r => state.sel.has(r.link.slug)); rows.forEach(r => all ? state.sel.delete(r.link.slug) : state.sel.add(r.link.slug)); refreshSelection(); return; }
+    if (hit('#sel-all')) { const rows = selectableRows(); const all = rows.every(r => state.sel.has(r.link.slug)); rows.forEach(r => all ? state.sel.delete(r.link.slug) : state.sel.add(r.link.slug)); refreshSelection(); return; }
     if ((el = hit('[data-group]'))) { const g = el.dataset.group; if (state.collapsed.has(g)) state.collapsed.delete(g); else state.collapsed.add(g); swapSection($('#links-table'), linksTableHTML()); return; }
     if ((el = hit('[data-bulk]'))) { bulk(el.dataset.bulk); return; }
     if ((el = hit('[data-row-qr]'))) { qrModal(D.LINKS.find(l => l.slug === el.dataset.rowQr)); return; }
     if ((el = hit('[data-row-analytics]'))) { goLink(el.dataset.rowAnalytics); return; }
     if ((el = hit('[data-row-more]'))) { rowMenu(el, el.dataset.rowMore); return; }
+    // QR codes page
+    if (hit('#create-qr-btn') || hit('#create-qr-empty')) { toast('Create QR code opens the link builder with QR on (outside this prototype)'); return; }
+    if (hit('#qr-designs-btn')) { qrDesignsModal(); return; }
+    if ((el = hit('[data-qr-dl]'))) { toast(`QR code PNG for ${el.dataset.qrDl} downloaded`); return; }
+    if ((el = hit('[data-qr-more]'))) { qrMenu(el, el.dataset.qrMore); return; }
+    if ((el = hit('[data-qr-open]'))) { qrModal(D.LINKS.find(l => l.slug === el.dataset.qrOpen)); return; }
+    // Templates page
+    if (hit('#create-tpl-btn') || hit('#create-tpl-empty')) { toast('Create template opens the template editor (outside this prototype)'); return; }
+    if (hit('#import-tpl-btn')) { toast('Import templates via CSV is outside this prototype'); return; }
+    if ((el = hit('[data-tpl-links]'))) { const t = TEMPLATE_LIST.find(x => x.key === el.dataset.tplLinks); goLinks(); state.lq = t.medium; render(); return; }
+    if ((el = hit('[data-tpl-use]'))) { toast(`Link builder would open with “${TEMPLATE_LIST.find(x => x.key === el.dataset.tplUse).name}” applied (outside this prototype)`); return; }
+    if ((el = hit('[data-tpl-edit]'))) { toast('Template editing is outside this prototype'); return; }
+    if ((el = hit('[data-tpl-more]'))) { templateMenu(el, el.dataset.tplMore); return; }
+    if ((el = hit('[data-tpl]'))) { templateModal(el.dataset.tpl); return; }
+    // Link shorteners page
+    if (hit('#add-dom-btn')) { addShortenerModal(); return; }
+    if (hit('#cleaner-btn')) { toast('UTM Page Cleaner setup is outside this prototype'); return; }
+    if ((el = hit('[data-dns]'))) { dnsModal(el.dataset.dns); return; }
+    if ((el = hit('[data-dom-links]'))) { goLinks(); state.lq = el.dataset.domLinks; render(); return; }
+    if ((el = hit('[data-toggle-dom]'))) { const d = el.dataset.toggleDom; if (state.disabledDomains.has(d)) state.disabledDomains.delete(d); else state.disabledDomains.add(d); swapSection(listTableEl(), shortenersTableHTML()); toast(`${d} ${state.disabledDomains.has(d) ? 'hidden from' : 'available in'} the link builder`); return; }
+    if ((el = hit('[data-dom-edit]'))) { shortenerMenu(el, el.dataset.domEdit); return; }
+    if ((el = hit('[data-dom-delete]'))) { confirmRemoveShortener(SHORTENERS.find(x => x.domain === el.dataset.domDelete)); return; }
+    if ((el = hit('[data-domain]'))) { shortenerMenu($('.acts .icon-btn', el) || el, el.dataset.domain); return; }
     if ((el = hit('[data-link]'))) { goLink(el.dataset.link); return; }
     if ((el = hit('[data-tab]'))) { const cardEl = el.closest('[data-card]'); const id = cardEl.dataset.card; if (state.tabs[id] === el.dataset.tab) return; state.tabs[id] = el.dataset.tab; swapSection(cardEl, cardFor(id)); return; }
     if ((el = hit('[data-expand]'))) { expandModal(el.dataset.expand); return; }
@@ -845,12 +1198,13 @@
     if (hit('#edit-btn')) { toast('Edit link opens the link settings (not in this prototype)'); return; }
   });
   $('#view').addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.row, .trow.data, .lrow')) { e.preventDefault(); e.target.click(); } });
-  // Links search: redraw only the table, keep the caret where it is
-  $('#view').addEventListener('input', (() => { let t; return e => { if (e.target.id !== 'lq') return; state.lq = e.target.value; const c = $('#lq-clear'); if (c) c.hidden = !state.lq; clearTimeout(t); t = setTimeout(() => swapSection($('#links-table'), linksTableHTML()), 120); }; })());
+  // List search: redraw only the table, keep the caret where it is
+  $('#view').addEventListener('input', (() => { let t; return e => { if (e.target.id !== 'lq') return; state.lq = e.target.value; const c = $('#lq-clear'); if (c) c.hidden = !state.lq; clearTimeout(t); t = setTimeout(() => swapSection(listTableEl(), LIST_TABLE[state.view]()), 120); }; })());
   // Selection: update checkboxes + bulk bar in place, no re-render
+  const selectableRows = () => state.view === 'qr' ? qrRows() : linkRows();
   function refreshSelection() {
-    $$('.lrow[data-link]').forEach(r => { const on = state.sel.has(r.dataset.link); r.classList.toggle('sel', on); const cb = $('.cb', r); cb.classList.toggle('on', on); cb.setAttribute('aria-checked', on); });
-    const rows = linkRows(), all = rows.length && rows.every(r => state.sel.has(r.link.slug)); const sa = $('#sel-all'); if (sa) { sa.classList.toggle('on', all); sa.setAttribute('aria-checked', all); }
+    $$('.lrow[data-link], .lrow[data-qr-open]').forEach(r => { const on = state.sel.has(r.dataset.link || r.dataset.qrOpen); r.classList.toggle('sel', on); const cb = $('.cb', r); cb.classList.toggle('on', on); cb.setAttribute('aria-checked', on); });
+    const rows = selectableRows(), all = rows.length && rows.every(r => state.sel.has(r.link.slug)); const sa = $('#sel-all'); if (sa) { sa.classList.toggle('on', all); sa.setAttribute('aria-checked', all); }
     const old = $('.bulk'); const html = bulkBarHTML();
     if (old && !html) old.remove(); else if (!old && html) $('#view').insertAdjacentHTML('beforeend', html); else if (old) old.querySelector('.cnt b').textContent = state.sel.size;
   }
@@ -867,7 +1221,7 @@
   /* ---------- Shell ---------- */
   const NAV = [['links', 'Links'], ['qr', 'QR codes'], ['analytics', 'Analytics'], ['templates', 'Templates'], ['parameters', 'Parameters'], ['attributes', 'Attributes'], ['shorteners', 'Link shorteners'], ['rules', 'Rules'], ['members', 'Workspace members'], ['support', 'Support']];
   $('#nav').innerHTML = NAV.map(([k, l]) => `<a href="#" data-nav="${k}" class="${k === 'analytics' ? 'active' : ''}" title="${l}">${I[k]}<span class="nav-label">${l}</span></a>`).join('');
-  $('#nav').addEventListener('click', e => { const a = e.target.closest('a'); if (!a) return; e.preventDefault(); if (a.dataset.nav === 'analytics') goOverview(); else if (a.dataset.nav === 'links') goLinks(); else toast(`${a.title} is outside this prototype`); });
+  $('#nav').addEventListener('click', e => { const a = e.target.closest('a'); if (!a) return; e.preventDefault(); const k = a.dataset.nav; if (k === 'analytics') goOverview(); else if (k === 'links') goLinks(); else if (LIST_VIEWS.includes(k)) goPage(k); else toast(`${a.title} is outside this prototype`); });
   $('#collapse-btn').addEventListener('click', () => { const c = $('#shell').classList.toggle('collapsed'); try { localStorage.setItem('utm-sidebar', c ? '1' : ''); } catch (e) { /* ignore */ } setTimeout(drawChart, 420); });
   try { if (localStorage.getItem('utm-sidebar') === '1') $('#shell').classList.add('collapsed'); } catch (e) { /* ignore */ }
   const topMenu = (btn, items) => openPop(btn, `<div class="menu" style="width:220px">${items.map(i => i === '-' ? '<div class="sep"></div>' : `<button class="mi"><span class="grow">${i}</span></button>`).join('')}</div>`, { align: 'right', onMount(el) { el.addEventListener('click', e => { const b = e.target.closest('.mi'); if (b) { closePop(); toast(`${b.textContent.trim()} is outside this prototype`); } }); } });
@@ -887,7 +1241,7 @@
   /* ---------- Boot ---------- */
   (function boot() {
     const h = (location.hash || '').replace('#', '');
-    if (h === 'links') state.view = 'links';
+    if (LIST_VIEWS.includes(h)) { state.view = h; if (h !== 'links') state.lsort = h === 'qr' ? { key: 'clicks', dir: -1 } : h === 'templates' ? { key: 'uses', dir: -1 } : { key: 'links', dir: -1 }; }
     if (h.startsWith('link-')) { const slug = D.LINKS.find(l => l.slug.replace(/[^a-z0-9]+/gi, '-') === h.slice(5)); if (slug) { state.view = 'link'; state.slug = slug.slug; } }
     render();
   })();
