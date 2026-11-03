@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>UTM.io Prototype v5</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Oxygen:wght@400;700&family=Source+Code+Pro:wght@400;500&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="shell" id="shell">
+  <aside class="sidebar" id="sidebar">
+    <!-- Workspace switcher: the one place to change workspace or reach Account settings -->
+    <div class="ws" id="ws" role="button" tabindex="0" aria-label="Switch workspace" aria-haspopup="menu">
+      <img src="assets/logo.png" alt="">
+      <span class="ws-txt"><span class="ws-kicker" id="ws-kicker">Workspace</span><span class="ws-name" id="ws-name">Acme Marketing</span></span>
+      <svg class="caret" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <nav class="nav" id="nav" aria-label="Main"></nav>
+    <!-- Bottom cluster: replaces the old top bar (extension, help, account) -->
+    <div class="side-foot" id="side-foot"></div>
+    <div class="collapse"><button id="collapse-btn" aria-label="Collapse sidebar"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>
+  </aside>
+  <div class="main">
+    <!-- Phones only: hamburger + page title. No top bar on desktop. -->
+    <header class="topbar">
+      <button class="menu-btn" id="menu-btn" aria-label="Open menu" aria-controls="sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+      <span class="topbar-title" id="topbar-title">Analytics</span>
+    </header>
+    <main class="content" id="view"></main>
+  </div>
+</div>
+<div class="drawer-scrim" id="drawer-scrim" hidden></div>
+<div class="toast-wrap" id="toasts" aria-live="polite"></div>
+<div id="layer"></div>
+<script src="map-data.js"></script>
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
