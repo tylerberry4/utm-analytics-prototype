@@ -92,7 +92,7 @@
     from: 'overview', lq: '', groupBy: 'none', lsort: { key: 'created', dir: -1 }, sel: new Set(), collapsed: new Set(),
     disabledDomains: new Set(),
     // Parameters page
-    param: 'medium', ptab: 'values',
+    param: 'medium', ptab: 'values', gview: 'list', gtry: null,
   };
   const LIST_VIEWS = ['links', 'qr', 'templates', 'shorteners', 'parameters'];
 
@@ -994,7 +994,7 @@
       <div class="pm-title"><div class="txt"><h2><span class="k">${esc(p.utm)}</span>${esc(p.label)}${p.custom ? '<span class="tag">Custom</span>' : ''}${p.common ? '<span class="tag" title="Added to every new workspace">All workspaces</span>' : ''}</h2>
           <p>${esc(p.desc)}</p></div>
         <div class="pm-ctl">
-          <button class="btn" id="pm-preview" title="Open the link builder at this field">${I.links}See in builder</button><button class="btn" id="pm-edit">${I.edit}Edit</button><button class="tb-btn icon" id="pm-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button></div></div>
+          <button class="btn" id="pm-edit">${I.edit}Edit</button><button class="tb-btn icon" id="pm-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button></div></div>
       <div class="pm-meta"><span class="rule-pill fmt" title="Field format">${FORMATS[p.format]}</span>${p.shown ? '' : `<span class="rule-pill hid" title="Hidden from the link builder by a rule. Existing links keep it.">${PI.eyeOff}Hidden in builder</span>`}${ruleChips(p)}${p.rules.length || p.format !== 'text' ? '' : '<span class="sm-muted">Free text, no rules</span>'}<a class="pm-rules-link" href="#" data-nav-rules>${I.rules}Builder rules are set in Rules</a></div>
       <div class="pm-tabs" role="tablist"><button class="${state.ptab === 'values' ? 'on' : ''}" data-ptab="values" role="tab">Values <span class="n">${vals}</span></button>
         <button class="${state.ptab === 'groupings' ? 'on' : ''}" data-ptab="groupings" role="tab">Groupings ${grpN ? `<span class="n">${grpN}</span>` : ''}${child ? `<span class="sm-muted" style="font-weight:400">· narrows ${esc(child.label.toLowerCase())}</span>` : ''}</button></div></div>`;
@@ -1030,13 +1030,30 @@
     let main;
     if (p.deps) {
       const par = paramOf(p.deps.parent); const pvals = par.values.filter(v => v.status !== 'archived');
-      const unrestricted = p.values.filter(v => v.status !== 'archived' && !allowedBy(p, v.v).length);
-      main = `<div class="grp-intro"><div class="txt"><b>Which ${esc(p.label.toLowerCase())} values members can pick depends on the <span class="code">${esc(par.utm)}</span> they chose first.</b><span class="sm-muted" style="white-space:normal">Parent values without a row show every ${esc(p.label.toLowerCase())}. New values are allowed everywhere until you narrow them.</span></div><button class="btn" id="grp-parent">${PI.branch}Change parent…</button></div>
-        <div class="grp-list">${pvals.map(pv => { const allow = p.deps.allow[pv.v]; return `<div class="grp-row ${allow ? '' : 'all'}" data-grp-edit="${esc(pv.v)}" role="button" tabindex="0">
+      const kids = p.values.filter(v => v.status !== 'archived'); const pl = esc(p.label.toLowerCase()), parl = esc(par.label.toLowerCase());
+      const unrestricted = kids.filter(v => !allowedBy(p, v.v).length);
+      // Try it: pick a parent value and see the child dropdown exactly as members will.
+      const tv = pvals.find(v => v.v === state.gtry) ? state.gtry : (pvals.find(v => p.deps.allow[v.v]) || pvals[0]).v;
+      const tAllow = p.deps.allow[tv]; const shown = tAllow ? kids.filter(k => tAllow.includes(k.v)) : kids;
+      const tryIt = `<div class="grp-try">
+        <div class="side"><span class="lbl">${PI.arrowR}1 · Member picks ${parl}</span><div class="grp-pick">${pvals.map(v => `<button type="button" class="${v.v === tv ? 'on' : ''} ${p.deps.allow[v.v] ? '' : 'all'}" data-gtry="${esc(v.v)}" title="${p.deps.allow[v.v] ? `${p.deps.allow[v.v].length} ${pl} values` : `No grouping: every ${pl}`}">${esc(v.v)}</button>`).join('')}</div></div>
+        <span class="grp-flow">${PI.arrowR}</span>
+        <div class="side"><span class="lbl">${PI.arrowR}2 · The ${pl} dropdown shows</span><div class="grp-dd"><div class="h"><span class="code">${esc(p.utm)}</span><span class="sm-muted">${shown.length} of ${kids.length}</span>${I.chev}</div>
+          ${shown.map(k => `<div class="o"><span class="code">${esc(k.v)}</span>${k.pretty ? `<span class="sm-muted">${esc(k.pretty)}</span>` : ''}</div>`).join('') || `<div class="o none">Nothing. Members can't pick a ${pl}.</div>`}
+          ${tAllow ? `<div class="f">${kids.length - shown.length} hidden for <b>${esc(tv)}</b>: ${kids.filter(k => !tAllow.includes(k.v)).map(k => esc(k.v)).join(', ')}</div>` : `<div class="f">No grouping for <b>${esc(tv)}</b>, so every ${pl} shows.</div>`}</div></div></div>`;
+      const seg = `<div class="seg grp-seg" role="tablist"><button type="button" data-gview="list" class="${state.gview === 'list' ? 'on' : ''}">By ${parl}</button><button type="button" data-gview="grid" class="${state.gview === 'grid' ? 'on' : ''}">Grid</button></div>`;
+      const list = `<div class="grp-list">${pvals.map(pv => { const allow = p.deps.allow[pv.v]; return `<div class="grp-row ${allow ? '' : 'all'}" data-grp-edit="${esc(pv.v)}" role="button" tabindex="0">
           <div class="parent"><span class="code">${esc(pv.v)}</span>${pv.pretty ? `<span class="sm-muted">${esc(pv.pretty)}</span>` : ''}</div><span class="arr">${PI.arrowR}</span>
-          <div class="kids">${allow ? (allow.length ? allow.map(v => `<span class="kid">${esc(v)}</span>`).join('') : '<span class="untagged">no values: members can\'t pick a source</span>') : `<span class="untagged">all ${p.values.filter(v => v.status !== 'archived').length} ${esc(p.label.toLowerCase())} values</span>`}</div>
-          <span class="cnt">${allow ? `${allow.length} of ${p.values.filter(v => v.status !== 'archived').length}` : 'all'}</span><span class="edit">${I.edit}</span></div>`; }).join('')}</div>
-        ${unrestricted.length ? `<div class="grp-note">${PI.warn}<span><b>${unrestricted.length}</b> ${esc(p.label.toLowerCase())} value${unrestricted.length === 1 ? ' isn\'t' : 's aren\'t'} in any grouping, so they show for every ${esc(par.label.toLowerCase())}: ${unrestricted.map(v => `<span class="code">${esc(v.v)}</span>`).join(' ')}</span></div>` : ''}`;
+          <div class="kids">${allow ? (allow.length ? allow.map(v => `<span class="kid">${esc(v)}</span>`).join('') : `<span class="untagged">no values: members can't pick a ${pl}</span>`) : `<span class="untagged">all ${kids.length} ${pl} values</span>`}</div>
+          <span class="cnt">${allow ? `${allow.length} of ${kids.length}` : 'all'}</span><span class="edit">${I.edit}</span></div>`; }).join('')}</div>`;
+      const grid = `<div class="grp-mx-wrap"><table class="grp-mx"><thead><tr><th class="corner"><span>${parl} ↓</span><span>${pl} →</span></th>${kids.map(k => `<th class="col ${unrestricted.includes(k) ? 'loose' : ''}" title="${unrestricted.includes(k) ? `In no grouping, so it shows for every ${parl}` : esc(k.pretty || k.v)}"><span>${esc(k.v)}</span></th>`).join('')}<th></th></tr></thead>
+        <tbody>${pvals.map(pv => { const allow = p.deps.allow[pv.v]; return `<tr class="${allow ? '' : 'all'}"><th class="rh"><span class="code">${esc(pv.v)}</span>${allow ? '' : '<span class="allp">all</span>'}</th>${kids.map(k => { const on = !allow || allow.includes(k.v); return `<td><button type="button" class="mx ${on ? 'on' : ''}" data-mx="${esc(pv.v)}" data-mx-k="${esc(k.v)}" aria-pressed="${on}" title="${esc(pv.v)} → ${esc(k.v)}: ${on ? 'shown' : 'hidden'}. Click to ${on ? 'hide' : 'show'}.">${on ? I.check : ''}</button></td>`; }).join('')}<td class="n">${allow ? allow.length : 'all'}</td></tr>`; }).join('')}</tbody></table></div>
+        <div class="grp-legend"><span><i class="mx on">${I.check}</i>shown in the dropdown</span><span><i class="mx"></i>hidden</span><span><i class="mx on soft">${I.check}</i>no grouping yet, so everything shows</span>${unrestricted.length ? `<span><b class="loose">orange</b>in no grouping yet</span>` : ''}<span class="sm-muted">Click a square to change it.</span></div>`;
+      main = `<div class="grp-intro"><div class="txt"><b>Groupings keep the ${pl} list short and correct.</b><span class="sm-muted" style="white-space:normal">When someone builds a link, they pick a ${parl} first. The ${pl} dropdown then only shows the values that belong with it, so nobody tags a Google ad as <span class="code">facebook</span>.</span></div><button class="btn" id="grp-parent">${PI.branch}Change parent…</button></div>
+        ${tryIt}
+        <div class="grp-bar"><b>All groupings</b><span class="sm-muted">${Object.keys(p.deps.allow).length} of ${pvals.length} ${parl} values narrow the list</span><span class="grow"></span>${seg}</div>
+        ${state.gview === 'grid' ? grid : list}
+        ${unrestricted.length ? `<div class="grp-note">${PI.warn}<span><b>${unrestricted.length}</b> ${pl} value${unrestricted.length === 1 ? ' isn\'t' : 's aren\'t'} in any grouping, so they show for every ${parl} without one: ${unrestricted.map(v => `<span class="code">${esc(v.v)}</span>`).join(' ')}</span></div>` : ''}`;
     } else {
       main = `<div class="empty" style="min-height:200px"><strong>No groupings on ${esc(p.label.toLowerCase())}</strong>Pick a parent parameter to narrow this list in the builder, e.g. show only paid sources once <span class="code">utm_medium</span> is <span class="code">paid_social</span>.<div style="margin-top:12px"><button class="btn primary" id="grp-parent">${PI.branch}Choose parent parameter</button></div></div>`;
     }
@@ -1877,7 +1894,6 @@
       <h4>Parameters</h4><ul>
       <li>Pick a parameter on the left; its saved values are on the right with how many links use each one. Top-to-bottom order is the link builder order.</li>
       <li><b>Tags</b> on a row flag what needs a look: <i>Not saved</i> (used in links but not in the list), <i>Duplicate?</i> (e.g. <i>Facebook</i> vs <i>facebook</i>), <i>Check</i> (capitals or spaces), <i>Unused</i> (no links for 90 days) and <i>New</i>.</li>
-      <li><b>See in builder</b> opens the link builder at that field, so you can check how a parameter's values, groupings and rules feel for members.</li>
       <li><b>Groupings</b> narrow a list: when medium is <i>paid_social</i>, source offers only paid platforms. Edit them per parent value, or per child value with the branch icon.</li>
       <li>Type in the add row to add a value (paste a list to add several). Delete removes a value from the builder; links that already use it keep working. Merge keeps one value and moves groupings across.</li></ul>
       <h4>Keyboard shortcuts</h4><p>With the date menu open: <kbd>D</kbd> Today · <kbd>E</kbd> Yesterday · <kbd>W</kbd> Last 7 days · <kbd>T</kbd> Last 30 days · <kbd>M</kbd> This month · <kbd>L</kbd> Last month · <kbd>Q</kbd> Last 90 days. <kbd>Esc</kbd> closes any menu.</p></div>`, { width: 560 });
@@ -1958,7 +1974,6 @@
       if (hit('#pm-export')) { toast('Exported all parameters as CSV'); return; }
       if (hit('#pm-import')) { importParamsModal(); return; }
       if (hit('#pm-edit')) { paramModal(p); return; }
-      if (hit('#pm-preview')) { if (!p.shown) { toast(`${p.label} is hidden from the builder by Rules`); return; } openBuilder({ focus: p.key }); return; }
       if (hit('#pm-more')) { paramMoreMenu(hit('#pm-more'), p); return; }
       if (hit('[data-nav-rules]')) { e.preventDefault(); toast('Rules is outside this prototype'); return; }
       if ((el = hit('[data-ptab]'))) { state.ptab = el.dataset.ptab; state.sel.clear(); render(); return; }
@@ -1969,6 +1984,12 @@
       if ((el = hit('[data-pv-grp]'))) { groupingPicker(p, el.dataset.pvGrp); return; }
       if ((el = hit('[data-pv-more]'))) { valueMenu(el, el.dataset.pvMore); return; }
       if ((el = hit('[data-grp-edit]'))) { groupingEditor(p, el.dataset.grpEdit); return; }
+      if ((el = hit('[data-gtry]'))) { state.gtry = el.dataset.gtry; render(); return; }
+      if ((el = hit('[data-gview]'))) { state.gview = el.dataset.gview; render(); return; }
+      if ((el = hit('[data-mx]'))) { const pv = el.dataset.mx, k = el.dataset.mxK; const all = p.values.filter(v => v.status !== 'archived').map(v => v.v);
+        const cur = p.deps.allow[pv] ? [...p.deps.allow[pv]] : all; const next = cur.includes(k) ? cur.filter(x => x !== k) : [...cur, k];
+        if (next.length === all.length) delete p.deps.allow[pv]; else p.deps.allow[pv] = all.filter(x => next.includes(x));
+        state.gtry = pv; render(); return; }
       if (hit('#grp-parent')) { chooseParent(p); return; }
       if (hit('#pv-add-form')) { if (!hit('.pm-addbtn')) { const i = $('#pv-add'); if (i && e.target !== i) i.focus(); } return; }
       if ((el = hit('[data-pv]'))) { const r = rowOf(el.dataset.pv); if (!r) return; if (r.val) editValueModal(p, r.v); else valueMenu($('[data-pv-more]', el) || el, r.id); return; }
@@ -2038,7 +2059,6 @@
   document.addEventListener('keydown', e => { if (e.key === 'Escape') setDrawer(false); });
   $('#ext-btn').addEventListener('click', () => openBuilder({ mode: 'ext' }));
   $('#plan-btn').addEventListener('click', () => toast('Plan management is outside this prototype'));
-  $('#help-btn').addEventListener('click', () => tipsModal());
 
   /* ---------- Boot ---------- */
   (function boot() {
