@@ -976,7 +976,7 @@
       return `<button class="pm-item ${p.key === state.param ? 'on' : ''} ${p.shown ? '' : 'hidden-p'}" data-pm="${esc(p.key)}" role="tab" aria-selected="${p.key === state.param}">
         <span class="grip" title="Drag to reorder (order = link builder order)">${PI.grip}</span>
         <span class="pi ${p.custom ? 'cus' : 'p-' + esc(p.key)}" aria-hidden="true">${P_ICON[p.custom ? 'custom' : p.key] || P_ICON.custom}</span>
-        <span class="txt"><span class="k">${esc(p.utm)}</span><span class="l">${esc(p.label)}${p.shown ? '' : `<span class="off" title="Hidden from the link builder">${PI.eyeOff}</span>`}</span></span>
+        <span class="txt"><span class="k">${esc(p.utm)}</span><span class="l">${esc(p.label)}${p.shown ? '' : `<span class="off" title="Hidden in the link builder (set in Rules)">${PI.eyeOff}</span>`}</span></span>
         <span class="cnt">${m != null ? `<b class="num ${m ? 'hit' : ''}">${m}</b><span class="sm-muted">of ${n}</span>` : `<b class="num">${p.values.length ? n : '–'}</b>`}</span></button>`; };
     const std = PARAMS.filter(p => !p.custom), cus = PARAMS.filter(p => p.custom);
     return `<aside class="card pm-rail" aria-label="Parameters">
@@ -991,9 +991,9 @@
     return `<div class="card pm-head">
       <div class="pm-title"><div class="txt"><h2><span class="k">${esc(p.utm)}</span>${esc(p.label)}${p.custom ? '<span class="tag">Custom</span>' : ''}${p.common ? '<span class="tag" title="Added to every new workspace">All workspaces</span>' : ''}</h2>
           <p>${esc(p.desc)}</p></div>
-        <div class="pm-ctl"><label class="switch ${p.shown ? 'on' : ''}" id="pm-shown" title="${p.shown ? 'Members see this field in the link builder' : 'Hidden from the link builder; existing links keep it'}"><i></i><span>${p.shown ? 'In builder' : 'Hidden'}</span></label>
+        <div class="pm-ctl">
           <button class="btn" id="pm-edit">${I.edit}Edit</button><button class="tb-btn icon" id="pm-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button></div></div>
-      <div class="pm-meta"><span class="rule-pill fmt" title="Field format">${FORMATS[p.format]}</span>${ruleChips(p)}${p.rules.length || p.format !== 'text' ? '' : '<span class="sm-muted">Free text, no rules</span>'}<a class="pm-rules-link" href="#" data-nav-rules>${I.rules}Builder rules are set in Rules</a></div>
+      <div class="pm-meta"><span class="rule-pill fmt" title="Field format">${FORMATS[p.format]}</span>${p.shown ? '' : `<span class="rule-pill hid" title="Hidden from the link builder by a rule. Existing links keep it.">${PI.eyeOff}Hidden in builder</span>`}${ruleChips(p)}${p.rules.length || p.format !== 'text' ? '' : '<span class="sm-muted">Free text, no rules</span>'}<a class="pm-rules-link" href="#" data-nav-rules>${I.rules}Builder rules are set in Rules</a></div>
       <div class="pm-tabs" role="tablist"><button class="${state.ptab === 'values' ? 'on' : ''}" data-ptab="values" role="tab">Values <span class="n">${vals}</span></button>
         <button class="${state.ptab === 'groupings' ? 'on' : ''}" data-ptab="groupings" role="tab">Groupings ${grpN ? `<span class="n">${grpN}</span>` : ''}${child ? `<span class="sm-muted" style="font-weight:400">· narrows ${esc(child.label.toLowerCase())}</span>` : ''}</button></div></div>`;
   }
@@ -1197,19 +1197,18 @@
         <div class="field"><label>Format</label><div class="seg" id="pp-f">${Object.entries(FORMATS).map(([k, l]) => `<button type="button" data-f="${k}" class="${d.format === k ? 'on' : ''}">${l}</button>`).join('')}</div><span class="sm-muted" style="white-space:normal">Text offers your saved values as a dropdown. Date and Number are typed per link and can't hold saved values.</span></div>
         <div class="field"><label for="pp-d">Description <span class="sm-muted">help text in the builder</span></label><div class="search"><input id="pp-d" value="${esc(d.desc)}" placeholder="When members should use it" style="font-family:var(--font-ui)"></div></div>
         <div class="field"><label for="pp-h">Placeholder</label><div class="search"><input id="pp-h" value="${esc(d.hint)}" placeholder="e.g. na, emea…" style="font-family:var(--font-ui)"></div></div>
-        <div class="field" style="gap:10px"><label class="switch ${d.shown ? 'on' : ''}" id="pp-shown"><i></i><span>Show in the link builder</span></label>
-          ${d.custom ? `<label class="switch ${d.common ? 'on' : ''}" id="pp-common"><i></i><span>Add to every new workspace <span class="sm-muted">(common parameter)</span></span></label>` : ''}</div>
-        <div class="grp-note" style="margin-top:14px">${I.rules}<span>Required, dropdown-only, lowercase and length limits are set per member group on <b>Rules</b>, so the same parameter can be strict for some teams and open for others.</span></div>
+        ${d.custom ? `<div class="field" style="gap:10px">` : ''}
+          ${d.custom ? `<label class="switch ${d.common ? 'on' : ''}" id="pp-common"><i></i><span>Add to every new workspace <span class="sm-muted">(common parameter)</span></span></label></div>` : ''}
+        <div class="grp-note" style="margin-top:14px">${I.rules}<span>Required, hidden, dropdown-only, lowercase and length limits are set per member group on <b>Rules</b>, so the same parameter can be strict for some teams and open for others.</span></div>
         <div class="tpl-foot">${!isNew && d.custom ? `<button class="btn" id="pp-del">${I.close}Delete parameter</button>` : ''}<span class="grow"></span><button class="btn close">Cancel</button><button class="btn primary" id="pp-ok" ${isNew ? 'disabled' : ''}>${isNew ? 'Add parameter' : 'Save'}</button></div></div>`, { width: 540, onMount(s) {
-        let fmtv = d.format; let shown = d.shown, common = d.common;
+        let fmtv = d.format; let common = d.common;
         const l = $('#pp-l', s), k = $('#pp-k', s); const slug = v => v.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
         let touched = !isNew; l.addEventListener('input', () => { if (!touched) k.value = slug(l.value); $('#pp-ok', s).disabled = !l.value.trim() || !k.value; }); k.addEventListener('input', () => { touched = true; k.value = slug(k.value); $('#pp-ok', s).disabled = !l.value.trim() || !k.value; });
         $('#pp-f', s).addEventListener('click', e => { const b = e.target.closest('[data-f]'); if (!b) return; fmtv = b.dataset.f; $$('[data-f]', s).forEach(x => x.classList.toggle('on', x === b)); });
-        $('#pp-shown', s).addEventListener('click', e => { e.preventDefault(); shown = !shown; e.currentTarget.classList.toggle('on', shown); });
         const cm = $('#pp-common', s); if (cm) cm.addEventListener('click', e => { e.preventDefault(); common = !common; e.currentTarget.classList.toggle('on', common); });
         $('#pp-ok', s).addEventListener('click', () => { const label = l.value.trim(), key = k.value;
-          if (isNew) { if (PARAMS.find(x => x.key === key)) { toast(`A parameter with key “${key}” already exists`); return; } PARAMS.push({ key, label, utm: key, format: fmtv, custom: true, desc: $('#pp-d', s).value.trim(), hint: $('#pp-h', s).value.trim(), rules: [], shown, common, deps: null, values: [] }); closeModal(); goParam(key, 'values'); toast(`Added “${label}”. Now add its values.`); }
-          else { p.label = label; p.format = fmtv; p.desc = $('#pp-d', s).value.trim(); p.hint = $('#pp-h', s).value.trim(); p.shown = shown; p.common = common; if (p.custom) { p.key = key; p.utm = key; state.param = key; } closeModal(); render(); toast(`Saved “${label}”`); } });
+          if (isNew) { if (PARAMS.find(x => x.key === key)) { toast(`A parameter with key “${key}” already exists`); return; } PARAMS.push({ key, label, utm: key, format: fmtv, custom: true, desc: $('#pp-d', s).value.trim(), hint: $('#pp-h', s).value.trim(), rules: [], shown: true, common, deps: null, values: [] }); closeModal(); goParam(key, 'values'); toast(`Added “${label}”. Now add its values.`); }
+          else { p.label = label; p.format = fmtv; p.desc = $('#pp-d', s).value.trim(); p.hint = $('#pp-h', s).value.trim(); p.common = common; if (p.custom) { p.key = key; p.utm = key; state.param = key; } closeModal(); render(); toast(`Saved “${label}”`); } });
         const del = $('#pp-del', s); if (del) del.addEventListener('click', () => { closeModal(); confirmDeleteParam(p); });
         setTimeout(() => l.focus(), 60);
       } });
@@ -1217,10 +1216,9 @@
   function confirmDeleteParam(p) {
     const used = p.values.reduce((a, v) => a + linksWith(p, v.v).length, 0); const child = childOf(p);
     openModal(`<div class="modal-h"><h3>Delete “${esc(p.label)}”?</h3><button class="close" aria-label="Close">${I.close}</button></div>
-      <div class="modal-b about"><p>${p.values.length} saved value${p.values.length === 1 ? '' : 's'} go with it${used ? `, and <b>${used}</b> existing link${used === 1 ? ' keeps' : 's keep'} <span class="code">${esc(p.utm)}=…</span> in their URLs` : ''}.${child ? ` <b>${esc(child.label)}</b> is narrowed by this parameter; that grouping is removed too.` : ''} Hiding it from the builder is reversible; deleting is not.</p>
-      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px"><button class="btn close">Cancel</button><button class="btn" id="dp-hide">${PI.eyeOff}Hide instead</button><button class="btn primary danger" id="dp-ok">Delete</button></div></div>`, { width: 460, onMount(s) {
+      <div class="modal-b about"><p>${p.values.length} saved value${p.values.length === 1 ? '' : 's'} go with it${used ? `, and <b>${used}</b> existing link${used === 1 ? ' keeps' : 's keep'} <span class="code">${esc(p.utm)}=…</span> in their URLs` : ''}.${child ? ` <b>${esc(child.label)}</b> is narrowed by this parameter; that grouping is removed too.` : ''} This can't be undone. To keep it but hide it from the builder, add a Hidden rule on <b>Rules</b> instead.</p>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px"><button class="btn close">Cancel</button><button class="btn primary danger" id="dp-ok">Delete</button></div></div>`, { width: 460, onMount(s) {
         $('#dp-ok', s).addEventListener('click', () => { closeModal(); const i = PARAMS.indexOf(p); PARAMS.splice(i, 1); if (child) child.deps = null; state.param = PARAMS[0].key; render(); toast(`Deleted “${p.label}”`); });
-        $('#dp-hide', s).addEventListener('click', () => { closeModal(); p.shown = false; render(); toast(`${p.label} hidden from the builder`); });
       } });
   }
   function paramMoreMenu(anchor, p) {
@@ -1621,7 +1619,6 @@
       if (hit('#pm-import')) { importParamsModal(); return; }
       if (hit('#pm-edit')) { paramModal(p); return; }
       if (hit('#pm-more')) { paramMoreMenu(hit('#pm-more'), p); return; }
-      if (hit('#pm-shown')) { e.preventDefault(); p.shown = !p.shown; render(); toast(p.shown ? `${p.label} is back in the link builder` : `${p.label} hidden from the builder; existing links keep it`); return; }
       if (hit('[data-nav-rules]')) { e.preventDefault(); toast('Rules is outside this prototype'); return; }
       if ((el = hit('[data-ptab]'))) { state.ptab = el.dataset.ptab; state.sel.clear(); render(); return; }
       if (hit('#pm-clear')) { state.lq = ''; render(); return; }
