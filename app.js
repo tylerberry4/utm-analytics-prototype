@@ -91,8 +91,10 @@
     // Links page (lq / lsort / sel are shared by the QR codes, Templates and Shorteners pages)
     from: 'overview', lq: '', groupBy: 'none', lsort: { key: 'created', dir: -1 }, sel: new Set(), collapsed: new Set(),
     disabledDomains: new Set(),
+    // Parameters page
+    param: 'medium', ptab: 'values', pfilter: 'all',
   };
-  const LIST_VIEWS = ['links', 'qr', 'templates', 'shorteners'];
+  const LIST_VIEWS = ['links', 'qr', 'templates', 'shorteners', 'parameters'];
 
   const METRICS = [
     { key: 'clicks', label: 'Total clicks', only: null },
@@ -462,7 +464,9 @@
 
   function bulkBarHTML() {
     const n = state.sel.size; if (!n) return '';
-    const acts = state.view === 'qr'
+    const acts = state.view === 'parameters'
+      ? `<button data-bulk="merge" ${n < 2 ? 'disabled title="Select 2 or more values to merge"' : ''}>${PI.merge}Merge</button><button data-bulk="parchive">${PI.archive}Archive</button><button data-bulk="pcsv">${I.download}Export CSV</button><button data-bulk="pdelete" class="danger">${I.close}Delete</button>`
+      : state.view === 'qr'
       ? `<button data-bulk="png">${I.download}Download PNGs</button><button data-bulk="copy">${I.copy}Copy links</button><button data-bulk="csv">${I.download}Export CSV</button><button data-bulk="design">${I.swatch}Change design</button><button data-bulk="delete" class="danger">${I.close}Delete</button>`
       : `<button data-bulk="copy">${I.copy}Copy links</button><button data-bulk="csv">${I.download}Export CSV</button><button data-bulk="tag">${I.tag}Add tag</button><button data-bulk="archive">${I.reset}Archive</button><button data-bulk="delete" class="danger">${I.close}Delete</button>`;
     return `<div class="bulk" role="toolbar" aria-label="Selected items"><span class="cnt"><b>${n}</b> selected</span>${acts}
@@ -489,9 +493,10 @@
       onMount(el) { el.addEventListener('click', e => { const b = e.target.closest('[data-g]'); if (!b) return; state.groupBy = b.dataset.g; state.collapsed.clear(); closePop(); render(); }); },
     });
   }
-  function lsortMenu(anchor, sorts = LSORTS) {
+  function lsortMenu(anchor, sorts) {
+    sorts = sorts || ({ qr: QSORTS, templates: TSORTS, shorteners: SSORTS, parameters: PSORTS })[state.view] || LSORTS;
     openPop(anchor, `<div class="menu" style="width:220px"><div class="group">Sort by</div>${sorts.map(([k, l]) => `<button class="mi ${state.lsort.key === k ? 'on' : ''}" data-s="${k}"><span class="check">${I.check}</span><span class="grow">${l}</span></button>`).join('')}</div>`, {
-      onMount(el) { el.addEventListener('click', e => { const b = e.target.closest('[data-s]'); if (!b) return; const k = b.dataset.s; state.lsort = { key: k, dir: ['link', 'name', 'domain'].includes(k) ? 1 : -1 }; closePop(); render(); }); },
+      onMount(el) { el.addEventListener('click', e => { const b = e.target.closest('[data-s]'); if (!b) return; const k = b.dataset.s; state.lsort = { key: k, dir: ['link', 'name', 'domain', 'value'].includes(k) ? 1 : -1 }; closePop(); render(); }); },
     });
   }
   function linksMoreMenu(anchor) {
@@ -533,6 +538,13 @@
     if (act === 'png') { toast(`Downloading ${slugs.length} QR codes as PNG`); return; }
     if (act === 'design') { qrDesignsModal(slugs); return; }
     if (act === 'delete') { confirmDelete(slugs); return; }
+    if (state.view === 'parameters') { const p = curParam(); const vs = slugs.map(s => s.slice(p.key.length + 1));
+      if (act === 'merge') { if (vs.length >= 2) mergeModal(p, vs); return; }
+      if (act === 'parchive') { archiveValues(p, vs); return; }
+      if (act === 'pcsv') { toast(`Exported ${vs.length} values as CSV`); return; }
+      if (act === 'pdelete') { openModal(`<div class="modal-h"><h3>Delete ${vs.length} values?</h3><button class="close" aria-label="Close">${I.close}</button></div><div class="modal-b about"><p>Links that use them keep working, but the values leave the builder and any grouping. Archiving is reversible; deleting is not.</p><div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px"><button class="btn close">Cancel</button><button class="btn" id="bd-arch">${PI.archive}Archive instead</button><button class="btn primary danger" id="bd-ok">Delete</button></div></div>`, { width: 440, onMount(s) {
+          $('#bd-ok', s).addEventListener('click', () => { closeModal(); vs.forEach(v => { const j = p.values.findIndex(x => x.v === v); if (j > -1) p.values.splice(j, 1); if (p.deps) Object.values(p.deps.allow).forEach(a => { const k = a.indexOf(v); if (k > -1) a.splice(k, 1); }); const c = childOf(p); if (c) delete c.deps.allow[v]; }); state.sel.clear(); render(); toast(`Deleted ${vs.length} values`); });
+          $('#bd-arch', s).addEventListener('click', () => { closeModal(); archiveValues(p, vs); }); } }); return; } }
     toast(`${act === 'tag' ? 'Add tag' : 'Archive'} is outside this prototype`);
   }
   function goLinks(opts = {}) { state.view = 'links'; state.slug = null; if (!opts.keepFilters) { state.filters = []; } state.sel.clear(); state.lq = ''; state.lsort = { key: 'created', dir: -1 }; render({ top: true }); }
@@ -541,6 +553,7 @@
     state.view = view; state.slug = null; state.sel.clear(); state.lq = opts.q || '';
     if (!opts.keepFilters) state.filters = [];
     state.lsort = view === 'qr' ? { key: 'clicks', dir: -1 } : view === 'templates' ? { key: 'uses', dir: -1 } : { key: 'links', dir: -1 };
+    if (view === 'parameters') { state.pfilter = 'all'; state.ptab = 'values'; }
     render({ top: true });
   }
 
@@ -841,8 +854,449 @@
       } });
   }
 
+  /* ---------- Parameters page ---------- */
+  // The workspace vocabulary: which values the link builder offers for each parameter, how each parameter behaves,
+  // and which parent values narrow which child values ("groupings"). Usage comes from the same dataset as Analytics,
+  // so "used by 4 links" here agrees with the Links page.
+  const PI = {
+    eye: '<svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+    eyeOff: '<svg viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 10.6a2 2 0 0 0 2.8 2.8M6.7 6.7C4 8.3 2 12 2 12s3.5 7 10 7c1.8 0 3.4-.5 4.8-1.2M9.9 5.2A10 10 0 0 1 12 5c6.5 0 10 7 10 7s-.8 1.6-2.4 3.3"/></svg>',
+    branch: '<svg viewBox="0 0 24 24"><circle cx="6" cy="5" r="2.2"/><circle cx="6" cy="19" r="2.2"/><circle cx="18" cy="9" r="2.2"/><path d="M6 7.2v9.6M18 11.2c0 3-3 4-6 4.5-2.5.4-4.5 1-6 1.1"/></svg>',
+    merge: '<svg viewBox="0 0 24 24"><path d="M5 5v4a4 4 0 0 0 4 4h6a4 4 0 0 1 4 4v2M5 19v-4a4 4 0 0 1 4-4"/><path d="m16 16 3 3 3-3"/></svg>',
+    archive: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4"/></svg>',
+    warn: '<svg viewBox="0 0 24 24"><path d="M12 4 2.5 20h19z"/><path d="M12 10v4M12 17h.01"/></svg>',
+    plus: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
+    grip: '<svg viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="6" r="1.3" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="9" cy="18" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="18" r="1.3" fill="currentColor" stroke="none"/></svg>',
+    spark: '<svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z"/></svg>',
+    lock: '<svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
+    arrowR: '<svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
+  };
+  // Effective builder rules, as set on the Rules page (read-only here; Rules is where you change them).
+  const RULE_LABEL = { required: ['Required', 'Members must fill this in'], lowercase: ['Lowercase', 'Typed values are forced to lowercase'], dropdown: ['Dropdown only', 'Members pick from this list; they can\'t type a new value'], unique: ['Unique', 'Each link needs a value no other link has'] };
+  const FORMATS = { text: 'Text', date: 'Date', number: 'Number' };
+  const PARAM_SEED = [
+    { key: 'campaign', label: 'Campaign', utm: 'utm_campaign', format: 'text', desc: 'Which promotion, launch or initiative the link belongs to', hint: 'e.g. fall_sale_2026', rules: ['required', 'lowercase', 'dropdown'], values: [
+      ['fall_sale_2026', 'Fall sale 2026', 'Sept–Oct sitewide sale', 'Dana Whitfield', '2026-09-01'], ['black_friday_teaser', 'Black Friday teaser', '', 'Dana Whitfield', '2026-10-12'], ['webinar_oct29', 'October webinar', '', 'Marcus Lee', '2026-08-18'],
+      ['product_launch_q4', 'Q4 product launch', '', 'Priya Natarajan', '2026-08-27'], ['partner_referral', 'Partner referral', 'Evergreen partner programme', 'Marcus Lee', '2026-08-10'], ['newsletter_oct', 'October newsletter', '', 'Dana Whitfield', '2026-06-01'],
+      ['podcast_s3', 'Podcast season 3', '', 'Marcus Lee', '2026-09-16'], ['saastr_2026', 'SaaStr 2026', 'Booth and badge links', 'Marcus Lee', '2026-09-08'], ['creator_oct', 'Creator programme · Oct', '', 'Dana Whitfield', '2026-10-10'],
+      ['spring_sale_2026', 'Spring sale 2026', '', 'Dana Whitfield', '2026-03-02'], ['Summer-Sale', '', '', 'Marcus Lee', '2026-06-14'], ['q1_planning', '', '', 'Priya Natarajan', '2026-01-20'],
+    ] },
+    { key: 'medium', label: 'Medium', utm: 'utm_medium', format: 'text', desc: 'The marketing channel. Keep to GA4\'s default channel groups so traffic isn\'t "Unassigned"', hint: 'e.g. paid_social', rules: ['required', 'lowercase', 'dropdown'], values: [
+      ['paid_social', 'Paid social', 'Meta, LinkedIn, TikTok ads', 'Dana Whitfield', '2026-06-12'], ['social', 'Organic social', 'Posts from our own accounts', 'Marcus Lee', '2026-06-12'], ['cpc', 'Paid search', 'Google and Bing search ads', 'Priya Natarajan', '2026-06-12'],
+      ['email', 'Email', 'Newsletter and lifecycle sends', 'Dana Whitfield', '2026-06-12'], ['print', 'Print', 'Posters, packaging, badges (QR)', 'Priya Natarajan', '2026-08-01'], ['referral', 'Referral', 'Partner and docs links', 'Marcus Lee', '2026-08-10'],
+      ['audio', 'Audio', 'Podcast host-reads and show notes', 'Marcus Lee', '2026-09-02'], ['video', 'Video', 'YouTube and creator sponsorships', 'Dana Whitfield', '2026-09-15'], ['display', 'Display', 'Banner ads (not running)', 'Priya Natarajan', '2026-05-04'], ['Paid_Social', '', '', 'Marcus Lee', '2026-10-21'],
+    ] },
+    { key: 'source', label: 'Source', utm: 'utm_source', format: 'text', desc: 'Where the click comes from: the platform, site or publication', hint: 'e.g. linkedin', rules: ['required', 'lowercase', 'dropdown'], deps: { parent: 'medium', allow: {
+      paid_social: ['facebook', 'instagram', 'linkedin', 'tiktok'], social: ['facebook', 'instagram', 'linkedin', 'youtube'], cpc: ['google', 'bing'], email: ['newsletter'], print: ['print'], audio: ['podcast'], video: ['youtube'], referral: ['partner'] } }, values: [
+      ['facebook', 'Facebook', '', 'Dana Whitfield', '2026-06-12'], ['instagram', 'Instagram', '', 'Dana Whitfield', '2026-06-12'], ['linkedin', 'LinkedIn', '', 'Marcus Lee', '2026-06-12'], ['tiktok', 'TikTok', '', 'Dana Whitfield', '2026-07-20'],
+      ['google', 'Google', 'Search and Display', 'Priya Natarajan', '2026-06-12'], ['bing', 'Bing', '', 'Priya Natarajan', '2026-06-12'], ['newsletter', 'Newsletter', 'Our own email list', 'Dana Whitfield', '2026-06-12'], ['print', 'Print', 'Physical placements', 'Priya Natarajan', '2026-08-01'],
+      ['youtube', 'YouTube', '', 'Dana Whitfield', '2026-09-15'], ['podcast', 'Podcast', '', 'Marcus Lee', '2026-09-02'], ['partner', 'Partner', 'Referral partners', 'Marcus Lee', '2026-08-10'],
+      ['Facebook', '', '', 'Marcus Lee', '2026-10-20'], ['twitter', 'Twitter', '', 'Marcus Lee', '2026-03-11'], ['snapchat', 'Snapchat', '', 'Dana Whitfield', '2026-04-02'],
+    ] },
+    { key: 'content', label: 'Content', utm: 'utm_content', format: 'text', desc: 'Which creative, placement or variant. Useful for A/B tests', hint: 'e.g. hero_cta', rules: ['lowercase'], values: [
+      ['carousel_v2', '', 'Fall sale carousel, 2nd cut', 'Dana Whitfield', '2026-09-05'], ['story_teaser', '', '', 'Dana Whitfield', '2026-10-13'], ['organic_post', '', '', 'Marcus Lee', '2026-08-19'], ['rsa_v3', 'Responsive search ad v3', '', 'Priya Natarajan', '2026-08-28'],
+      ['hero_cta', 'Hero CTA', 'Button in the email hero', 'Dana Whitfield', '2026-06-01'], ['store_window', 'Store window', '', 'Priya Natarajan', '2026-09-02'], ['reel_v1', '', '', 'Dana Whitfield', '2026-09-07'], ['promo_banner', 'Promo banner', '', 'Dana Whitfield', '2026-09-08'],
+      ['ep42', 'Episode 42', '', 'Marcus Lee', '2026-09-17'], ['sidebar_cta', 'Sidebar CTA', '', 'Priya Natarajan', '2026-07-01'],
+    ] },
+    { key: 'term', label: 'Term', utm: 'utm_term', format: 'text', desc: 'Paid keyword. Only paid search links need it', hint: 'e.g. utm-builder', rules: ['lowercase'], values: [
+      ['acme q4', '', '', 'Priya Natarajan', '2026-08-28'], ['utm-builder', '', '', 'Priya Natarajan', '2026-06-12'], ['campaign-tracking', '', '', 'Priya Natarajan', '2026-06-12'],
+    ] },
+    { key: 'region', label: 'Region', utm: 'region', format: 'text', custom: true, desc: 'Sales region the link is aimed at. Feeds the regional dashboards', hint: 'Pick a region', rules: ['dropdown'], common: true, values: [
+      ['na', 'North America', '', 'Priya Natarajan', '2026-07-15'], ['emea', 'EMEA', 'Europe, Middle East, Africa', 'Priya Natarajan', '2026-07-15'], ['apac', 'APAC', '', 'Priya Natarajan', '2026-07-15'], ['latam', 'LATAM', '', 'Priya Natarajan', '2026-07-15'],
+    ] },
+    { key: 'promo', label: 'Promo code', utm: 'promo', format: 'text', custom: true, desc: 'Discount code pre-filled on the landing page', hint: 'e.g. FALL20', rules: [], values: [
+      ['FALL20', '', '20% off, fall sale', 'Dana Whitfield', '2026-09-01'], ['BF30', '', 'Black Friday 30%', 'Dana Whitfield', '2026-10-12'],
+    ] },
+    { key: 'ad_id', label: 'Ad ID', utm: 'ad_id', format: 'number', custom: true, desc: 'Platform ad ID, typed per link. No saved values', hint: 'e.g. 120208833', rules: [], shown: false, values: [] },
+  ];
+  // Custom parameters aren't on the links dataset, so a small lookup says which links carry them.
+  const CUSTOM_USAGE = { region: { na: ['acme.co/fall-sale', 'acme.co/bf-teaser', 'acme.co/q4-launch', 'acme.co/newsletter', 'acme.co/fall-email', 'acme.co/yt-review'], emea: ['acme.co/webinar', 'acme.co/fall-ig', 'acme.co/podcast'], apac: ['acme.co/docs-cta'] }, promo: { FALL20: ['acme.co/fall-sale', 'acme.co/fall-ig', 'acme.co/fall-email', 'acme.co/store-poster', 'acme.co/fall-qr'], BF30: ['acme.co/bf-teaser'] } };
+  const PARAMS = PARAM_SEED.map(p => ({ ...p, shown: p.shown !== false, deps: p.deps ? { parent: p.deps.parent, allow: Object.fromEntries(Object.entries(p.deps.allow).map(([k, v]) => [k, [...v]])) } : null,
+    values: p.values.map(([v, pretty, desc, by, created]) => ({ v, pretty, desc, by, created, status: 'active' })) }));
+  const PSORTS = [['links', 'Most used'], ['clicks', 'Most clicks'], ['last', 'Recently used'], ['created', 'Newest first'], ['value', 'Value A–Z']];
+  const PFILTERS = [['all', 'All'], ['active', 'Active'], ['review', 'Needs review'], ['archived', 'Archived']];
+  const paramOf = key => PARAMS.find(p => p.key === key);
+  const curParam = () => paramOf(state.param) || PARAMS[0];
+  const STALE_DAYS = 90;
+  const daysAgo = iso => Math.round((D.stripTime(T) - new Date(iso + 'T00:00:00')) / 864e5);
+  const daysSince = d => Math.round((D.stripTime(T) - D.stripTime(d)) / 864e5);
+  const todayISO = () => `${T.getFullYear()}-${String(T.getMonth() + 1).padStart(2, '0')}-${String(T.getDate()).padStart(2, '0')}`;
+
+  // Links that carry a value for a parameter (case-sensitive, like UTMs themselves).
+  function linksWith(p, v) {
+    if (p.custom) return Q.linksAll.rows.filter(r => (CUSTOM_USAGE[p.key] && CUSTOM_USAGE[p.key][v] || []).includes(r.link.slug));
+    return Q.linksAll.rows.filter(r => r.link[p.key] === v);
+  }
+  function lastUsed(rows) { let d = null; rows.forEach(r => { for (let i = r.series.length - 1; i >= 0; i--) if (r.series[i].clicks > 0) { if (!d || r.series[i].date > d) d = r.series[i].date; break; } }); return d; }
+  // What's wrong with a value, if anything. Each issue carries the fix the review queue offers.
+  function issuesFor(p, val, all) {
+    const out = []; const v = val.v;
+    if (val.status === 'archived') return out;
+    const twin = all.find(o => o !== val && o.status !== 'archived' && o.v.toLowerCase().replace(/[\s_-]+/g, '') === v.toLowerCase().replace(/[\s_-]+/g, ''));
+    if (twin) { const keep = /[A-Z\s]/.test(v) && !/[A-Z\s]/.test(twin.v) ? twin : (val.created < twin.created ? val : twin); if (keep !== val) out.push({ type: 'dup', label: `Looks like a duplicate of “${keep.v}”`, fix: 'merge', into: keep.v }); }
+    if (p.rules.includes('lowercase') && /[A-Z]/.test(v) && !twin) out.push({ type: 'case', label: 'Has capitals, but this parameter is forced to lowercase in Rules', fix: 'rename', to: v.toLowerCase() });
+    if (/\s/.test(v)) out.push({ type: 'space', label: 'Contains a space. The builder replaces spaces with “-”', fix: 'rename', to: v.replace(/\s+/g, '-') });
+    return out;
+  }
+  function paramValueRows(p = curParam(), opts = {}) {
+    const q = (opts.q != null ? opts.q : state.lq).trim().toLowerCase();
+    const rows = p.values.map(val => {
+      const links = linksWith(p, val.v); const issues = issuesFor(p, val, p.values);
+      const stale = val.status === 'active' && !links.length && daysAgo(val.created) > STALE_DAYS;
+      if (stale) issues.push({ type: 'stale', label: `Not used by any link, added ${fmt.d(new Date(val.created + 'T00:00:00'), { month: 'short', day: 'numeric', year: 'numeric' })}`, fix: 'archive' });
+      return { id: `${p.key}:${val.v}`, p, val, v: val.v, status: val.status, links: links.length, clicks: links.reduce((a, r) => a + r.clicks, 0), last: lastUsed(links), issues, created: val.created };
+    });
+    // Seen in links but never saved: the builder let someone type it, or it came in via import.
+    if (!p.custom) { const seen = new Set(p.values.map(x => x.v)); const extra = {};
+      Q.linksAll.rows.forEach(r => { const v = r.link[p.key]; if (v && !seen.has(v)) (extra[v] = extra[v] || []).push(r); });
+      Object.entries(extra).forEach(([v, links]) => rows.push({ id: `${p.key}:${v}`, p, val: null, v, status: 'unplanned', links: links.length, clicks: links.reduce((a, r) => a + r.clicks, 0), last: lastUsed(links), issues: [{ type: 'unplanned', label: `Used by ${links.length} link${links.length === 1 ? '' : 's'} but not in this list, so members can't pick it`, fix: 'add' }], created: links.map(r => r.link.created).sort()[0] })); }
+    let out = rows;
+    if (!opts.all) {
+      const f = state.pfilter;
+      out = out.filter(r => f === 'all' ? r.status !== 'archived' : f === 'active' ? r.status === 'active' && !r.issues.length : f === 'review' ? r.issues.length > 0 : r.status === 'archived');
+      if (q) out = out.filter(r => [r.v, r.val && r.val.pretty, r.val && r.val.desc, r.val && r.val.by].some(s => s && s.toLowerCase().includes(q)));
+      const { key, dir } = state.lsort;
+      out.sort((a, b) => { let v = 0; if (key === 'value') v = a.v.localeCompare(b.v, undefined, { sensitivity: 'base' }); else if (key === 'created') v = a.created < b.created ? -1 : a.created > b.created ? 1 : 0; else if (key === 'last') v = (a.last || 0) - (b.last || 0); else v = a[key] - b[key]; if (!v && key !== 'value') v = a.v.localeCompare(b.v); return v * dir; });
+    }
+    return out;
+  }
+  const reviewCount = p => paramValueRows(p, { all: true }).filter(r => r.issues.length).length;
+  const childOf = p => PARAMS.find(c => c.deps && c.deps.parent === p.key);
+  // Which parent values allow this child value (null = not restricted by any grouping)
+  function allowedBy(p, v) { if (!p.deps) return null; return Object.entries(p.deps.allow).filter(([, vs]) => vs.includes(v)).map(([k]) => k); }
+
+  function ruleChips(p) { return p.rules.map(r => `<span class="rule-pill" title="${esc(RULE_LABEL[r][1])}">${r === 'dropdown' ? PI.lock : r === 'required' ? '<b>*</b>' : r === 'lowercase' ? '<b>aa</b>' : I.check}${RULE_LABEL[r][0]}</span>`).join(''); }
+  function railHTML() {
+    const q = state.lq.trim().toLowerCase();
+    const item = p => { const n = p.values.filter(v => v.status !== 'archived').length; const rev = reviewCount(p); const m = q ? paramValueRows(p, { all: true }).filter(r => [r.v, r.val && r.val.pretty].some(s => s && s.toLowerCase().includes(q))).length : null;
+      return `<button class="pm-item ${p.key === state.param ? 'on' : ''} ${p.shown ? '' : 'hidden-p'}" data-pm="${esc(p.key)}" role="tab" aria-selected="${p.key === state.param}">
+        <span class="grip" title="Drag to reorder (order = link builder order)">${PI.grip}</span>
+        <span class="txt"><span class="k">${esc(p.utm)}</span><span class="l">${esc(p.label)}${p.shown ? '' : `<span class="off" title="Hidden from the link builder">${PI.eyeOff}</span>`}</span></span>
+        <span class="cnt">${m != null ? `<b class="num ${m ? 'hit' : ''}">${m}</b><span class="sm-muted">of ${n}</span>` : `<b class="num">${p.values.length ? n : '–'}</b>`}</span>
+        ${rev ? `<span class="dot warn" title="${rev} value${rev === 1 ? '' : 's'} to review"></span>` : `<span class="dot"></span>`}</button>`; };
+    const std = PARAMS.filter(p => !p.custom), cus = PARAMS.filter(p => p.custom);
+    return `<aside class="card pm-rail" role="tablist" aria-label="Parameters">
+      <div class="pm-sec">Standard UTM</div>${std.map(item).join('')}
+      <div class="pm-sec">Custom <span class="sm-muted" style="font-weight:400;text-transform:none;letter-spacing:0">· Professional</span></div>${cus.map(item).join('')}
+      <button class="pm-add" id="pm-add-param">${PI.plus}Add parameter</button>
+      <div class="pm-foot">Top to bottom is the order fields appear in the link builder.</div></aside>`;
+  }
+  function paramHeadHTML(p) {
+    const child = childOf(p); const vals = p.values.filter(v => v.status !== 'archived').length; const rev = reviewCount(p);
+    const grpN = p.deps ? Object.keys(p.deps.allow).length : 0;
+    return `<div class="card pm-head">
+      <div class="pm-title"><div class="txt"><h2><span class="k">${esc(p.utm)}</span>${esc(p.label)}${p.custom ? '<span class="tag">Custom</span>' : ''}${p.common ? '<span class="tag" title="Added to every new workspace">All workspaces</span>' : ''}</h2>
+          <p>${esc(p.desc)}</p></div>
+        <div class="pm-ctl"><label class="switch ${p.shown ? 'on' : ''}" id="pm-shown" title="${p.shown ? 'Members see this field in the link builder' : 'Hidden from the link builder; existing links keep it'}"><i></i><span>${p.shown ? 'In builder' : 'Hidden'}</span></label>
+          <button class="btn" id="pm-edit">${I.edit}Edit</button><button class="tb-btn icon" id="pm-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button></div></div>
+      <div class="pm-meta"><span class="rule-pill fmt" title="Field format">${FORMATS[p.format]}</span>${ruleChips(p)}${p.rules.length || p.format !== 'text' ? '' : '<span class="sm-muted">Free text, no rules</span>'}<a class="pm-rules-link" href="#" data-nav-rules>${I.rules}Builder rules are set in Rules</a></div>
+      <div class="pm-tabs" role="tablist"><button class="${state.ptab === 'values' ? 'on' : ''}" data-ptab="values" role="tab">Values <span class="n">${vals}</span>${rev ? `<span class="n warn">${rev}</span>` : ''}</button>
+        <button class="${state.ptab === 'groupings' ? 'on' : ''}" data-ptab="groupings" role="tab">Groupings ${grpN ? `<span class="n">${grpN}</span>` : ''}${child ? `<span class="sm-muted" style="font-weight:400">· narrows ${esc(child.label.toLowerCase())}</span>` : ''}</button></div></div>`;
+  }
+  function reviewBannerHTML(p) {
+    const rows = paramValueRows(p, { all: true }).filter(r => r.issues.length); if (!rows.length || state.pfilter === 'review') return '';
+    const by = {}; rows.forEach(r => r.issues.forEach(i => { by[i.type] = (by[i.type] || 0) + 1; }));
+    const parts = [['unplanned', 'used in links but not saved'], ['dup', 'likely duplicate'], ['case', 'wrong case'], ['space', 'with a space'], ['stale', `unused for ${STALE_DAYS}+ days`]].filter(([k]) => by[k]).map(([k, l]) => `<b>${by[k]}</b> ${l}`);
+    return `<div class="pm-review"><span class="ic">${PI.spark}</span><div class="txt"><b>${rows.length} value${rows.length === 1 ? '' : 's'} to review</b><span>${parts.join(' · ')}</span></div><button class="btn" data-pfilter="review">Show them</button><button class="btn primary" id="pm-review">Review &amp; fix</button></div>`;
+  }
+  function valueRowHTML(r, i) {
+    const p = r.p; const val = r.val; const sel = state.sel.has(r.id);
+    const parents = allowedBy(p, r.v); const child = childOf(p); const narrows = child && child.deps.allow[r.v];
+    const grp = r.status === 'unplanned' ? '' : parents ? (parents.length ? `<span class="grp-chip" data-pv-grp="${esc(r.v)}" title="Shown in the builder only after ${esc(paramOf(p.deps.parent).label.toLowerCase())} is ${parents.join(' or ')}">${PI.branch}<span class="k">${esc(paramOf(p.deps.parent).label.toLowerCase())}:</span>${parents.slice(0, 2).map(x => `<b>${esc(x)}</b>`).join(', ')}${parents.length > 2 ? `<span class="k">+${parents.length - 2}</span>` : ''}</span>` : `<span class="grp-chip none" data-pv-grp="${esc(r.v)}" title="Not in any grouping: always available">${PI.branch}any ${esc(paramOf(p.deps.parent).label.toLowerCase())}</span>`)
+      : narrows ? `<span class="grp-chip" data-pv-grp="${esc(r.v)}" title="Picking this narrows ${esc(child.label.toLowerCase())} to ${narrows.length} value${narrows.length === 1 ? '' : 's'}">${PI.branch}<span class="k">narrows ${esc(child.label.toLowerCase())} to</span><b>${narrows.length}</b></span>` : '';
+    const status = r.status === 'unplanned' ? '<span class="status-pill warn">Not saved</span>' : r.status === 'archived' ? '<span class="status-pill off">Archived</span>' : r.issues.length ? `<span class="status-pill warn" title="${esc(r.issues[0].label)}">${r.issues[0].type === 'dup' ? 'Duplicate?' : r.issues[0].type === 'stale' ? 'Unused' : 'Check'}</span>` : daysAgo(r.created) <= 14 ? '<span class="status-pill">New</span>' : '';
+    const acts = r.status === 'unplanned' ? `<button class="btn sm" data-fix="add" data-pv-id="${esc(r.id)}">${PI.plus}Add to list</button><button class="icon-btn" data-pv-more="${esc(r.id)}" title="More" aria-haspopup="menu">${I.more}</button>`
+      : `<button class="icon-btn" data-pv-edit="${esc(r.id)}" title="Edit value">${I.edit}</button><button class="icon-btn" data-pv-grp="${esc(r.v)}" title="Groupings">${PI.branch}</button><button class="icon-btn" data-pv-more="${esc(r.id)}" title="More" aria-haspopup="menu">${I.more}</button>`;
+    return `<div class="lrow prow ${sel ? 'sel' : ''} ${r.status === 'archived' ? 'off' : ''} ${r.status === 'unplanned' ? 'unplanned' : ''}" data-pv="${esc(r.id)}" role="row" tabindex="0" style="animation-delay:${Math.min(i, 12) * 20}ms">
+      <span class="cb ${sel ? 'on' : ''} ${r.status === 'unplanned' ? 'dis' : ''}" role="checkbox" aria-checked="${sel}" ${r.status === 'unplanned' ? '' : `data-sel="${esc(r.id)}"`} tabindex="-1">${I.check}</span>
+      <div class="pv"><span class="pv-v"><span class="code v">${esc(r.v)}</span>${status}</span><span class="pv-sub">${val && val.pretty ? `<span class="pretty" title="Pretty name: what members see in the builder">${esc(val.pretty)}</span>` : ''}${val && val.pretty && val.desc ? '<span class="dotsep">·</span>' : ''}${val && val.desc ? `<span>${esc(val.desc)}</span>` : ''}${r.issues.length && !(val && (val.pretty || val.desc)) ? `<span class="issue" title="${esc(r.issues[0].label)}">${esc(r.issues[0].label)}</span>` : ''}</span></div>
+      <div class="pgrp">${grp}</div>
+      <div class="uses">${r.links ? `<button class="n" data-pv-links="${esc(r.id)}" title="Show these links"><b class="num">${r.links}</b> link${r.links === 1 ? '' : 's'}</button><span class="sm-muted num">${fmt.n(r.clicks)} clicks</span>` : '<span class="untagged">Not used yet</span>'}</div>
+      <div class="last">${r.last ? `<span>${fmt.d(r.last)}</span><span class="sm-muted">${daysSince(r.last) === 0 ? 'today' : daysSince(r.last) === 1 ? 'yesterday' : daysSince(r.last) + 'd ago'}</span>` : '<span class="untagged">–</span>'}</div>
+      <div class="who">${val ? `${avatar(val.by)}<span class="txt"><span>${fmt.d(new Date(val.created + 'T00:00:00'), { month: 'short', day: 'numeric', year: 'numeric' })}</span><span class="sm-muted">${esc(val.by)}</span></span>` : `<span class="txt"><span class="sm-muted">first seen</span><span>${fmt.d(new Date(r.created + 'T00:00:00'), { month: 'short', day: 'numeric', year: 'numeric' })}</span></span>`}</div>
+      <div class="acts">${acts}</div></div>`;
+  }
+  function paramValuesCard(p = curParam()) {
+    const rows = paramValueRows(p); const all = paramValueRows(p, { all: true }); const f = state.pfilter;
+    const sortBtn = (key, label) => `<button data-lsort="${key}" class="${state.lsort.key === key ? 'on' : ''} ${state.lsort.key === key && state.lsort.dir === 1 ? 'asc' : ''}">${label}${I.sort}</button>`;
+    const head = `<div class="lrow prow head" role="row"><span class="cb" id="sel-all" role="checkbox" aria-checked="false" title="Select all">${I.check}</span><div>${sortBtn('value', 'Value')}</div><div>Groupings</div><div>${sortBtn('links', 'Used by')}</div><div>${sortBtn('last', 'Last used')}</div><div>${sortBtn('created', 'Added')}</div><div></div></div>`;
+    const empty = !p.values.length && !all.length ? `<div class="empty" style="min-height:180px"><strong>No saved values yet</strong>${p.format === 'number' ? 'Members type a number per link. Add values here to offer a dropdown instead.' : 'Add values above, paste a list, or import a CSV.'}</div>`
+      : `<div class="empty" style="min-height:160px"><strong>${f === 'review' ? 'Nothing to review' : f === 'archived' ? 'No archived values' : 'No values match'}</strong>${f === 'review' ? 'Every value is saved, unique and in use.' : state.lq ? 'Try a different search.' : 'Try another filter.'}${state.lq || f !== 'all' ? `<div style="margin-top:10px"><button class="btn" id="pm-clear">Show all values</button></div>` : ''}</div>`;
+    return `<section class="card" id="list-table"><div class="ltable">${head}${rows.length ? rows.map(valueRowHTML).join('') : empty}</div>
+      <div class="tbl-foot"><span>Showing ${rows.length} of ${all.filter(r => r.status !== 'archived').length} values${state.lq ? ` matching “${esc(state.lq)}”` : ''}${all.some(r => r.status === 'archived') && f !== 'archived' ? ` · <button class="link-btn" data-pfilter="archived">${all.filter(r => r.status === 'archived').length} archived</button>` : ''}</span><span class="grow"></span><span>Click a row to edit · ${p.rules.includes('dropdown') ? 'members can only pick from this list' : 'members can also type a new value'}</span></div></section>`;
+  }
+  function groupingsHTML(p) {
+    const child = childOf(p);
+    let main;
+    if (p.deps) {
+      const par = paramOf(p.deps.parent); const pvals = par.values.filter(v => v.status !== 'archived');
+      const unrestricted = p.values.filter(v => v.status !== 'archived' && !allowedBy(p, v.v).length);
+      main = `<div class="grp-intro"><div class="txt"><b>Which ${esc(p.label.toLowerCase())} values members can pick depends on the <span class="code">${esc(par.utm)}</span> they chose first.</b><span class="sm-muted" style="white-space:normal">Parent values without a row show every ${esc(p.label.toLowerCase())}. New values are allowed everywhere until you narrow them.</span></div><button class="btn" id="grp-parent">${PI.branch}Change parent…</button></div>
+        <div class="grp-list">${pvals.map(pv => { const allow = p.deps.allow[pv.v]; return `<div class="grp-row ${allow ? '' : 'all'}" data-grp-edit="${esc(pv.v)}" role="button" tabindex="0">
+          <div class="parent"><span class="code">${esc(pv.v)}</span>${pv.pretty ? `<span class="sm-muted">${esc(pv.pretty)}</span>` : ''}</div><span class="arr">${PI.arrowR}</span>
+          <div class="kids">${allow ? (allow.length ? allow.map(v => `<span class="kid">${esc(v)}</span>`).join('') : '<span class="untagged">no values: members can\'t pick a source</span>') : `<span class="untagged">all ${p.values.filter(v => v.status !== 'archived').length} ${esc(p.label.toLowerCase())} values</span>`}</div>
+          <span class="cnt">${allow ? `${allow.length} of ${p.values.filter(v => v.status !== 'archived').length}` : 'all'}</span><span class="edit">${I.edit}</span></div>`; }).join('')}</div>
+        ${unrestricted.length ? `<div class="grp-note">${PI.warn}<span><b>${unrestricted.length}</b> ${esc(p.label.toLowerCase())} value${unrestricted.length === 1 ? ' isn\'t' : 's aren\'t'} in any grouping, so they show for every ${esc(par.label.toLowerCase())}: ${unrestricted.map(v => `<span class="code">${esc(v.v)}</span>`).join(' ')}</span></div>` : ''}`;
+    } else {
+      main = `<div class="empty" style="min-height:200px"><strong>No groupings on ${esc(p.label.toLowerCase())}</strong>Pick a parent parameter to narrow this list in the builder, e.g. show only paid sources once <span class="code">utm_medium</span> is <span class="code">paid_social</span>.<div style="margin-top:12px"><button class="btn primary" id="grp-parent">${PI.branch}Choose parent parameter</button></div></div>`;
+    }
+    const asParent = child ? `<div class="grp-asparent"><span class="ic">${PI.branch}</span><div class="txt"><b>${esc(p.label)} narrows ${esc(child.label.toLowerCase())}.</b><span class="sm-muted" style="white-space:normal">${Object.keys(child.deps.allow).length} of ${p.values.filter(v => v.status !== 'archived').length} ${esc(p.label.toLowerCase())} values have their own ${esc(child.label.toLowerCase())} list.</span></div><button class="btn" data-pm="${esc(child.key)}" data-ptab="groupings">Edit on ${esc(child.label)}${I.chevR}</button></div>` : '';
+    return `<section class="card pm-grp" id="list-table">${asParent}${main}</section>`;
+  }
+  function parametersHTML() {
+    const p = curParam(); const s = PSORTS.find(x => x[0] === state.lsort.key) || PSORTS[0];
+    const totalV = PARAMS.reduce((a, q) => a + q.values.filter(v => v.status !== 'archived').length, 0); const totalR = PARAMS.reduce((a, q) => a + reviewCount(q), 0);
+    const tools = state.ptab === 'values' ? `<div class="toolbar links-tb pm-tb"><div class="search lq">${I.search}<input id="lq" placeholder="Search values, pretty names, people…" value="${esc(state.lq)}" aria-label="Search values"><button class="icon-btn" id="lq-clear" aria-label="Clear search" ${state.lq ? '' : 'hidden'}>${I.close}</button></div>
+        <div class="controls"><div class="seg pf">${PFILTERS.map(([k, l]) => `<button data-pfilter="${k}" class="${state.pfilter === k ? 'on' : ''}">${l}${k === 'review' && reviewCount(p) ? `<span class="badge">${reviewCount(p)}</span>` : ''}</button>`).join('')}</div>
+          <button class="tb-btn" id="lsort-btn" aria-haspopup="menu" aria-expanded="false">${I.sort}${s[1]}<span class="chev">${I.chev}</span></button>
+          <button class="tb-btn icon" id="list-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button></div></div>
+      <form class="pm-addrow" id="pv-add-form" autocomplete="off"><span class="ic">${PI.plus}</span><input id="pv-add" placeholder="Add a ${esc(p.label.toLowerCase())} value… ${esc(p.hint)}" aria-label="Add value" ${p.format === 'number' ? 'inputmode="numeric"' : ''}><span class="hint" id="pv-hint">${p.rules.includes('lowercase') ? 'lowercase · ' : ''}${p.format === 'number' ? 'numbers only · ' : ''}spaces become “-” · Enter to add, paste a list to add several</span><button class="btn primary sm" type="submit" disabled>Add</button></form>` : '';
+    return `<div class="view"><div class="page-head"><div class="title"><h1>Parameters</h1><span class="status" tabindex="0" data-tip="${PARAMS.length} parameters · ${totalV} saved values · ${totalR} to review">${PARAMS.length} parameters · ${totalV} values${totalR ? ` · <b class="warn-t">${totalR} to review</b>` : ''}</span></div>
+        <div class="actions"><button class="btn" id="pm-import">${I.download}Import CSV</button><button class="btn primary" id="pm-add-param-top">${PI.plus}Add parameter</button></div></div>
+      <div class="pm-layout">${railHTML()}<div class="pm-main">${paramHeadHTML(p)}${state.ptab === 'values' ? reviewBannerHTML(p) + tools + paramValuesCard(p) : groupingsHTML(p)}</div></div>${bulkBarHTML()}</div>`;
+  }
+
+  /* Parameters: actions */
+  function goParam(key, tab) { state.param = key; if (tab) state.ptab = tab; state.sel.clear(); state.lq = ''; state.pfilter = 'all'; render(); }
+  function normalizeValue(p, raw) { let v = raw.trim().replace(/\s+/g, '-'); if (p.rules.includes('lowercase')) v = v.toLowerCase(); return v; }
+  function validateValue(p, raw) {
+    const v = normalizeValue(p, raw); if (!v) return { ok: false };
+    if (p.format === 'number' && !/^\d+$/.test(v)) return { ok: false, msg: 'Numbers only for this parameter' };
+    const exact = p.values.find(x => x.v === v); if (exact) return { ok: false, msg: exact.status === 'archived' ? `“${v}” is archived. Restore it instead?` : `“${v}” is already in the list`, restore: exact.status === 'archived' ? v : null };
+    const twin = p.values.find(x => x.status !== 'archived' && x.v.toLowerCase() === v.toLowerCase()); if (twin) return { ok: false, msg: `“${twin.v}” already exists with different capitals` };
+    const changed = v !== raw.trim(); return { ok: true, v, msg: changed ? `Will be saved as “${v}”` : '' };
+  }
+  function addValues(p, raws, opts = {}) {
+    const added = []; raws.forEach(raw => { const r = validateValue(p, raw); if (r.ok) { p.values.push({ v: r.v, pretty: opts.pretty || '', desc: opts.desc || '', by: 'Tyler Berry', created: todayISO(), status: 'active' }); added.push(r.v); } });
+    return added;
+  }
+  function editValueModal(p, v) {
+    const val = p.values.find(x => x.v === v); const row = paramValueRows(p, { all: true }).find(r => r.v === v) || { links: 0, clicks: 0 };
+    const parents = allowedBy(p, v);
+    openModal(`<div class="modal-h"><h3>Edit value<span class="sub"><span class="code">${esc(p.utm)}</span></span></h3><button class="close" aria-label="Close">${I.close}</button></div>
+      <div class="modal-b">
+        <div class="field"><label for="ev-v">Value <span class="sm-muted">what goes in the URL</span></label><div class="search"><input id="ev-v" value="${esc(val.v)}" spellcheck="false"></div><span class="sm-muted" id="ev-hint" style="white-space:normal">${row.links ? `Renaming updates the dropdown and templates only. The ${row.links} existing link${row.links === 1 ? '' : 's'} keep “${esc(val.v)}”.` : 'Not used by any link yet, so renaming is safe.'}</span></div>
+        <div class="field"><label for="ev-p">Pretty name <span class="sm-muted">what members see in the builder (optional)</span></label><div class="search"><input id="ev-p" value="${esc(val.pretty)}" placeholder="e.g. ${esc(p.key === 'source' ? 'LinkedIn' : p.key === 'region' ? 'North America' : 'Fall sale 2026')}" style="font-family:var(--font-ui)"></div></div>
+        <div class="field"><label for="ev-d">Description <span class="sm-muted">when to use it (optional)</span></label><div class="search"><input id="ev-d" value="${esc(val.desc)}" placeholder="Shown as help text in the builder" style="font-family:var(--font-ui)"></div></div>
+        ${p.deps ? `<div class="field"><label>Available when <span class="code">${esc(paramOf(p.deps.parent).utm)}</span> is</label><div class="ev-grp">${parents.length ? parents.map(x => `<span class="kid">${esc(x)}</span>`).join('') : '<span class="untagged">any value (not in a grouping)</span>'}<button class="btn sm" id="ev-grp">${PI.branch}Edit groupings</button></div></div>` : ''}
+        <div class="tpl-foot"><span class="sm-muted">${row.links ? `Used by <b>${row.links}</b> link${row.links === 1 ? '' : 's'} · ${fmt.n(row.clicks)} clicks` : 'Not used by any link'} · added ${fmt.d(new Date(val.created + 'T00:00:00'), { month: 'short', day: 'numeric', year: 'numeric' })} by ${esc(val.by)}</span><span class="grow"></span>
+          <button class="btn" id="ev-arch">${val.status === 'archived' ? I.reset : PI.archive}${val.status === 'archived' ? 'Restore' : 'Archive'}</button><button class="btn primary" id="ev-save">Save</button></div></div>`, { width: 560, onMount(s) {
+        const iv = $('#ev-v', s), hint = $('#ev-hint', s);
+        iv.addEventListener('input', () => { if (iv.value.trim() === val.v) { hint.textContent = ''; return; } const r = validateValue(p, iv.value); hint.textContent = r.ok ? (r.msg || '') : (r.msg || ''); hint.style.color = r.ok ? '' : 'var(--down)'; $('#ev-save', s).disabled = !r.ok; });
+        $('#ev-save', s).addEventListener('click', () => { const nv = iv.value.trim() === val.v ? val.v : validateValue(p, iv.value).v; const old = val.v;
+          if (nv !== old) { val.v = nv; if (p.deps) Object.values(p.deps.allow).forEach(a => { const i = a.indexOf(old); if (i > -1) a[i] = nv; }); const c = childOf(p); if (c && c.deps.allow[old]) { c.deps.allow[nv] = c.deps.allow[old]; delete c.deps.allow[old]; } }
+          val.pretty = $('#ev-p', s).value.trim(); val.desc = $('#ev-d', s).value.trim(); closeModal(); render(); toast(nv !== old ? `Renamed “${old}” to “${nv}”` : `Saved “${nv}”`); });
+        $('#ev-arch', s).addEventListener('click', () => { closeModal(); if (val.status === 'archived') { val.status = 'active'; render(); toast(`Restored “${val.v}”`); } else archiveValues(p, [val.v]); });
+        const g = $('#ev-grp', s); if (g) g.addEventListener('click', () => { closeModal(); groupingPicker(p, val.v); });
+        setTimeout(() => $('#ev-p', s).focus(), 60);
+      } });
+  }
+  function archiveValues(p, vs) {
+    vs.forEach(v => { const val = p.values.find(x => x.v === v); if (val) val.status = 'archived'; }); state.sel.clear(); render();
+    toast(`Archived ${vs.length === 1 ? `“${vs[0]}”` : vs.length + ' values'}: hidden from the builder, links unchanged`);
+  }
+  function mergeModal(p, vs, into) {
+    const rows = vs.map(v => paramValueRows(p, { all: true }).find(r => r.v === v)).filter(Boolean);
+    const cands = into ? [into, ...vs.filter(v => v !== into)] : vs; let keep = cands[0];
+    const body = () => `<div class="choice-list">${cands.map(v => { const r = rows.find(x => x.v === v) || paramValueRows(p, { all: true }).find(x => x.v === v); return `<label class="choice ${v === keep ? 'on' : ''}"><input type="radio" name="keep" value="${esc(v)}" ${v === keep ? 'checked' : ''}><span class="t"><span class="code">${esc(v)}</span><span class="sm-muted">${r ? `${r.links} link${r.links === 1 ? '' : 's'} · ${fmt.n(r.clicks)} clicks${r.val && r.val.pretty ? ' · ' + esc(r.val.pretty) : ''}` : ''}</span></span></label>`; }).join('')}</div>`;
+    const losers = () => cands.filter(v => v !== keep); const nLinks = () => losers().reduce((a, v) => { const r = rows.find(x => x.v === v); return a + (r ? r.links : 0); }, 0);
+    openModal(`<div class="modal-h"><h3>Merge ${cands.length} values<span class="sub"><span class="code">${esc(p.utm)}</span></span></h3><button class="close" aria-label="Close">${I.close}</button></div>
+      <div class="modal-b"><p class="sm-muted" style="white-space:normal;margin:4px 0 12px">Keep one value. The others are removed from the list and their groupings move to the kept value.</p><div id="mg-body">${body()}</div>
+        <div class="grp-note" id="mg-note"></div>
+        <div class="tpl-foot"><span class="grow"></span><button class="btn close">Cancel</button><button class="btn primary" id="mg-ok">Merge</button></div></div>`, { width: 520, onMount(s) {
+        const note = () => { $('#mg-note', s).innerHTML = `${I.info}<span><b>${nLinks()}</b> existing link${nLinks() === 1 ? '' : 's'} keep ${losers().map(v => `<span class="code">${esc(v)}</span>`).join(', ')} in their URLs. ${p.custom ? '' : 'Analytics will offer to report them under the kept value.'}</span>`; };
+        note(); $('#mg-body', s).addEventListener('change', e => { keep = e.target.value; $('#mg-body', s).innerHTML = body(); note(); });
+        $('#mg-ok', s).addEventListener('click', () => { losers().forEach(v => { const i = p.values.findIndex(x => x.v === v); if (i > -1) p.values.splice(i, 1);
+            if (p.deps) Object.values(p.deps.allow).forEach(a => { if (a.includes(v) && !a.includes(keep)) a.push(keep); const j = a.indexOf(v); if (j > -1) a.splice(j, 1); });
+            const c = childOf(p); if (c && c.deps.allow[v]) { c.deps.allow[keep] = [...new Set([...(c.deps.allow[keep] || []), ...c.deps.allow[v]])]; delete c.deps.allow[v]; } });
+          if (!p.values.find(x => x.v === keep)) addValues(p, [keep]);
+          closeModal(); state.sel.clear(); render(); toast(`Merged into “${keep}”`); });
+      } });
+  }
+  function reviewModal(p) {
+    const ORDER = { unplanned: 0, dup: 1, case: 2, space: 3, stale: 4 };
+    const items = paramValueRows(p, { all: true }).filter(r => r.issues.length).flatMap(r => r.issues.map(i => ({ r, i }))).sort((x, y) => ORDER[x.i.type] - ORDER[y.i.type] || y.r.links - x.r.links);
+    const row = ({ r, i }, idx) => `<div class="rv-row" data-rv="${idx}"><span class="cb on" role="checkbox" aria-checked="true" data-rv-cb="${idx}">${I.check}</span>
+      <div class="txt"><span class="code v">${esc(r.v)}</span><span class="sm-muted" style="white-space:normal">${esc(i.label)}</span></div>
+      <span class="rv-fix">${i.fix === 'merge' ? `${PI.merge}Merge into <span class="code">${esc(i.into)}</span>` : i.fix === 'rename' ? `${I.edit}Rename to <span class="code">${esc(i.to)}</span>` : i.fix === 'add' ? `${PI.plus}Add to list` : `${PI.archive}Archive`}</span></div>`;
+    openModal(`<div class="modal-h"><h3>Review ${esc(p.label.toLowerCase())} values<span class="sub">${items.length} suggestion${items.length === 1 ? '' : 's'}</span></h3><button class="close" aria-label="Close">${I.close}</button></div>
+      <div class="modal-b"><p class="sm-muted" style="white-space:normal;margin:4px 0 12px">Untick anything you want to keep as it is. Nothing here deletes a link or changes a URL that's already out there.</p>
+        <div class="rv-list">${items.map(row).join('')}</div>
+        <div class="tpl-foot"><span class="sm-muted" id="rv-n"><b>${items.length}</b> selected</span><span class="grow"></span><button class="btn close">Not now</button><button class="btn primary" id="rv-ok">Apply</button></div></div>`, { width: 600, onMount(s) {
+        const on = new Set(items.map((_, i) => i));
+        s.addEventListener('click', e => { const b = e.target.closest('[data-rv-cb]'); if (!b) return; const i = +b.dataset.rvCb; if (on.has(i)) on.delete(i); else on.add(i); b.classList.toggle('on', on.has(i)); b.setAttribute('aria-checked', on.has(i)); b.closest('.rv-row').classList.toggle('skip', !on.has(i)); $('#rv-n b', s).textContent = on.size; });
+        $('#rv-ok', s).addEventListener('click', () => { let n = 0; [...on].sort((a, b) => a - b).forEach(idx => { const { r, i } = items[idx]; n++; applyFix(p, r, i, true); }); closeModal(); state.sel.clear(); render(); toast(`Applied ${n} fix${n === 1 ? '' : 'es'}`); });
+      } });
+  }
+  function applyFix(p, r, i, silent) {
+    if (i.fix === 'add') { addValues(p, [r.v]); if (!silent) { render(); toast(`Added “${r.v}” to ${p.label.toLowerCase()}`); } return; }
+    if (i.fix === 'archive') { const val = p.values.find(x => x.v === r.v); if (val) val.status = 'archived'; if (!silent) { render(); toast(`Archived “${r.v}”`); } return; }
+    if (i.fix === 'rename') { const val = p.values.find(x => x.v === r.v); if (val && !p.values.find(x => x.v === i.to)) { val.v = i.to; } else if (val) { const j = p.values.indexOf(val); p.values.splice(j, 1); } if (!silent) { render(); toast(`Renamed to “${i.to}”`); } return; }
+    if (i.fix === 'merge') { const j = p.values.findIndex(x => x.v === r.v); if (j > -1) p.values.splice(j, 1); if (p.deps) Object.values(p.deps.allow).forEach(a => { if (a.includes(r.v) && !a.includes(i.into)) a.push(i.into); const k = a.indexOf(r.v); if (k > -1) a.splice(k, 1); }); if (!silent) { render(); toast(`Merged “${r.v}” into “${i.into}”`); } }
+  }
+  function valueMenu(anchor, id) {
+    const p = curParam(); const r = paramValueRows(p, { all: true }).find(x => x.id === id); if (!r) return;
+    const un = r.status === 'unplanned';
+    openPop(anchor, `<div class="menu" style="width:240px"><div class="group" style="font-family:var(--font-mono);text-transform:none;letter-spacing:0">${esc(r.v)}</div>
+      ${un ? `<button class="mi" data-r="add">${PI.plus}<span class="grow">Add to list</span></button><button class="mi" data-r="mergeinto">${PI.merge}<span class="grow">Merge into an existing value…</span></button>` : `<button class="mi" data-r="edit">${I.edit}<span class="grow">Edit value</span></button><button class="mi" data-r="grp">${PI.branch}<span class="grow">Groupings…</span></button><button class="mi" data-r="merge">${PI.merge}<span class="grow">Merge with…</span></button>`}
+      ${r.links ? `<button class="mi" data-r="links">${I.links}<span class="grow">Show ${r.links} link${r.links === 1 ? '' : 's'}</span></button><button class="mi" data-r="analytics">${I.analytics}<span class="grow">Analytics for this value</span></button>` : ''}
+      <button class="mi" data-r="copy">${I.copy}<span class="grow">Copy value</span></button>
+      <div class="sep"></div>
+      ${un ? `<button class="mi" data-r="ignore">${PI.eyeOff}<span class="grow">Ignore (keep unsaved)</span></button>` : r.status === 'archived' ? `<button class="mi" data-r="restore">${I.reset}<span class="grow">Restore</span></button>` : `<button class="mi" data-r="archive">${PI.archive}<span class="grow">Archive</span></button>`}
+      ${!un ? `<button class="mi danger" data-r="delete">${I.close}<span class="grow">Delete${r.links ? ` <span class="sm-muted">(used by ${r.links})</span>` : ''}</span></button>` : ''}</div>`, { align: 'right', onMount(el) {
+        el.addEventListener('click', e => { const b = e.target.closest('[data-r]'); if (!b) return; closePop(); const a = b.dataset.r;
+          if (a === 'add') applyFix(p, r, { fix: 'add' }); else if (a === 'edit') editValueModal(p, r.v); else if (a === 'grp') groupingPicker(p, r.v); else if (a === 'merge') mergeWithPicker(p, r.v); else if (a === 'mergeinto') mergeWithPicker(p, r.v, true);
+          else if (a === 'links') showValueLinks(p, r.v); else if (a === 'analytics') { if (!p.custom) { state.filters = [{ dim: p.key, op: 'is', values: [r.v] }]; goOverview(); } else toast('Custom parameters aren\'t in Analytics yet'); }
+          else if (a === 'copy') copyText(r.v, 'Value copied'); else if (a === 'ignore') toast(`“${r.v}” stays unsaved; it won't be suggested again`); else if (a === 'restore') { r.val.status = 'active'; render(); toast(`Restored “${r.v}”`); }
+          else if (a === 'archive') archiveValues(p, [r.v]); else if (a === 'delete') confirmDeleteValue(p, r); });
+      } });
+  }
+  function mergeWithPicker(p, v, intoOnly) {
+    const others = p.values.filter(x => x.v !== v && x.status !== 'archived');
+    openModal(`<div class="modal-h"><h3>Merge “${esc(v)}” ${intoOnly ? 'into' : 'with'}…</h3><button class="close" aria-label="Close">${I.close}</button></div>
+      <div class="modal-b"><div class="search" style="margin:4px 0 8px">${I.search}<input id="mw-q" placeholder="Search values…"></div><div class="vals" id="mw-list" style="max-height:280px">${others.map(o => `<button class="val" data-v="${esc(o.v)}"><span class="lbl"><span class="code">${esc(o.v)}</span>${o.pretty ? `<span class="sm-muted">${esc(o.pretty)}</span>` : ''}</span></button>`).join('')}</div></div>`, { width: 440, onMount(s) {
+        const q = $('#mw-q', s); q.addEventListener('input', () => $$('.val', s).forEach(b => { b.hidden = !b.dataset.v.toLowerCase().includes(q.value.toLowerCase()); }));
+        $('#mw-list', s).addEventListener('click', e => { const b = e.target.closest('[data-v]'); if (!b) return; closeModal(); if (intoOnly) mergeModal(p, [b.dataset.v, v], b.dataset.v); else mergeModal(p, [v, b.dataset.v]); });
+        setTimeout(() => q.focus(), 60);
+      } });
+  }
+  function confirmDeleteValue(p, r) {
+    openModal(`<div class="modal-h"><h3>Delete “${esc(r.v)}”?</h3><button class="close" aria-label="Close">${I.close}</button></div>
+      <div class="modal-b about"><p>${r.links ? `<b>${r.links}</b> link${r.links === 1 ? '' : 's'} use this value. They keep working, but the value disappears from the builder and from any grouping. <b>Archiving</b> keeps it on record and is reversible.` : 'Nothing uses this value. It will be removed from the list and from any grouping.'}</p>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px"><button class="btn close">Cancel</button>${r.links ? `<button class="btn" id="dv-arch">${PI.archive}Archive instead</button>` : ''}<button class="btn primary danger" id="dv-ok">Delete</button></div></div>`, { width: 460, onMount(s) {
+        $('#dv-ok', s).addEventListener('click', () => { closeModal(); const j = p.values.findIndex(x => x.v === r.v); if (j > -1) p.values.splice(j, 1); if (p.deps) Object.values(p.deps.allow).forEach(a => { const k = a.indexOf(r.v); if (k > -1) a.splice(k, 1); }); const c = childOf(p); if (c) delete c.deps.allow[r.v]; state.sel.clear(); render(); toast(`Deleted “${r.v}”`); });
+        const a = $('#dv-arch', s); if (a) a.addEventListener('click', () => { closeModal(); archiveValues(p, [r.v]); });
+      } });
+  }
+  function showValueLinks(p, v) { if (p.custom) { toast('Custom parameters aren\'t searchable on Links yet'); return; } state.from = 'parameters'; goLinks(); state.filters = [{ dim: p.key, op: 'is', values: [v] }]; render(); }
+  // Groupings: for a child value, which parent values allow it (edited from the child, HubSpot-style)
+  function groupingPicker(p, v) {
+    if (!p.deps) { const c = childOf(p); if (c) { groupingEditor(c, v); return; } chooseParent(p); return; }
+    const par = paramOf(p.deps.parent); const pvals = par.values.filter(x => x.status !== 'archived');
+    const on = new Set(allowedBy(p, v));
+    const row = pv => `<label class="val ${on.has(pv.v) ? 'on' : ''}" data-pv-row="${esc(pv.v)}"><span class="box">${I.check}</span><span class="lbl"><span class="code">${esc(pv.v)}</span>${pv.pretty ? `<span class="sm-muted">${esc(pv.pretty)}</span>` : ''}</span><span class="cnt">${p.deps.allow[pv.v] ? `${p.deps.allow[pv.v].length} allowed` : 'all'}</span></label>`;
+    openModal(`<div class="modal-h"><h3>When is “${esc(v)}” available?<span class="sub"><span class="code">${esc(p.utm)}</span></span></h3><button class="close" aria-label="Close">${I.close}</button></div>
+      <div class="modal-b"><p class="sm-muted" style="white-space:normal;margin:4px 0 10px">Tick the <span class="code">${esc(par.utm)}</span> values that should offer <span class="code">${esc(v)}</span>. Untick all to make it always available.</p>
+        <div class="vals" id="gp-list" style="max-height:300px;border:1px solid var(--border);border-radius:8px;padding:4px">${pvals.map(row).join('')}</div>
+        <div class="tpl-foot"><span class="sm-muted" id="gp-n">${on.size ? `Available after <b>${on.size}</b> of ${pvals.length} ${esc(par.label.toLowerCase())} values` : 'Always available'}</span><span class="grow"></span><button class="btn close">Cancel</button><button class="btn primary" id="gp-ok">Save</button></div></div>`, { width: 480, onMount(s) {
+        $('#gp-list', s).addEventListener('click', e => { const l = e.target.closest('[data-pv-row]'); if (!l) return; e.preventDefault(); const k = l.dataset.pvRow; if (on.has(k)) on.delete(k); else on.add(k); l.classList.toggle('on', on.has(k)); $('#gp-n', s).innerHTML = on.size ? `Available after <b>${on.size}</b> of ${pvals.length} ${esc(par.label.toLowerCase())} values` : 'Always available'; });
+        $('#gp-ok', s).addEventListener('click', () => { pvals.forEach(pv => { const a = p.deps.allow[pv.v];
+            // a parent without a row offered everything; ticking it keeps that, unticking it narrows to everything but this value
+            if (on.has(pv.v)) { if (!a) p.deps.allow[pv.v] = p.values.filter(x => x.status !== 'archived').map(x => x.v); else if (!a.includes(v)) a.push(v); }
+            else if (a) { const i = a.indexOf(v); if (i > -1) a.splice(i, 1); } else p.deps.allow[pv.v] = p.values.filter(x => x.status !== 'archived' && x.v !== v).map(x => x.v); });
+          closeModal(); render(); toast(`Saved groupings for “${v}”`); });
+      } });
+  }
+  // Groupings: for a parent value, which child values it allows
+  function groupingEditor(c, pv) {
+    const kids = c.values.filter(x => x.status !== 'archived'); const cur = c.deps.allow[pv]; const on = new Set(cur || kids.map(x => x.v)); let restrict = !!cur;
+    const row = k => `<label class="val ${on.has(k.v) ? 'on' : ''}" data-k="${esc(k.v)}"><span class="box">${I.check}</span><span class="lbl"><span class="code">${esc(k.v)}</span>${k.pretty ? `<span class="sm-muted">${esc(k.pretty)}</span>` : ''}</span></label>`;
+    openModal(`<div class="modal-h"><h3>When <span class="code">${esc(paramOf(c.deps.parent).utm)}</span> is “${esc(pv)}”</h3><button class="close" aria-label="Close">${I.close}</button></div>
+      <div class="modal-b"><div class="choice-list" id="ge-mode"><label class="choice ${restrict ? '' : 'on'}"><input type="radio" name="m" value="all" ${restrict ? '' : 'checked'}><span class="t"><b>Offer every ${esc(c.label.toLowerCase())}</b><span class="sm-muted">No narrowing for this value</span></span></label>
+          <label class="choice ${restrict ? 'on' : ''}"><input type="radio" name="m" value="some" ${restrict ? 'checked' : ''}><span class="t"><b>Only these ${esc(c.label.toLowerCase())} values</b><span class="sm-muted">Members see just the ticked values</span></span></label></div>
+        <div class="vals" id="ge-list" style="max-height:260px;border:1px solid var(--border);border-radius:8px;padding:4px;${restrict ? '' : 'opacity:.45;pointer-events:none'}">${kids.map(row).join('')}</div>
+        <div class="tpl-foot"><span class="sm-muted" id="ge-n"></span><span class="grow"></span><button class="btn close">Cancel</button><button class="btn primary" id="ge-ok">Save</button></div></div>`, { width: 480, onMount(s) {
+        const n = () => { $('#ge-n', s).innerHTML = restrict ? `<b>${on.size}</b> of ${kids.length} ${esc(c.label.toLowerCase())} values` : `All ${kids.length} values`; }; n();
+        $('#ge-mode', s).addEventListener('change', e => { restrict = e.target.value === 'some'; $$('.choice', s).forEach(ch => ch.classList.toggle('on', ch.querySelector('input').checked)); const l = $('#ge-list', s); l.style.opacity = restrict ? '' : '.45'; l.style.pointerEvents = restrict ? '' : 'none'; n(); });
+        $('#ge-list', s).addEventListener('click', e => { const l = e.target.closest('[data-k]'); if (!l) return; e.preventDefault(); const k = l.dataset.k; if (on.has(k)) on.delete(k); else on.add(k); l.classList.toggle('on', on.has(k)); n(); });
+        $('#ge-ok', s).addEventListener('click', () => { if (restrict) c.deps.allow[pv] = kids.map(x => x.v).filter(v => on.has(v)); else delete c.deps.allow[pv]; closeModal(); render(); toast(restrict ? `“${pv}” now offers ${on.size} ${c.label.toLowerCase()} value${on.size === 1 ? '' : 's'}` : `“${pv}” offers every ${c.label.toLowerCase()}`); });
+      } });
+  }
+  function chooseParent(p) {
+    const cands = PARAMS.filter(x => x.key !== p.key && !(x.deps && x.deps.parent === p.key));
+    openModal(`<div class="modal-h"><h3>Narrow ${esc(p.label.toLowerCase())} by…</h3><button class="close" aria-label="Close">${I.close}</button></div>
+      <div class="modal-b"><p class="sm-muted" style="white-space:normal;margin:4px 0 10px">Members pick the parent first; the ${esc(p.label.toLowerCase())} list then shows only the values you allow for it. One parent per parameter keeps the builder predictable.</p>
+        <div class="choice-list">${cands.map(x => `<label class="choice ${p.deps && p.deps.parent === x.key ? 'on' : ''}"><input type="radio" name="par" value="${esc(x.key)}" ${p.deps && p.deps.parent === x.key ? 'checked' : ''}><span class="t"><b><span class="code">${esc(x.utm)}</span> ${esc(x.label)}</b><span class="sm-muted">${x.values.filter(v => v.status !== 'archived').length} values${x.deps ? ` · itself narrowed by ${esc(paramOf(x.deps.parent).label.toLowerCase())}` : ''}</span></span></label>`).join('')}</div>
+        <div class="tpl-foot">${p.deps ? `<button class="btn" id="cp-rm">${I.close}Remove groupings</button>` : ''}<span class="grow"></span><button class="btn close">Cancel</button><button class="btn primary" id="cp-ok" ${p.deps ? '' : 'disabled'}>Continue</button></div></div>`, { width: 480, onMount(s) {
+        s.addEventListener('change', () => { $$('.choice', s).forEach(ch => ch.classList.toggle('on', ch.querySelector('input').checked)); $('#cp-ok', s).disabled = false; });
+        $('#cp-ok', s).addEventListener('click', () => { const k = (s.querySelector('input[name=par]:checked') || {}).value; if (!k) return; if (!p.deps || p.deps.parent !== k) p.deps = { parent: k, allow: {} }; state.ptab = 'groupings'; closeModal(); render(); toast(`${p.label} is now narrowed by ${paramOf(k).label.toLowerCase()}. Add rows per ${paramOf(k).label.toLowerCase()} value.`); });
+        const rm = $('#cp-rm', s); if (rm) rm.addEventListener('click', () => { p.deps = null; closeModal(); render(); toast(`Removed groupings from ${p.label.toLowerCase()}`); });
+      } });
+  }
+  function paramModal(p) {
+    const isNew = !p; const d = p || { label: '', utm: '', format: 'text', desc: '', hint: '', shown: true, common: false, custom: true, rules: [] };
+    openModal(`<div class="modal-h"><h3>${isNew ? 'Add custom parameter' : `Edit ${esc(d.label)}`}</h3><button class="close" aria-label="Close">${I.close}</button></div>
+      <div class="modal-b">
+        <div class="field" style="margin-top:4px"><label for="pp-l">Name <span class="sm-muted">shown in the builder</span></label><div class="search"><input id="pp-l" value="${esc(d.label)}" placeholder="e.g. Region" style="font-family:var(--font-ui)"></div></div>
+        <div class="field"><label for="pp-k">URL key <span class="sm-muted">what goes in the link</span></label><div class="search"><span class="sm-muted">?</span><input id="pp-k" value="${esc(d.utm)}" placeholder="region" ${d.custom ? '' : 'disabled'} spellcheck="false"><span class="sm-muted">=…</span></div>${isNew ? '<span class="sm-muted" id="pp-kh" style="white-space:normal">Lowercase letters, numbers and _ only. Filled in from the name.</span>' : ''}</div>
+        <div class="field"><label>Format</label><div class="seg" id="pp-f">${Object.entries(FORMATS).map(([k, l]) => `<button type="button" data-f="${k}" class="${d.format === k ? 'on' : ''}">${l}</button>`).join('')}</div><span class="sm-muted" style="white-space:normal">Text offers your saved values as a dropdown. Date and Number are typed per link and can't hold saved values.</span></div>
+        <div class="field"><label for="pp-d">Description <span class="sm-muted">help text in the builder</span></label><div class="search"><input id="pp-d" value="${esc(d.desc)}" placeholder="When members should use it" style="font-family:var(--font-ui)"></div></div>
+        <div class="field"><label for="pp-h">Placeholder</label><div class="search"><input id="pp-h" value="${esc(d.hint)}" placeholder="e.g. na, emea…" style="font-family:var(--font-ui)"></div></div>
+        <div class="field" style="gap:10px"><label class="switch ${d.shown ? 'on' : ''}" id="pp-shown"><i></i><span>Show in the link builder</span></label>
+          ${d.custom ? `<label class="switch ${d.common ? 'on' : ''}" id="pp-common"><i></i><span>Add to every new workspace <span class="sm-muted">(common parameter)</span></span></label>` : ''}</div>
+        <div class="grp-note" style="margin-top:14px">${I.rules}<span>Required, dropdown-only, lowercase and length limits are set per member group on <b>Rules</b>, so the same parameter can be strict for some teams and open for others.</span></div>
+        <div class="tpl-foot">${!isNew && d.custom ? `<button class="btn" id="pp-del">${I.close}Delete parameter</button>` : ''}<span class="grow"></span><button class="btn close">Cancel</button><button class="btn primary" id="pp-ok" ${isNew ? 'disabled' : ''}>${isNew ? 'Add parameter' : 'Save'}</button></div></div>`, { width: 540, onMount(s) {
+        let fmtv = d.format; let shown = d.shown, common = d.common;
+        const l = $('#pp-l', s), k = $('#pp-k', s); const slug = v => v.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+        let touched = !isNew; l.addEventListener('input', () => { if (!touched) k.value = slug(l.value); $('#pp-ok', s).disabled = !l.value.trim() || !k.value; }); k.addEventListener('input', () => { touched = true; k.value = slug(k.value); $('#pp-ok', s).disabled = !l.value.trim() || !k.value; });
+        $('#pp-f', s).addEventListener('click', e => { const b = e.target.closest('[data-f]'); if (!b) return; fmtv = b.dataset.f; $$('[data-f]', s).forEach(x => x.classList.toggle('on', x === b)); });
+        $('#pp-shown', s).addEventListener('click', e => { e.preventDefault(); shown = !shown; e.currentTarget.classList.toggle('on', shown); });
+        const cm = $('#pp-common', s); if (cm) cm.addEventListener('click', e => { e.preventDefault(); common = !common; e.currentTarget.classList.toggle('on', common); });
+        $('#pp-ok', s).addEventListener('click', () => { const label = l.value.trim(), key = k.value;
+          if (isNew) { if (PARAMS.find(x => x.key === key)) { toast(`A parameter with key “${key}” already exists`); return; } PARAMS.push({ key, label, utm: key, format: fmtv, custom: true, desc: $('#pp-d', s).value.trim(), hint: $('#pp-h', s).value.trim(), rules: [], shown, common, deps: null, values: [] }); closeModal(); goParam(key, 'values'); toast(`Added “${label}”. Now add its values.`); }
+          else { p.label = label; p.format = fmtv; p.desc = $('#pp-d', s).value.trim(); p.hint = $('#pp-h', s).value.trim(); p.shown = shown; p.common = common; if (p.custom) { p.key = key; p.utm = key; state.param = key; } closeModal(); render(); toast(`Saved “${label}”`); } });
+        const del = $('#pp-del', s); if (del) del.addEventListener('click', () => { closeModal(); confirmDeleteParam(p); });
+        setTimeout(() => l.focus(), 60);
+      } });
+  }
+  function confirmDeleteParam(p) {
+    const used = p.values.reduce((a, v) => a + linksWith(p, v.v).length, 0); const child = childOf(p);
+    openModal(`<div class="modal-h"><h3>Delete “${esc(p.label)}”?</h3><button class="close" aria-label="Close">${I.close}</button></div>
+      <div class="modal-b about"><p>${p.values.length} saved value${p.values.length === 1 ? '' : 's'} go with it${used ? `, and <b>${used}</b> existing link${used === 1 ? ' keeps' : 's keep'} <span class="code">${esc(p.utm)}=…</span> in their URLs` : ''}.${child ? ` <b>${esc(child.label)}</b> is narrowed by this parameter; that grouping is removed too.` : ''} Hiding it from the builder is reversible; deleting is not.</p>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px"><button class="btn close">Cancel</button><button class="btn" id="dp-hide">${PI.eyeOff}Hide instead</button><button class="btn primary danger" id="dp-ok">Delete</button></div></div>`, { width: 460, onMount(s) {
+        $('#dp-ok', s).addEventListener('click', () => { closeModal(); const i = PARAMS.indexOf(p); PARAMS.splice(i, 1); if (child) child.deps = null; state.param = PARAMS[0].key; render(); toast(`Deleted “${p.label}”`); });
+        $('#dp-hide', s).addEventListener('click', () => { closeModal(); p.shown = false; render(); toast(`${p.label} hidden from the builder`); });
+      } });
+  }
+  function paramMoreMenu(anchor, p) {
+    const i = PARAMS.indexOf(p);
+    openPop(anchor, `<div class="menu" style="width:250px"><div class="group">${esc(p.label)}</div>
+      <button class="mi" data-r="edit">${I.edit}<span class="grow">Edit parameter…</span></button>
+      <button class="mi" data-r="grp">${PI.branch}<span class="grow">Groupings…</span></button>
+      <button class="mi" data-r="rules">${I.rules}<span class="grow">Builder rules in Rules</span>${I.external}</button>
+      <div class="sep"></div>
+      <button class="mi" data-r="up" ${i === 0 ? 'disabled' : ''}><svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg><span class="grow">Move up in builder</span></button>
+      <button class="mi" data-r="down" ${i === PARAMS.length - 1 ? 'disabled' : ''}><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7"/></svg><span class="grow">Move down in builder</span></button>
+      <div class="sep"></div>
+      <button class="mi" data-r="paste">${I.copy}<span class="grow">Paste a list of values…</span></button>
+      <button class="mi" data-r="csv">${I.download}<span class="grow">Export values as CSV</span></button>
+      <button class="mi" data-r="ga">${I.analytics}<span class="grow">Import from Google Analytics</span></button>
+      ${p.custom ? `<div class="sep"></div><button class="mi danger" data-r="delete">${I.close}<span class="grow">Delete parameter</span></button>` : ''}</div>`, { align: 'right', onMount(el) {
+        el.addEventListener('click', e => { const b = e.target.closest('[data-r]'); if (!b || b.disabled) return; closePop(); const a = b.dataset.r;
+          if (a === 'edit') paramModal(p); else if (a === 'grp') { state.ptab = 'groupings'; render(); } else if (a === 'rules') toast('Rules is outside this prototype'); else if (a === 'up' || a === 'down') { const j = a === 'up' ? i - 1 : i + 1; PARAMS.splice(i, 1); PARAMS.splice(j, 0, p); render(); toast(`${p.label} moved ${a} in the builder`); }
+          else if (a === 'paste') pasteModal(p); else if (a === 'csv') toast(`Exported ${p.values.length} ${p.label.toLowerCase()} values as CSV`); else if (a === 'ga') toast('Google Analytics import is outside this prototype'); else if (a === 'delete') confirmDeleteParam(p); });
+      } });
+  }
+  function pasteModal(p) {
+    openModal(`<div class="modal-h"><h3>Add several ${esc(p.label.toLowerCase())} values</h3><button class="close" aria-label="Close">${I.close}</button></div>
+      <div class="modal-b"><p class="sm-muted" style="white-space:normal;margin:4px 0 10px">One per line, or separated by commas. Values already in the list are skipped; ${p.rules.includes('lowercase') ? 'capitals are lowercased and ' : ''}spaces become “-”.</p>
+        <textarea id="ps-t" class="pm-textarea" rows="7" placeholder="facebook&#10;instagram&#10;linkedin"></textarea><div class="sm-muted" id="ps-n" style="margin-top:6px"></div>
+        <div class="tpl-foot"><span class="grow"></span><button class="btn close">Cancel</button><button class="btn primary" id="ps-ok" disabled>Add values</button></div></div>`, { width: 480, onMount(s) {
+        const t = $('#ps-t', s); const parse = () => t.value.split(/[\n,]/).map(x => x.trim()).filter(Boolean);
+        t.addEventListener('input', () => { const list = parse(); const ok = list.filter(x => validateValue(p, x).ok); $('#ps-n', s).textContent = list.length ? `${ok.length} new value${ok.length === 1 ? '' : 's'}${list.length - ok.length ? ` · ${list.length - ok.length} skipped (already in the list)` : ''}` : ''; $('#ps-ok', s).disabled = !ok.length; });
+        $('#ps-ok', s).addEventListener('click', () => { const added = addValues(p, parse()); closeModal(); render(); toast(`Added ${added.length} value${added.length === 1 ? '' : 's'} to ${p.label.toLowerCase()}`); });
+        setTimeout(() => t.focus(), 60);
+      } });
+  }
+  function importParamsModal() {
+    openModal(`<div class="modal-h"><h3>Import parameters via CSV</h3><button class="close" aria-label="Close">${I.close}</button></div>
+      <div class="modal-b about"><p>One column per parameter, header = the parameter's key. A header that doesn't exist yet becomes a new custom parameter. Add <span class="code">prettyname:utm_source</span> columns for pretty names. Existing values are kept; only new ones are added.</p>
+        <div class="pm-drop">${I.download}<b>Drop a CSV here</b><span class="sm-muted">or click to choose a file</span></div>
+        <div class="tpl-foot"><button class="btn">${I.download}Download template</button><span class="grow"></span><button class="btn close">Cancel</button><button class="btn primary" disabled>Import</button></div></div>`, { width: 500, onMount(s) { $('.pm-drop', s).addEventListener('click', () => toast('File picking is outside this prototype')); $('.tpl-foot .btn:not(.close)', s).addEventListener('click', () => toast('Template CSV downloaded')); } });
+  }
+  function paramsMoreMenu(anchor) {
+    openPop(anchor, `<div class="menu" style="width:240px">
+      <button class="mi" data-act="csv">${I.download}<span class="grow">Export all parameters as CSV</span></button>
+      <button class="mi" data-act="import">${I.download}<span class="grow">Import parameters via CSV</span></button>
+      <button class="mi" data-act="ga">${I.analytics}<span class="grow">Import from Google Analytics</span></button>
+      <div class="sep"></div>
+      <button class="mi" data-act="review-all">${PI.spark}<span class="grow">Review every parameter</span>${PARAMS.reduce((a, q) => a + reviewCount(q), 0) ? `<span class="pro">${PARAMS.reduce((a, q) => a + reviewCount(q), 0)}</span>` : ''}</button>
+      <button class="mi" data-act="about">${I.info}<span class="grow">Tips &amp; shortcuts</span></button></div>`, { align: 'right', onMount(el) { el.addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (!b) return; closePop(); const a = b.dataset.act;
+        if (a === 'csv') toast('Exported all parameters as CSV'); else if (a === 'import') importParamsModal(); else if (a === 'about') tipsModal(); else if (a === 'review-all') { const p = PARAMS.find(q => reviewCount(q)); if (p) { goParam(p.key, 'values'); reviewModal(p); } else toast('Nothing to review'); } else toast(`${b.textContent.trim()} is outside this prototype`); }); } });
+  }
+
   // Which table a list page draws, so search and sort can redraw just that card.
-  const LIST_TABLE = { links: linksTableHTML, qr: qrTableHTML, templates: templatesTableHTML, shorteners: shortenersTableHTML };
+  const LIST_TABLE = { links: linksTableHTML, qr: qrTableHTML, templates: templatesTableHTML, shorteners: shortenersTableHTML, parameters: () => state.ptab === 'values' ? paramValuesCard() : groupingsHTML(curParam()) };
   const listTableEl = () => $('#links-table') || $('#list-table');
   function listMoreMenu(anchor) {
     const what = state.view === 'qr' ? 'QR codes' : state.view === 'templates' ? 'templates' : 'shorteners';
@@ -862,7 +1316,7 @@
     const view = $('#view');
     const y = window.scrollY;
     if (opts.busy) { view.classList.add('busy'); setTimeout(() => view.classList.remove('busy'), 500); }
-    const VIEWS = { link: linkHTML, links: linksHTML, qr: qrHTML, templates: templatesHTML, shorteners: shortenersHTML };
+    const VIEWS = { link: linkHTML, links: linksHTML, qr: qrHTML, templates: templatesHTML, shorteners: shortenersHTML, parameters: parametersHTML };
     view.innerHTML = (VIEWS[state.view] || overviewHTML)();
     if (opts.top) window.scrollTo({ top: 0, behavior: 'instant' }); else window.scrollTo(0, y);
     requestAnimationFrame(() => {
@@ -879,9 +1333,9 @@
     });
     const section = state.view === 'link' ? (LIST_VIEWS.includes(state.from) ? state.from : 'analytics') : LIST_VIEWS.includes(state.view) ? state.view : 'analytics';
     $$('.nav a').forEach(a => a.classList.toggle('active', a.dataset.nav === section));
-    const TITLES = { links: 'Links', qr: 'QR codes', templates: 'Templates', shorteners: 'Link shorteners' };
+    const TITLES = { links: 'Links', qr: 'QR codes', templates: 'Templates', shorteners: 'Link shorteners', parameters: 'Parameters' };
     $('#topbar-title').textContent = state.view === 'link' ? state.slug : TITLES[state.view] || 'Acme Marketing';
-    try { location.hash = state.view === 'link' ? 'link-' + state.slug.replace(/[^a-z0-9]+/gi, '-') : state.view; } catch (e) { /* ignore */ }
+    try { location.hash = state.view === 'link' ? 'link-' + state.slug.replace(/[^a-z0-9]+/gi, '-') : state.view === 'parameters' ? 'parameters-' + state.param : state.view; } catch (e) { /* ignore */ }
   }
   window.addEventListener('resize', (() => { let t; return () => { clearTimeout(t); t = setTimeout(drawChart, 120); }; })());
 
@@ -1109,6 +1563,11 @@
       <li><b>QR codes</b> lists every link that has a code, with scans and its design. Click a row to preview and download; tick rows to change the design in bulk.</li>
       <li><b>Templates</b> shows each template's parameters. Dashed chips are asked for in the link builder. Click "N links" to see the links built from it.</li>
       <li><b>Link shorteners</b>: switch a domain off to hide it from the builder without breaking links. "Needs DNS" shows the record to add.</li></ul>
+      <h4>Parameters</h4><ul>
+      <li>Pick a parameter on the left; its saved values are on the right with how many links use each one. Top-to-bottom order is the link builder order.</li>
+      <li><b>Needs review</b> lists values used in links but never saved, likely duplicates (<i>Facebook</i> vs <i>facebook</i>), values with capitals or spaces, and values unused for 90 days. "Review &amp; fix" applies the suggested merges, renames and archives in one go.</li>
+      <li><b>Groupings</b> narrow a list: when medium is <i>paid_social</i>, source offers only paid platforms. Edit them per parent value, or per child value with the branch icon.</li>
+      <li>Type in the add row to add a value (paste a list to add several). Archive hides a value from the builder without touching links; Merge keeps one value and moves groupings across.</li></ul>
       <h4>Keyboard shortcuts</h4><p>With the date menu open: <kbd>D</kbd> Today · <kbd>E</kbd> Yesterday · <kbd>W</kbd> Last 7 days · <kbd>T</kbd> Last 30 days · <kbd>M</kbd> This month · <kbd>L</kbd> Last month · <kbd>Q</kbd> Last 90 days. <kbd>Esc</kbd> closes any menu.</p></div>`, { width: 560 });
   }
 
@@ -1155,11 +1614,11 @@
     if (hit('#group-btn')) { groupMenu(hit('#group-btn')); return; }
     if (hit('#lsort-btn')) { lsortMenu(hit('#lsort-btn')); return; }
     if (hit('#links-more')) { linksMoreMenu(hit('#links-more')); return; }
-    if (hit('#list-more')) { listMoreMenu(hit('#list-more')); return; }
+    if (hit('#list-more')) { if (state.view === 'parameters') paramsMoreMenu(hit('#list-more')); else listMoreMenu(hit('#list-more')); return; }
     if (hit('#lq-clear') || hit('#clear-search')) { state.lq = ''; if (hit('#clear-search')) state.filters = []; render(); return; }
-    if ((el = hit('[data-lsort]'))) { const k = el.dataset.lsort; if (state.lsort.key === k) state.lsort.dir *= -1; else state.lsort = { key: k, dir: ['link', 'campaign', 'name', 'domain'].includes(k) ? 1 : -1 }; swapSection(listTableEl(), LIST_TABLE[state.view]()); return; }
+    if ((el = hit('[data-lsort]'))) { const k = el.dataset.lsort; if (state.lsort.key === k) state.lsort.dir *= -1; else state.lsort = { key: k, dir: ['link', 'campaign', 'name', 'domain', 'value'].includes(k) ? 1 : -1 }; swapSection(listTableEl(), LIST_TABLE[state.view]()); return; }
     if ((el = hit('[data-sel]'))) { const sl = el.dataset.sel; if (state.sel.has(sl)) state.sel.delete(sl); else state.sel.add(sl); refreshSelection(); return; }
-    if (hit('#sel-all')) { const rows = selectableRows(); const all = rows.every(r => state.sel.has(r.link.slug)); rows.forEach(r => all ? state.sel.delete(r.link.slug) : state.sel.add(r.link.slug)); refreshSelection(); return; }
+    if (hit('#sel-all')) { const ids = selectableIds(); const all = ids.every(i => state.sel.has(i)); ids.forEach(i => all ? state.sel.delete(i) : state.sel.add(i)); refreshSelection(); return; }
     if ((el = hit('[data-group]'))) { const g = el.dataset.group; if (state.collapsed.has(g)) state.collapsed.delete(g); else state.collapsed.add(g); swapSection($('#links-table'), linksTableHTML()); return; }
     if ((el = hit('[data-bulk]'))) { bulk(el.dataset.bulk); return; }
     if ((el = hit('[data-row-qr]'))) { qrModal(D.LINKS.find(l => l.slug === el.dataset.rowQr)); return; }
@@ -1179,6 +1638,30 @@
     if ((el = hit('[data-tpl-edit]'))) { toast('Template editing is outside this prototype'); return; }
     if ((el = hit('[data-tpl-more]'))) { templateMenu(el, el.dataset.tplMore); return; }
     if ((el = hit('[data-tpl]'))) { templateModal(el.dataset.tpl); return; }
+    // Parameters page
+    if (state.view === 'parameters') {
+      const p = curParam(); const pvId = el => el.dataset.pvId || el.dataset.pvEdit || el.dataset.pvMore || el.dataset.pvLinks || el.dataset.pv; const rowOf = id => paramValueRows(p, { all: true }).find(r => r.id === id);
+      if ((el = hit('[data-pm]'))) { goParam(el.dataset.pm, el.dataset.ptab || null); return; }
+      if (hit('#pm-add-param') || hit('#pm-add-param-top')) { paramModal(null); return; }
+      if (hit('#pm-import')) { importParamsModal(); return; }
+      if (hit('#pm-edit')) { paramModal(p); return; }
+      if (hit('#pm-more')) { paramMoreMenu(hit('#pm-more'), p); return; }
+      if (hit('#pm-shown')) { e.preventDefault(); p.shown = !p.shown; render(); toast(p.shown ? `${p.label} is back in the link builder` : `${p.label} hidden from the builder; existing links keep it`); return; }
+      if (hit('[data-nav-rules]')) { e.preventDefault(); toast('Rules is outside this prototype'); return; }
+      if ((el = hit('[data-ptab]'))) { state.ptab = el.dataset.ptab; state.sel.clear(); render(); return; }
+      if ((el = hit('[data-pfilter]'))) { state.pfilter = el.dataset.pfilter; state.sel.clear(); render(); return; }
+      if (hit('#pm-review')) { reviewModal(p); return; }
+      if (hit('#pm-clear')) { state.lq = ''; state.pfilter = 'all'; render(); return; }
+      if ((el = hit('[data-fix]'))) { const r = rowOf(el.dataset.pvId); if (r) applyFix(p, r, { fix: el.dataset.fix }); return; }
+      if ((el = hit('[data-pv-links]'))) { const r = rowOf(el.dataset.pvLinks); if (r) showValueLinks(p, r.v); return; }
+      if ((el = hit('[data-pv-edit]'))) { const r = rowOf(el.dataset.pvEdit); if (r && r.val) editValueModal(p, r.v); return; }
+      if ((el = hit('[data-pv-grp]'))) { groupingPicker(p, el.dataset.pvGrp); return; }
+      if ((el = hit('[data-pv-more]'))) { valueMenu(el, el.dataset.pvMore); return; }
+      if ((el = hit('[data-grp-edit]'))) { groupingEditor(p, el.dataset.grpEdit); return; }
+      if (hit('#grp-parent')) { chooseParent(p); return; }
+      if (hit('#pv-add-form')) { return; }
+      if ((el = hit('[data-pv]'))) { const r = rowOf(el.dataset.pv); if (!r) return; if (r.val) editValueModal(p, r.v); else valueMenu($('[data-pv-more]', el) || el, r.id); return; }
+    }
     // Link shorteners page
     if (hit('#add-dom-btn')) { addShortenerModal(); return; }
     if (hit('#cleaner-btn')) { toast('UTM Page Cleaner setup is outside this prototype'); return; }
@@ -1199,14 +1682,23 @@
   });
   $('#view').addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.row, .trow.data, .lrow')) { e.preventDefault(); e.target.click(); } });
   // List search: redraw only the table, keep the caret where it is
-  $('#view').addEventListener('input', (() => { let t; return e => { if (e.target.id !== 'lq') return; state.lq = e.target.value; const c = $('#lq-clear'); if (c) c.hidden = !state.lq; clearTimeout(t); t = setTimeout(() => swapSection(listTableEl(), LIST_TABLE[state.view]()), 120); }; })());
+  $('#view').addEventListener('input', (() => { let t; return e => { if (e.target.id !== 'lq') return; state.lq = e.target.value; const c = $('#lq-clear'); if (c) c.hidden = !state.lq; clearTimeout(t); t = setTimeout(() => { swapSection(listTableEl(), LIST_TABLE[state.view]()); if (state.view === 'parameters') { const rail = $('.pm-rail'); if (rail) rail.outerHTML = railHTML(); } }, 120); }; })());
+  // Parameters: inline add-value row (validates as you type, Enter adds, a pasted list adds several)
+  $('#view').addEventListener('input', e => { if (e.target.id !== 'pv-add') return; const p = curParam(); const hint = $('#pv-hint'), btn = $('#pv-add-form .btn'); const raw = e.target.value;
+    if (!raw.trim()) { hint.textContent = `${p.rules.includes('lowercase') ? 'lowercase · ' : ''}${p.format === 'number' ? 'numbers only · ' : ''}spaces become “-” · Enter to add, paste a list to add several`; hint.classList.remove('bad'); btn.disabled = true; return; }
+    if (/[\n,]/.test(raw)) { const n = raw.split(/[\n,]/).map(x => x.trim()).filter(x => validateValue(p, x).ok).length; hint.textContent = `${n} new value${n === 1 ? '' : 's'} will be added`; hint.classList.remove('bad'); btn.disabled = !n; return; }
+    const r = validateValue(p, raw); hint.textContent = r.msg || 'Press Enter to add'; hint.classList.toggle('bad', !r.ok && !r.restore); btn.disabled = !r.ok && !r.restore; btn.textContent = r.restore ? 'Restore' : 'Add'; });
+  $('#view').addEventListener('submit', e => { if (e.target.id !== 'pv-add-form') return; e.preventDefault(); const p = curParam(); const inp = $('#pv-add'); const raw = inp.value; const r = validateValue(p, raw);
+    if (r.restore) { p.values.find(x => x.v === r.restore).status = 'active'; render(); toast(`Restored “${r.restore}”`); return; }
+    const added = addValues(p, raw.split(/[\n,]/)); if (!added.length) return; render(); const i = $('#pv-add'); if (i) i.focus();
+    toast(added.length === 1 ? `Added “${added[0]}” to ${p.label.toLowerCase()}` : `Added ${added.length} values to ${p.label.toLowerCase()}`); });
   // Selection: update checkboxes + bulk bar in place, no re-render
-  const selectableRows = () => state.view === 'qr' ? qrRows() : linkRows();
+  const selectableIds = () => state.view === 'qr' ? qrRows().map(r => r.link.slug) : state.view === 'parameters' ? paramValueRows().filter(r => r.status !== 'unplanned').map(r => r.id) : linkRows().map(r => r.link.slug);
   function refreshSelection() {
-    $$('.lrow[data-link], .lrow[data-qr-open]').forEach(r => { const on = state.sel.has(r.dataset.link || r.dataset.qrOpen); r.classList.toggle('sel', on); const cb = $('.cb', r); cb.classList.toggle('on', on); cb.setAttribute('aria-checked', on); });
-    const rows = selectableRows(), all = rows.length && rows.every(r => state.sel.has(r.link.slug)); const sa = $('#sel-all'); if (sa) { sa.classList.toggle('on', all); sa.setAttribute('aria-checked', all); }
+    $$('.lrow[data-link], .lrow[data-qr-open], .lrow[data-pv]').forEach(r => { const id = r.dataset.link || r.dataset.qrOpen || r.dataset.pv; const on = state.sel.has(id); r.classList.toggle('sel', on); const cb = $('.cb[data-sel]', r); if (!cb) return; cb.classList.toggle('on', on); cb.setAttribute('aria-checked', on); });
+    const ids = selectableIds(), all = ids.length > 0 && ids.every(i => state.sel.has(i)); const sa = $('#sel-all'); if (sa) { sa.classList.toggle('on', all); sa.setAttribute('aria-checked', all); }
     const old = $('.bulk'); const html = bulkBarHTML();
-    if (old && !html) old.remove(); else if (!old && html) $('#view').insertAdjacentHTML('beforeend', html); else if (old) old.querySelector('.cnt b').textContent = state.sel.size;
+    if (old && !html) old.remove(); else if (!old && html) $('#view').insertAdjacentHTML('beforeend', html); else if (old) { if (state.view === 'parameters') old.outerHTML = html; else old.querySelector('.cnt b').textContent = state.sel.size; }
   }
 
   // Map hover tooltip
@@ -1242,6 +1734,7 @@
   (function boot() {
     const h = (location.hash || '').replace('#', '');
     if (LIST_VIEWS.includes(h)) { state.view = h; if (h !== 'links') state.lsort = h === 'qr' ? { key: 'clicks', dir: -1 } : h === 'templates' ? { key: 'uses', dir: -1 } : { key: 'links', dir: -1 }; }
+    if (h.startsWith('parameters-')) { const p = PARAMS.find(x => x.key === h.slice(11)); if (p) { state.view = 'parameters'; state.param = p.key; state.lsort = { key: 'links', dir: -1 }; } }
     if (h.startsWith('link-')) { const slug = D.LINKS.find(l => l.slug.replace(/[^a-z0-9]+/gi, '-') === h.slice(5)); if (slug) { state.view = 'link'; state.slug = slug.slug; } }
     render();
   })();
