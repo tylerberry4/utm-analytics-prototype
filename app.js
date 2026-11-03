@@ -667,8 +667,8 @@
     { key: 'paid_social', name: 'Paid social', slug: 'paid-social', desc: 'Meta, LinkedIn and TikTok ads', source: '{{platform}}', medium: 'paid_social', campaign: '{{campaign}}', content: '{{creative}}', term: '', by: 'Dana Whitfield', created: '2026-06-12', shortener: 'acme.co' },
     { key: 'social', name: 'Organic social', slug: 'organic-social', desc: 'Posts from our own accounts', source: '{{platform}}', medium: 'social', campaign: '{{campaign}}', content: 'organic_post', term: '', by: 'Marcus Lee', created: '2026-06-12', shortener: 'acme.co' },
     { key: 'cpc', name: 'Paid search', slug: 'paid-search', desc: 'Google and Bing search campaigns', source: 'google', medium: 'cpc', campaign: '{{campaign}}', content: '{{ad_group}}', term: '{{keyword}}', by: 'Priya Natarajan', created: '2026-07-02', shortener: 'acme.co' },
-    { key: 'email', name: 'Email', slug: 'email', desc: 'Newsletter and lifecycle sends', source: 'newsletter', medium: 'email', campaign: '{{campaign}}', content: '{{position}}', term: '', by: 'Dana Whitfield', created: '2026-06-20', shortener: 'acme.co' },
-    { key: 'print', name: 'Print · QR', slug: 'print-qr', desc: 'Posters, packaging and badges', source: '{{placement}}', medium: 'print', campaign: '{{campaign}}', content: '', term: '', by: 'Priya Natarajan', created: '2026-08-01', shortener: 'acme.co', qr: 'brand' },
+    { key: 'email', name: 'Email', slug: 'email', desc: 'Newsletter and lifecycle sends', source: 'newsletter', medium: 'email', campaign: '{{campaign}}', content: '{{position}}', term: '', promo: '{{promo}}', by: 'Dana Whitfield', created: '2026-06-20', shortener: 'acme.co' },
+    { key: 'print', name: 'Print · QR', slug: 'print-qr', desc: 'Posters, packaging and badges', source: '{{placement}}', medium: 'print', campaign: '{{campaign}}', content: '', term: '', region: '{{region}}', by: 'Priya Natarajan', created: '2026-08-01', shortener: 'acme.co', qr: 'brand' },
     { key: 'referral', name: 'Partner', slug: 'partner', desc: 'Referral links for partners', source: '{{partner}}', medium: 'referral', campaign: 'partner_referral', content: '', term: '', by: 'Marcus Lee', created: '2026-08-10', shortener: 'utm.io' },
     { key: 'audio', name: 'Podcast', slug: 'podcast', desc: 'Host-read ads and show notes', source: '{{show}}', medium: 'audio', campaign: '{{campaign}}', content: '', term: '', by: 'Marcus Lee', created: '2026-09-02', shortener: 'acme.co' },
     { key: 'video', name: 'Creator', slug: 'creator', desc: 'YouTube and creator sponsorships', source: 'youtube', medium: 'video', campaign: '{{campaign}}', content: '{{creator}}', term: '', by: 'Dana Whitfield', created: '2026-09-15', shortener: 'acme.co' },
@@ -676,7 +676,7 @@
   const TSORTS = [['uses', 'Most used'], ['clicks', 'Most clicks'], ['created', 'Newest first'], ['name', 'Name A–Z']];
   const UTM_KEYS = ['source', 'medium', 'campaign', 'content', 'term'];
   const isDyn = v => /^\{\{.*\}\}$/.test(v);
-  const paramChip = (k, v) => v ? `<span class="utm-chip ${isDyn(v) ? 'dyn' : ''}" title="${isDyn(v) ? 'Asked for when the link is built' : 'Fixed value'}"><span class="k">utm_${k}</span>${esc(isDyn(v) ? v.slice(2, -2) : v)}</span>` : '';
+  const paramChip = (k, v, key = 'utm_' + k) => v ? `<span class="utm-chip ${isDyn(v) ? 'dyn' : ''}" title="${isDyn(v) ? 'Asked for when the link is built' : 'Fixed value'}"><span class="k">${esc(key)}</span>${esc(isDyn(v) ? v.slice(2, -2) : v)}</span>` : '';
   function templateRows() {
     const q = state.lq.trim().toLowerCase();
     const rows = TEMPLATE_LIST.map(t => {
@@ -690,7 +690,7 @@
   function templateRowHTML({ t, uses, clicks }, i) {
     return `<div class="lrow trow-t" data-tpl="${esc(t.key)}" role="row" tabindex="0" style="animation-delay:${Math.min(i, 12) * 20}ms">
       <div class="lk"><span class="type">${I.templates}</span><div class="txt"><span class="lk-name">${esc(t.name)}${t.qr ? `<span class="tag">QR</span>` : ''}</span><span class="lk-dest"><span class="code">${esc(t.slug)}</span> ${esc(t.desc)}</span></div></div>
-      <div class="params">${UTM_KEYS.map(k => paramChip(k, t[k])).join('')}</div>
+      <div class="params">${UTM_KEYS.map(k => paramChip(k, t[k])).join('')}${PARAMS.filter(p => p.custom && t[p.key]).map(p => paramChip(p.key, t[p.key], p.utm)).join('')}</div>
       <div class="uses">${uses ? `<button class="n" data-tpl-links="${esc(t.key)}" title="Show these links"><b class="num">${uses}</b> link${uses === 1 ? '' : 's'}</button><span class="sm-muted num">${fmt.n(clicks)} clicks</span>` : '<span class="untagged">Not used yet</span>'}</div>
       <div class="who">${avatar(t.by)}<span class="txt"><span>${fmt.d(new Date(t.created), { month: 'short', day: 'numeric', year: 'numeric' })}</span><span class="sm-muted">${esc(t.by)}</span></span></div>
       <div class="acts">
@@ -724,6 +724,7 @@
     openModal(`<div class="modal-h"><h3>${esc(t.name)}<span class="sub"><span class="code">${esc(t.slug)}</span></span></h3><button class="close" aria-label="Close">${I.close}</button></div>
       <div class="modal-b"><p class="sm-muted" style="white-space:normal;margin:4px 0 14px">${esc(t.desc)}. Created ${fmt.d(new Date(t.created), { month: 'short', day: 'numeric', year: 'numeric' })} by ${esc(t.by)}.</p>
         <dl class="tpl-dl">${UTM_KEYS.map(k => `<dt>utm_${k}</dt><dd>${t[k] ? (isDyn(t[k]) ? `<span class="utm-chip dyn">${esc(t[k].slice(2, -2))}</span><span class="sm-muted" style="margin-left:8px">asked for in the builder</span>` : `<b>${esc(t[k])}</b>`) : '<span class="untagged">not set</span>'}</dd>`).join('')}
+        ${PARAMS.filter(p => p.custom && t[p.key]).map(p => `<dt>${esc(p.utm)}</dt><dd>${isDyn(t[p.key]) ? `<span class="utm-chip dyn">${esc(t[p.key].slice(2, -2))}</span><span class="sm-muted" style="margin-left:8px">asked for in the builder</span>` : `<b>${esc(t[p.key])}</b>`}</dd>`).join('')}
         <dt>Shortener</dt><dd>${esc(t.shortener)}</dd><dt>QR design</dt><dd>${t.qr ? esc(QR_DESIGNS.find(d => d.id === t.qr).name) : '<span class="untagged">workspace default</span>'}</dd></dl>
         <div class="tpl-example"><span class="sm-muted">Example</span><code>${esc(example)}</code></div>
         <div class="tpl-foot"><span class="sm-muted">${row.uses ? `Used by <b>${row.uses}</b> link${row.uses === 1 ? '' : 's'} · ${fmt.n(row.clicks)} clicks` : 'Not used by any link yet'}</span><span class="grow"></span>${row.uses ? `<button class="btn" id="tpl-links">${I.links}View links</button>` : ''}<button class="btn" id="tpl-edit">${I.edit}Edit</button><button class="btn primary" id="tpl-use">Build a link</button></div></div>`, { width: 600, onMount(s) {
@@ -1290,17 +1291,17 @@
   const usableShorteners = () => SHORTENERS.filter(s => s.status !== 'pending' && !state.disabledDomains.has(s.domain));
   const defaultShortener = () => { const u = usableShorteners(); return (u.find(s => s.default) || u[0] || { domain: 'none' }).domain; };
   const validUrl = u => /^(https?:\/\/)?[^\s/?#]+\.[a-z]{2,}([/?#]\S*)?$/i.test(u.trim());
-  const withScheme = u => /^https?:\/\//i.test(u) ? u : 'https://' + u;
+  const withScheme = u => /^https?:\/\//i.test(u) ? u : `${B && B.proto || 'https'}://` + u;
   const lbUrls = () => B.urls.split(/\n/).map(s => s.trim()).filter(Boolean);
 
   function newBuilder(o = {}) {
     const vals = {}; lbAll().forEach(p => { vals[p.key] = ''; });
-    return { mode: o.mode || 'web', edit: null, multi: false, url: o.url || '', urls: '', tpls: [], vals, notes: '', shortener: defaultShortener(), slug: '', slugEdited: false,
-      qr: defaultShortener() !== 'none', design: 'default', touched: new Set(), submitted: false, more: false, done: null, utmOffer: null, qrNote: '', focus: o.focus || null, combo: null };
+    return { mode: o.mode || 'web', edit: null, multi: false, url: o.url || '', urls: '', tpls: [], vals, proto: 'https', notes: '', shortener: defaultShortener(), slug: '', slugEdited: false,
+      qr: defaultShortener() !== 'none', design: 'default', touched: new Set(), submitted: false, more: null, done: null, utmOffer: null, qrNote: '', focus: o.focus || null, combo: null };
   }
   // What the selected template(s) do to a field: fixed value, values that differ per template, or "asked for".
   function tplState(p) {
-    if (p.custom || p.attr || !B.tpls.length) return null;
+    if (!B.tpls.length) return null;
     const vs = B.tpls.map(k => tplOf(k)[p.key] || '');
     const fixed = vs.filter(v => v && !isDyn(v));
     if (fixed.length === vs.length) { const u = [...new Set(fixed)]; return u.length === 1 ? { fixed: u[0] } : { varies: u }; }
@@ -1348,7 +1349,7 @@
   // Every link this form will create: URLs × templates.
   function lbCombos() { const urls = B.multi ? (lbUrls().length ? lbUrls() : ['']) : [B.url.trim() || '']; const tpls = B.tpls.length ? B.tpls : [null]; const out = []; urls.forEach(u => tpls.forEach(t => out.push({ url: u, tpl: t }))); return out; }
   function lbQuery(tplKey) {
-    return lbParams().map(p => { let v = lbValue(p); if (tplKey && !p.custom) { const tv = tplOf(tplKey)[p.key]; if (tv && !isDyn(tv)) v = tv; } return { p, v: v ? normalizeValue(p, v) : '' }; });
+    return lbParams().map(p => { let v = lbValue(p); if (tplKey) { const tv = tplOf(tplKey)[p.key]; if (tv && !isDyn(tv)) v = tv; } return { p, v: v ? normalizeValue(p, v) : '' }; });
   }
   function lbFullUrl(dest, tplKey) { const q = lbQuery(tplKey).filter(x => x.v).map(x => `${x.p.utm}=${encodeURIComponent(x.v)}`).join('&'); const base = withScheme((dest || '').trim().replace(/[?&]$/, '')); return q ? base + (base.includes('?') ? '&' : '?') + q : base; }
   function utmFromUrl(u) { const m = u.match(/[?&](utm_[a-z]+)=([^&#]*)/gi); if (!m) return null; const o = {}; m.forEach(s => { const [k, v] = s.slice(1).split('='); const key = k.toLowerCase().replace('utm_', ''); if (paramOf(key)) o[key] = decodeURIComponent(v); }); return Object.keys(o).length ? o : null; }
@@ -1374,14 +1375,17 @@
     const sel = !locked && p.values.find(x => x.v === v.trim());
     const ph = p.values.length ? `${p.rules.includes('dropdown') ? 'Pick' : 'Pick or type'} ${p.hint ? '· ' + p.hint : ''}` : (p.hint || 'Type a value');
     return `<div class="lb-f ${show && iss.lvl === 'err' ? 'bad' : ''} ${locked ? 'locked' : ''} ${t && t.asked ? 'asked' : ''}" data-f="${esc(p.key)}">
-      <label class="lb-l" for="lb-${esc(p.key)}"><span class="nm">${esc(p.label)}</span>${req ? '<b class="req" title="Required">*</b>' : ''}${p.attr ? '' : `<span class="k">${esc(p.utm)}</span>`}${t && t.asked ? '<span class="ask">template asks for this</span>' : ''}${p.desc ? `<span class="tipi" tabindex="0" data-tip="${esc(p.desc)}">${I.info}</span>` : ''}</label>
+      <label class="lb-l" for="lb-${esc(p.key)}">${lbIcon(p)}<span class="nm">${esc(p.label)}</span>${req ? '<b class="req" title="Required">*</b>' : ''}${p.attr ? '' : `<span class="k">${esc(p.utm)}</span>`}${t && t.asked ? '<span class="ask">template asks for this</span>' : ''}${p.desc ? `<span class="tipi" tabindex="0" data-tip="${esc(p.desc)}">${I.info}</span>` : ''}</label>
       ${locked ? `<div class="lb-lock" title="${t.fixed ? 'Set by the template' : 'Each template sets its own value'}">${PI.lock}<span class="code">${esc(t.fixed || t.varies.join(' · '))}</span><span class="sm-muted">${t.fixed ? 'from template' : 'one per template'}</span></div>`
         : `<div class="lb-in ${p.values.length ? 'combo' : ''}"><input id="lb-${esc(p.key)}" data-lb="${esc(p.key)}" value="${esc(v)}" placeholder="${esc(ph)}" autocomplete="off" spellcheck="false" role="${p.values.length ? 'combobox' : 'textbox'}" aria-expanded="false" ${p.format === 'number' ? 'inputmode="numeric"' : ''}><span class="pretty">${sel && sel.pretty ? esc(sel.pretty) : ''}</span>${p.values.length ? `<span class="chev">${I.chev}</span>` : ''}</div>`}
       <div class="lb-msg ${show ? iss.lvl : ''}" data-msg="${esc(p.key)}">${lbMsgHTML(p, iss, show)}</div></div>`;
   }
+  const lbIcon = p => `<span class="pi ${p.custom ? 'p-cus' : 'p-' + p.key}" title="${p.custom ? 'Custom parameter' : 'Standard UTM parameter'}">${P_ICON[p.custom ? 'custom' : p.key] || P_ICON.custom}</span>`;
+  // Shown up front: what Rules require and what the picked template sets or asks for. The rest is optional and folds away.
+  const lbUp = p => p.rules.includes('required') || !!tplState(p);
   function lbMsgHTML(p, iss, show) {
     if (show) return `${iss.lvl === 'err' ? LBI.bad : I.info}<span>${esc(iss.msg)}</span>${iss.add ? `<button class="link-btn" data-lb-addval="${esc(p.key)}" type="button">Add it to the list</button>` : ''}`;
-    const n = lbNarrow(p); if (n) return `${PI.branch}<span>${n.allow.length} ${esc(p.label.toLowerCase())} values for ${esc(n.par.label.toLowerCase())} <b>${esc(n.pv)}</b></span>`;
+    const n = lbNarrow(p); if (n) return `${PI.branch}<span>${n.allow.length} ${esc(p.label.toLowerCase())} value${n.allow.length === 1 ? '' : 's'} for ${esc(n.par.label.toLowerCase())} <b>${esc(n.pv)}</b></span>`;
     return '';
   }
   function lbSec(n, icon, title, sub, body, extra = '') { return `<section class="lb-sec" data-sec="${n}"><div class="lb-sec-h"><span class="ic">${icon}</span><h4>${title}</h4>${sub ? `<span class="sub">${sub}</span>` : ''}<span class="grow"></span>${extra}</div>${body}</section>`; }
@@ -1389,18 +1393,17 @@
     const ext = B.mode === 'ext'; const urlIss = lbUrlIssue(); const urlShow = urlIss && (B.touched.has('url') || B.submitted);
     const dest = B.edit ? `<div class="lb-f locked" data-f="url"><label class="lb-l"><span class="nm">Destination URL</span></label><div class="lb-lock">${I.external}<span class="code">${esc(B.url)}</span></div></div>`
       : B.multi ? `<div class="lb-f ${urlShow ? 'bad' : ''}" data-f="url"><label class="lb-l" for="lb-urls"><span class="nm">Destination URLs</span><b class="req">*</b><span class="sm-muted">one per line</span></label><textarea id="lb-urls" rows="4" placeholder="acme.com/sale&#10;acme.com/black-friday" spellcheck="false">${esc(B.urls)}</textarea><div class="lb-msg ${urlShow ? 'err' : ''}" data-msg="url">${urlShow ? LBI.bad + `<span>${esc(urlIss.msg)}</span>` : `<span>${lbUrls().length} URL${lbUrls().length === 1 ? '' : 's'}</span>`}</div></div>`
-      : `<div class="lb-f ${urlShow ? 'bad' : ''}" data-f="url"><label class="lb-l" for="lb-url"><span class="nm">Destination URL</span><b class="req">*</b></label><div class="lb-in url">${I.globe}<input id="lb-url" value="${esc(B.url)}" placeholder="Paste the page link, e.g. acme.com/sale" spellcheck="false" autocomplete="off" inputmode="url"></div><div class="lb-msg ${urlShow ? 'err' : ''}" data-msg="url">${urlShow ? LBI.bad + `<span>${esc(urlIss.msg)}</span>` : ''}</div></div>`;
+      : `<div class="lb-f ${urlShow ? 'bad' : ''}" data-f="url"><label class="lb-l" for="lb-url"><span class="nm">Destination URL</span><b class="req">*</b></label><div class="lb-in url"><span class="lb-proto"><select id="lb-proto" aria-label="Protocol"><option ${B.proto === 'https' ? 'selected' : ''}>https</option><option ${B.proto === 'http' ? 'selected' : ''}>http</option></select>${I.chev}</span><span class="lb-sep">://</span><input id="lb-url" value="${esc(B.url)}" placeholder="acme.com/sale" spellcheck="false" autocomplete="off" inputmode="url"></div><div class="lb-msg ${urlShow ? 'err' : ''}" data-msg="url">${urlShow ? LBI.bad + `<span>${esc(urlIss.msg)}</span>` : ''}</div></div>`;
     const offer = B.utmOffer ? `<div class="lb-offer">${I.info}<span>This URL already has ${Object.keys(B.utmOffer).length} UTM tag${Object.keys(B.utmOffer).length === 1 ? '' : 's'} (${Object.entries(B.utmOffer).map(([k, v]) => `<span class="code">${esc(k)}=${esc(v)}</span>`).join(' ')}). Move them into the fields below?</span><button class="btn sm primary" id="lb-utm-use" type="button">Use them</button><button class="btn sm" id="lb-utm-no" type="button">Ignore</button></div>` : '';
     const modeSeg = B.edit ? '' : `<div class="seg lb-seg" role="tablist"><button type="button" data-lb-multi="0" class="${B.multi ? '' : 'on'}">One URL</button><button type="button" data-lb-multi="1" class="${B.multi ? 'on' : ''}">Several URLs</button></div>`;
     const s1 = lbSec(1, LBI.target, 'Where should it go?', '', dest + offer, ext ? '' : modeSeg);
     const tcards = TEMPLATE_LIST.map(t => { const on = B.tpls.includes(t.key); return `<button type="button" class="lb-tpl ${on ? 'on' : ''}" data-tpl-pick="${esc(t.key)}" aria-pressed="${on}"><span class="cb ${on ? 'on' : ''}">${I.check}</span><span class="t"><b>${esc(t.name)}</b><span class="sm-muted">${esc(t.medium)}${t.source && !isDyn(t.source) ? ' · ' + esc(t.source) : ''}</span></span></button>`; }).join('');
     const tsub = B.tpls.length > 1 ? `${B.tpls.length} picked · one link per template` : B.tpls.length ? 'fills the fixed tags for you' : 'optional · pick several to make one link each';
     const s2 = lbSec(2, LBI.tpl, 'Start from a template', tsub, `<div class="lb-tpls">${tcards}</div>`, B.tpls.length ? '<button class="link-btn" id="lb-tpl-clear" type="button">Clear</button>' : '');
-    const std = lbParams().filter(p => !p.custom), cus = lbParams().filter(p => p.custom);
-    const byKey = k => std.find(p => p.key === k);
+    const up = lbParams().filter(lbUp), opt = lbParams().filter(p => !lbUp(p));
     // Medium and source sit side by side so the grouping reads left to right.
-    const order = std.map(p => p.key); const pairs = [];
-    for (let i = 0; i < order.length; i++) { const p = byKey(order[i]); const kid = std.find(c => c.deps && c.deps.parent === p.key); if (kid && order[i + 1] === kid.key) { pairs.push([p, kid]); i++; } else pairs.push([p]); }
+    const pairs = [];
+    for (let i = 0; i < up.length; i++) { const p = up[i]; const kid = up.find(c => c.deps && c.deps.parent === p.key); if (kid && up[i + 1] === kid) { pairs.push([p, kid]); i++; } else pairs.push([p]); }
     const grid = pairs.map(g => g.length === 2 ? `<div class="lb-pair">${lbFieldHTML(g[0])}<span class="lb-link" title="${esc(g[1].label)} options depend on ${esc(g[0].label.toLowerCase())}">${PI.arrowR}</span>${lbFieldHTML(g[1])}</div>` : lbFieldHTML(g[0])).join('');
     const sh = usableShorteners(); const slugIss = lbSlugIssue(); const multiLinks = lbCombos().length > 1;
     const shortRow = `<div class="lb-f ${slugIss ? 'bad' : ''}" data-f="slug"><label class="lb-l" for="lb-slug"><span class="nm">Short link</span>${B.edit ? '<span class="sm-muted">can\'t change after it\'s created</span>' : ''}</label>
@@ -1408,18 +1411,23 @@
       <div class="lb-msg ${slugIss ? 'err' : B.qrNote ? 'info' : ''}" data-msg="slug">${slugIss ? LBI.bad + `<span>${esc(slugIss.msg)}</span>` : B.qrNote ? I.info + `<span>${esc(B.qrNote)}</span>` : (!B.slugEdited && !B.edit && lbSlug() ? '<span>Made from campaign and source. Type to change it.</span>' : '')}</div></div>`;
     const qrRow = `<div class="lb-qr"><label class="switch ${B.qr ? 'on' : ''}" id="lb-qr"><i></i><span>QR code</span></label>${B.qr && !ext ? `<div class="lb-designs">${QR_DESIGNS.map(d => `<button type="button" class="lb-dz ${B.design === d.id ? 'on' : ''}" data-lb-design="${d.id}" title="${esc(d.desc)}"><span class="sw">${qrSVG('acme.co/new', d, 22)}</span>${esc(d.name)}</button>`).join('')}</div>` : B.qr ? '<span class="sm-muted">workspace default design</span>' : '<span class="sm-muted">for print, packaging and events</span>'}</div>`;
     if (ext) {
-      const up = std.filter(p => { const t = tplState(p); return p.rules.includes('required') && !(t && (t.fixed || t.varies)) || (t && t.asked); });
-      const rest = [...std.filter(p => !up.includes(p)), ...cus];
+      const up = lbParams().filter(p => { const t = tplState(p); return p.rules.includes('required') && !(t && (t.fixed || t.varies)) || (t && t.asked); });
+      const rest = lbParams().filter(p => !up.includes(p));
       const errIn = rest.some(p => { const i = lbIssue(p); return i && i.lvl === 'err' && B.submitted; });
-      const moreX = `<div class="lb-more ${B.more || errIn ? 'open' : ''}"><button type="button" class="lb-more-h" id="lb-more" aria-expanded="${B.more || errIn}">${I.chevR}<span>More fields</span><span class="n">${rest.length}</span></button><div class="lb-more-b">${rest.map(lbFieldHTML).join('')}<div class="lb-f" data-f="notes"><label class="lb-l" for="lb-notes"><span class="nm">Notes</span></label><textarea id="lb-notes" rows="2" placeholder="Saved in UTM.io, not added to the link">${esc(B.notes)}</textarea></div></div></div>`;
+      B.moreOpen = !!(B.more || errIn);
+      const moreX = `<div class="lb-more ${B.moreOpen ? 'open' : ''}"><button type="button" class="lb-more-h" id="lb-more" aria-expanded="${B.moreOpen}">${I.chevR}<span>More fields</span><span class="n">${rest.length}</span></button><div class="lb-more-b">${rest.map(lbFieldHTML).join('')}<div class="lb-f" data-f="notes"><label class="lb-l" for="lb-notes"><span class="nm">Notes</span></label><textarea id="lb-notes" rows="2" placeholder="Saved in UTM.io, not added to the link">${esc(B.notes)}</textarea></div></div></div>`;
       const recent = D.LINKS.slice().sort((a, b) => a.created < b.created ? 1 : -1).slice(0, 3);
       B.recentHTML = `<section class="lb-sec ext-recent"><div class="lb-sec-h"><h4>Recent links</h4><span class="grow"></span><button class="link-btn" id="ext-open-web" type="button">Open UTM.io${I.external}</button></div>${recent.map(l => `<div class="ext-rl"><span class="t"><b>${esc(l.slug)}</b><span class="sm-muted">${esc(l.title)}</span></span><button class="icon-btn" type="button" data-copy-l="${esc(l.slug)}" title="Copy">${I.copy}</button></div>`).join('')}</section>`;
       return s1 + s2.replace('optional · pick several to make one link each', 'optional') + lbSec(3, LBI.tag, 'Tag it', '', `<div class="lb-grid">${up.map(lbFieldHTML).join('') || '<span class="sm-muted">The template fills every required tag.</span>'}</div>${moreX}`) + lbSec(4, LBI.short, 'Short link', '', shortRow + qrRow);
     }
-    const cusErr = cus.some(p => { const i = lbIssue(p); return i && i.lvl === 'err'; });
-    const more = cus.length ? `<div class="lb-more ${B.more || cusErr ? 'open' : ''}"><button type="button" class="lb-more-h" id="lb-more" aria-expanded="${B.more || cusErr}">${I.chevR}<span>More parameters</span><span class="n">${cus.length}</span><span class="sm-muted">${cus.map(p => esc(p.label.toLowerCase())).join(', ')}</span></button><div class="lb-more-b">${cus.map(lbFieldHTML).join('')}</div></div>` : '';
+    const filled = opt.filter(p => (B.vals[p.key] || '').trim()).length;
+    const optErr = opt.some(p => { const i = lbIssue(p); return i && i.lvl === 'err' && (B.submitted || B.touched.has(p.key)); });
+    B.moreOpen = !!(optErr || (B.more == null ? filled : B.more));
+    const optStd = opt.filter(p => !p.custom), optCus = opt.filter(p => p.custom);
+    const more = opt.length ? `<div class="lb-more ${B.moreOpen ? 'open' : ''}"><button type="button" class="lb-more-h" id="lb-more" aria-expanded="${B.moreOpen}">${I.chevR}<span>Optional parameters</span><span class="n">${opt.length}</span><span class="lb-more-ic">${opt.map(lbIcon).join('')}</span><span class="sm-muted">${filled ? `<b>${filled} filled</b> · ` : ''}${opt.map(p => esc(p.label.toLowerCase())).join(', ')}</span></button>
+      <div class="lb-more-b">${optStd.length ? `<div class="lb-grp">UTM parameters</div>${optStd.map(lbFieldHTML).join('')}` : ''}${optCus.length ? `<div class="lb-grp cus">Custom parameters<span class="sm-muted">added by your admin on Parameters</span></div>${optCus.map(lbFieldHTML).join('')}` : ''}</div></div>` : '';
     const hiddenN = PARAMS.filter(p => !p.shown).length;
-    const s3 = lbSec(3, LBI.tag, 'Tag it', 'added to the URL so analytics knows where clicks come from', `<div class="lb-grid">${grid}</div>${more}`, hiddenN && !ext ? `<span class="sm-muted lb-hidn" data-tip="Hidden by Rules: ${PARAMS.filter(p => !p.shown).map(p => p.label).join(', ')}">${PI.eyeOff}${hiddenN} hidden</span>` : '');
+    const s3 = lbSec(3, LBI.tag, 'Tag it', B.tpls.length ? 'what Rules require and what your template asks for' : 'what Rules require · the rest is optional', `<div class="lb-grid">${grid}</div>${more}`, hiddenN && !ext ? `<span class="sm-muted lb-hidn" data-tip="Hidden by Rules: ${PARAMS.filter(p => !p.shown).map(p => p.label).join(', ')}">${PI.eyeOff}${hiddenN} hidden</span>` : '');
     const s4 = lbSec(4, LBI.note, 'Notes', 'optional · not added to the URL', `<div class="lb-f" data-f="notes"><textarea id="lb-notes" rows="2" aria-label="Notes" placeholder="Anything your team should know about this link">${esc(B.notes)}</textarea></div>`);
     const route = ext ? '' : `<div class="lb-route">${LBI.route}<span><b>Smart routing</b> <span class="sm-muted">send people to different pages by country or device</span></span><span class="grow"></span><span class="sm-muted">Off</span><button class="link-btn" id="lb-route" type="button">Set up</button></div>`;
     const s5 = lbSec(5, LBI.short, 'Short link &amp; QR', '', shortRow + qrRow + route);
@@ -1516,7 +1524,7 @@
     const me = $(`#lb-${CSS.escape(key)}`, lbRoot); if (me) me.blur();
   }
   function lbJump(key) {
-    const box = lbRoot; if (lbParams().find(p => p.key === key && p.custom) && !B.more) { B.more = true; lbPaint(); }
+    const box = lbRoot; const f0 = $(`[data-f="${CSS.escape(key)}"]`, box); if (f0 && f0.closest('.lb-more:not(.open)')) { B.more = true; lbPaint(); }
     const f = $(`[data-f="${CSS.escape(key)}"]`, box); if (!f) return; f.scrollIntoView({ behavior: 'smooth', block: 'center' });
     const i = $('input, textarea, select', f); if (i && !i.disabled) setTimeout(() => i.focus({ preventScroll: true }), 250); f.classList.remove('flash'); void f.offsetWidth; f.classList.add('flash');
   }
@@ -1555,11 +1563,11 @@
     // All builder events are delegated from the modal so repaints don't drop listeners.
     s.addEventListener('input', e => { const t = e.target;
       if (t.dataset.lb) { B.vals[t.dataset.lb] = t.value; if (B.combo) B.combo.i = -1; lbComboOpen(t.dataset.lb); lbRefresh(); return; }
-      if (t.id === 'lb-url') { B.url = t.value; const u = utmFromUrl(t.value); const was = JSON.stringify(B.utmOffer); B.utmOffer = u; if (JSON.stringify(u) !== was) lbPaint(); else lbRefresh(); return; }
+      if (t.id === 'lb-url') { const m = t.value.match(/^\s*(https?):\/\//i); if (m) { B.proto = m[1].toLowerCase(); t.value = t.value.replace(/^\s*https?:\/\//i, ''); const pr = $('#lb-proto', lbRoot); if (pr) pr.value = B.proto; } B.url = t.value; const u = utmFromUrl(t.value); const was = JSON.stringify(B.utmOffer); B.utmOffer = u; if (JSON.stringify(u) !== was) lbPaint(); else lbRefresh(); return; }
       if (t.id === 'lb-urls') { B.urls = t.value; lbRefresh(); return; }
       if (t.id === 'lb-slug') { B.slug = t.value; B.slugEdited = true; lbRefresh(); return; }
       if (t.id === 'lb-notes') { B.notes = t.value; return; } });
-    s.addEventListener('change', e => { if (e.target.id === 'lb-sh') { B.shortener = e.target.value; B.qrNote = ''; if (B.shortener === 'none' && B.qr) { B.qr = false; B.qrNote = 'QR codes need a short link, so the QR code was turned off.'; } lbPaint(); } });
+    s.addEventListener('change', e => { if (e.target.id === 'lb-proto') { B.proto = e.target.value; lbRefresh(); return; } if (e.target.id === 'lb-sh') { B.shortener = e.target.value; B.qrNote = ''; if (B.shortener === 'none' && B.qr) { B.qr = false; B.qrNote = 'QR codes need a short link, so the QR code was turned off.'; } lbPaint(); } });
     s.addEventListener('focusin', e => { const t = e.target; if (t.dataset && t.dataset.lb) lbComboOpen(t.dataset.lb); });
     s.addEventListener('focusout', e => { const t = e.target; if (!t.id) return; const key = t.dataset.lb || (t.id === 'lb-url' || t.id === 'lb-urls' ? 'url' : null); if (!key) return;
       setTimeout(() => { if (!lbRoot || !document.body.contains(t)) return; if (document.activeElement === t) return; if (key !== 'url' && $('.lb-pop', lbRoot) && $('.lb-pop', lbRoot).parentElement.dataset.f === key) lbComboClose(); if ((B.vals[key] || '').trim() || key === 'url' && (B.url || B.urls)) B.touched.add(key); else if (key !== 'url') B.touched.add(key); lbRefresh(); }, 120); });
@@ -1575,7 +1583,7 @@
       if ((el = h('[data-lb-multi]'))) { B.multi = el.dataset.lbMulti === '1'; if (B.multi && !B.urls && B.url) B.urls = B.url; if (!B.multi && !B.url && B.urls) B.url = lbUrls()[0] || ''; lbPaint(); const i = $(B.multi ? '#lb-urls' : '#lb-url', box); if (i) i.focus(); return; }
       if ((el = h('[data-tpl-pick]'))) { const k = el.dataset.tplPick; B.tpls = B.tpls.includes(k) ? B.tpls.filter(x => x !== k) : [...B.tpls, k]; lbApplyTemplateDefaults(); lbPaint(); return; }
       if (h('#lb-tpl-clear')) { B.tpls = []; lbPaint(); return; }
-      if (h('#lb-more')) { B.more = !B.more; lbPaint(); return; }
+      if (h('#lb-more')) { B.more = !B.moreOpen; lbPaint(); return; }
       if (h('#lb-qr')) { e.preventDefault(); B.qr = !B.qr; B.qrNote = ''; if (B.qr && B.shortener === 'none') { B.shortener = defaultShortener(); B.qrNote = `QR codes need a short link, so ${B.shortener} was picked for you.`; } lbPaint(); return; }
       if ((el = h('[data-lb-design]'))) { B.design = el.dataset.lbDesign; lbPaint(); return; }
       if (h('#lb-route')) { toast('Smart routing setup is outside this prototype'); return; }

@@ -664,11 +664,12 @@ button.status-pill { cursor: pointer; transition: box-shadow var(--dur) var(--ea
 .pm-item .cnt { display: flex; align-items: baseline; gap: 4px; font-size: 13px; color: var(--text-muted); } .pm-item .cnt b { font-weight: 600; color: var(--text); } .pm-item .cnt b.hit { color: var(--accent-strong); }
 .pm-item .pi { width: 28px; height: 28px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; background: var(--pi-bg, var(--sunken)); color: var(--pi-fg, var(--text-muted)); }
 .pm-item .pi svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.pm-item .pi.p-campaign { --pi-bg: #f3e8ff; --pi-fg: #7e22ce; }
-.pm-item .pi.p-medium { --pi-bg: #e0f2fe; --pi-fg: #0369a1; }
-.pm-item .pi.p-source { --pi-bg: #dcfce7; --pi-fg: #15803d; }
-.pm-item .pi.p-content { --pi-bg: #ffedd5; --pi-fg: #c2410c; }
-.pm-item .pi.p-term { --pi-bg: #fce7f3; --pi-fg: #be185d; }
+.pi.p-campaign { --pi-bg: #f3e8ff; --pi-fg: #7e22ce; }
+.pi.p-medium { --pi-bg: #e0f2fe; --pi-fg: #0369a1; }
+.pi.p-source { --pi-bg: #dcfce7; --pi-fg: #15803d; }
+.pi.p-content { --pi-bg: #ffedd5; --pi-fg: #c2410c; }
+.pi.p-term { --pi-bg: #fce7f3; --pi-fg: #be185d; }
+.pi.p-cus { --pi-bg: #eef2f6; --pi-fg: #475569; }
 .pm-item.hidden-p .pi { opacity: .55; }
 .pm-rail .pm-add { justify-content: center; margin: 2px 2px 6px; flex: none; }
 .pm-foot { padding: 10px 10px 4px; font-size: 11px; color: var(--text-faint); line-height: 1.4; }
@@ -931,6 +932,23 @@ button.status-pill { cursor: pointer; transition: box-shadow var(--dur) var(--ea
 .lb-done-list { width: 100%; display: flex; flex-direction: column; gap: 6px; margin: 10px 0 6px; text-align: left; }
 .lb-one.done b { font-size: 13px; color: var(--accent-strong); } .lb-one.done .icon-btn { grid-row: 1 / 3; grid-column: 2; align-self: center; }
 .lb-done-acts { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+
+/* Parameter icons, protocol picker, optional fold */
+.lb-l .pi { width: 20px; height: 20px; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; flex: none; background: var(--pi-bg, var(--sunken)); color: var(--pi-fg, var(--text-muted)); }
+.lb-l .pi svg, .lb-more-ic .pi svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.lb-more-ic { display: inline-flex; } .lb-more-ic .pi { width: 18px; height: 18px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--pi-bg, var(--sunken)); color: var(--pi-fg, var(--text-muted)); box-shadow: 0 0 0 2px var(--card); }
+.lb-more-ic .pi + .pi { margin-left: -4px; } .lb-more-ic .pi svg { width: 10px; height: 10px; }
+.lb-more-h .sm-muted b { color: var(--accent-strong); font-weight: 600; }
+.lb-grp { display: flex; align-items: baseline; gap: 8px; margin-top: 6px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-faint); }
+.lb-grp .sm-muted { font-size: 12px; font-weight: 400; letter-spacing: 0; text-transform: none; }
+.lb-grp.cus { padding-top: 12px; border-top: 1px dashed var(--border); }
+.lb-in.url { padding-left: 0; gap: 0; }
+.lb-proto { position: relative; display: inline-flex; align-items: center; height: 100%; }
+.lb-proto select { appearance: none; -webkit-appearance: none; border: 0; outline: 0; background: none; height: 100%; padding: 0 22px 0 12px; font: 14px var(--font-mono); color: var(--text-strong); cursor: pointer; border-radius: 8px 0 0 8px; }
+.lb-proto select:hover { background: var(--hover); } .lb-proto select:focus-visible { box-shadow: inset 0 0 0 2px rgba(var(--accent-rgb), .35); }
+.lb-proto svg { position: absolute; right: 6px; width: 12px; height: 12px; stroke: var(--text-muted); fill: none; stroke-width: 2; pointer-events: none; }
+.lb-sep { font: 14px var(--font-mono); color: var(--text-faint); padding: 0 6px 0 2px; }
+.lb-in.url input { font-family: var(--font-mono); }
 
 /* Full page on the web (the Chrome extension keeps the popup) */
 .lb-page { display: flex; flex-direction: column; gap: 16px; }
