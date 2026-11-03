@@ -520,6 +520,7 @@
       <button class="mi danger" data-r="delete">${I.close}<span class="grow">Delete</span></button></div>`, { align: 'right', onMount(el) {
         el.addEventListener('click', e => { const b = e.target.closest('[data-r]'); if (!b) return; closePop(); const r = b.dataset.r;
           if (r === 'analytics') goLink(slug); else if (r === 'copy-dest') copyText(`https://${l.dest}${utmQuery(l)}`, 'Destination copied'); else if (r === 'open') toast(`Would open ${l.dest} in a new tab`);
+          else if (r === 'edit') openBuilder({ edit: slug }); else if (r === 'dup') openBuilder({ dup: slug });
           else if (r === 'delete') confirmDelete([slug]); else toast(`${b.textContent.trim()} is outside this prototype`); });
       } });
   }
@@ -656,7 +657,7 @@
       <div class="sep"></div>
       <button class="mi danger" data-r="delete">${I.close}<span class="grow">Delete QR code</span></button></div>`, { align: 'right', onMount(el) {
         el.addEventListener('click', e => { const b = e.target.closest('[data-r]'); if (!b) return; closePop(); const r = b.dataset.r;
-          if (r === 'preview') qrModal(l); else if (r === 'design') qrDesignsModal([slug]); else if (r === 'analytics') goLink(slug); else if (r === 'delete') confirmDelete([slug]); else toast(`${b.textContent.trim()} is outside this prototype`); });
+          if (r === 'preview') qrModal(l); else if (r === 'design') qrDesignsModal([slug]); else if (r === 'analytics') goLink(slug); else if (r === 'edit') openBuilder({ edit: slug }); else if (r === 'delete') confirmDelete([slug]); else toast(`${b.textContent.trim()} is outside this prototype`); });
       } });
   }
 
@@ -728,7 +729,7 @@
         <div class="tpl-foot"><span class="sm-muted">${row.uses ? `Used by <b>${row.uses}</b> link${row.uses === 1 ? '' : 's'} · ${fmt.n(row.clicks)} clicks` : 'Not used by any link yet'}</span><span class="grow"></span>${row.uses ? `<button class="btn" id="tpl-links">${I.links}View links</button>` : ''}<button class="btn" id="tpl-edit">${I.edit}Edit</button><button class="btn primary" id="tpl-use">Build a link</button></div></div>`, { width: 600, onMount(s) {
         const tl = $('#tpl-links', s); if (tl) tl.addEventListener('click', () => { closeModal(); goLinks(); state.lq = t.medium; render(); });
         $('#tpl-edit', s).addEventListener('click', () => { closeModal(); toast('Template editing is outside this prototype'); });
-        $('#tpl-use', s).addEventListener('click', () => { closeModal(); toast(`Link builder would open with “${t.name}” applied (outside this prototype)`); });
+        $('#tpl-use', s).addEventListener('click', () => { closeModal(); openBuilder({ tpl: t.key }); });
       } });
   }
   function templateMenu(anchor, key) {
@@ -742,7 +743,7 @@
       <button class="mi" data-r="default">${I.check}<span class="grow">Make workspace default</span></button>
       <button class="mi danger" data-r="delete">${I.close}<span class="grow">Delete</span></button></div>`, { align: 'right', onMount(el) {
         el.addEventListener('click', e => { const b = e.target.closest('[data-r]'); if (!b) return; closePop(); const r = b.dataset.r;
-          if (r === 'open') templateModal(key); else if (r === 'links') { goLinks(); state.lq = t.medium; render(); } else if (r === 'delete') confirmDeleteTemplate(t); else toast(`${b.textContent.trim()} is outside this prototype`); });
+          if (r === 'open') templateModal(key); else if (r === 'use') openBuilder({ tpl: key }); else if (r === 'links') { goLinks(); state.lq = t.medium; render(); } else if (r === 'delete') confirmDeleteTemplate(t); else toast(`${b.textContent.trim()} is outside this prototype`); });
       } });
   }
   function confirmDeleteTemplate(t) {
@@ -992,7 +993,7 @@
       <div class="pm-title"><div class="txt"><h2><span class="k">${esc(p.utm)}</span>${esc(p.label)}${p.custom ? '<span class="tag">Custom</span>' : ''}${p.common ? '<span class="tag" title="Added to every new workspace">All workspaces</span>' : ''}</h2>
           <p>${esc(p.desc)}</p></div>
         <div class="pm-ctl">
-          <button class="btn" id="pm-edit">${I.edit}Edit</button><button class="tb-btn icon" id="pm-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button></div></div>
+          <button class="btn" id="pm-preview" title="Open the link builder at this field">${I.links}See in builder</button><button class="btn" id="pm-edit">${I.edit}Edit</button><button class="tb-btn icon" id="pm-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button></div></div>
       <div class="pm-meta"><span class="rule-pill fmt" title="Field format">${FORMATS[p.format]}</span>${p.shown ? '' : `<span class="rule-pill hid" title="Hidden from the link builder by a rule. Existing links keep it.">${PI.eyeOff}Hidden in builder</span>`}${ruleChips(p)}${p.rules.length || p.format !== 'text' ? '' : '<span class="sm-muted">Free text, no rules</span>'}<a class="pm-rules-link" href="#" data-nav-rules>${I.rules}Builder rules are set in Rules</a></div>
       <div class="pm-tabs" role="tablist"><button class="${state.ptab === 'values' ? 'on' : ''}" data-ptab="values" role="tab">Values <span class="n">${vals}</span></button>
         <button class="${state.ptab === 'groupings' ? 'on' : ''}" data-ptab="groupings" role="tab">Groupings ${grpN ? `<span class="n">${grpN}</span>` : ''}${child ? `<span class="sm-muted" style="font-weight:400">· narrows ${esc(child.label.toLowerCase())}</span>` : ''}</button></div></div>`;
@@ -1267,6 +1268,329 @@
         if (a === 'csv') toast('Exported all parameters as CSV'); else if (a === 'import') importParamsModal(); else if (a === 'about') tipsModal(); else toast(`${b.textContent.trim()} is outside this prototype`); }); } });
   }
 
+  /* ---------- Link builder: Create link, Edit link, Chrome extension ----------
+     One builder, two shells. Fields come straight from Parameters (order, saved values,
+     pretty names, groupings) and Rules (required, dropdown only, lowercase, hidden). */
+  const ATTRS = [
+    { key: 'a_team', label: 'Team', utm: 'attribute', attr: true, format: 'text', rules: ['required', 'dropdown'], desc: 'Who owns this link. Used to filter Links and Analytics.', hint: 'e.g. growth', values: [['growth', 'Growth'], ['brand', 'Brand'], ['lifecycle', 'Lifecycle'], ['partnerships', 'Partnerships']].map(([v, pretty]) => ({ v, pretty, desc: '' })) },
+    { key: 'a_stage', label: 'Funnel stage', utm: 'attribute', attr: true, format: 'text', rules: ['dropdown'], desc: 'Where this link sits in the funnel', hint: 'e.g. awareness', values: [['awareness', 'Awareness'], ['consideration', 'Consideration'], ['conversion', 'Conversion'], ['retention', 'Retention']].map(([v, pretty]) => ({ v, pretty, desc: '' })) },
+    { key: 'a_budget', label: 'Budget code', utm: 'attribute', attr: true, format: 'text', rules: [], desc: 'Finance code for spend reports', hint: 'e.g. MKT-26-Q4', values: [] },
+  ];
+  const LBI = {
+    target: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>',
+    tag: '<svg viewBox="0 0 24 24"><path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9z"/><circle cx="8" cy="8" r="1.5"/></svg>',
+    tpl: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>',
+    note: '<svg viewBox="0 0 24 24"><path d="M4 4h16v12H8l-4 4z"/><path d="M8 9h8M8 12h5"/></svg>',
+    short: '<svg viewBox="0 0 24 24"><path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>',
+    ok: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>',
+    bad: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 16.5v.5"/></svg>',
+    route: '<svg viewBox="0 0 24 24"><path d="M6 3v6a4 4 0 0 0 4 4h8M14 9l4 4-4 4M6 21v-4"/></svg>',
+    tab: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18"/></svg>',
+  };
+  let B = null;
+  const lbParams = () => PARAMS.filter(p => p.shown);
+  const lbAll = () => [...lbParams(), ...ATTRS];
+  const lbP = key => PARAMS.find(p => p.key === key) || ATTRS.find(a => a.key === key);
+  const tplOf = k => TEMPLATE_LIST.find(t => t.key === k);
+  const usableShorteners = () => SHORTENERS.filter(s => s.status !== 'pending' && !state.disabledDomains.has(s.domain));
+  const defaultShortener = () => { const u = usableShorteners(); return (u.find(s => s.default) || u[0] || { domain: 'none' }).domain; };
+  const validUrl = u => /^(https?:\/\/)?[^\s/?#]+\.[a-z]{2,}([/?#]\S*)?$/i.test(u.trim());
+  const withScheme = u => /^https?:\/\//i.test(u) ? u : 'https://' + u;
+  const lbUrls = () => B.urls.split(/\n/).map(s => s.trim()).filter(Boolean);
+
+  function newBuilder(o = {}) {
+    const vals = {}; lbAll().forEach(p => { vals[p.key] = ''; });
+    return { mode: o.mode || 'web', edit: null, multi: false, url: o.url || '', urls: '', tpls: [], vals, notes: '', shortener: defaultShortener(), slug: '', slugEdited: false,
+      qr: false, design: 'default', touched: new Set(), submitted: false, more: false, done: null, utmOffer: null, qrNote: '', focus: o.focus || null, combo: null };
+  }
+  // What the selected template(s) do to a field: fixed value, values that differ per template, or "asked for".
+  function tplState(p) {
+    if (p.custom || p.attr || !B.tpls.length) return null;
+    const vs = B.tpls.map(k => tplOf(k)[p.key] || '');
+    const fixed = vs.filter(v => v && !isDyn(v));
+    if (fixed.length === vs.length) { const u = [...new Set(fixed)]; return u.length === 1 ? { fixed: u[0] } : { varies: u }; }
+    if (vs.some(isDyn)) return { asked: [...new Set(vs.filter(isDyn).map(v => v.slice(2, -2)))] };
+    return null;
+  }
+  function lbValue(p) { const t = tplState(p); return t && t.fixed ? t.fixed : (B.vals[p.key] || '').trim(); }
+  // Saved values offered for a field, narrowed by its grouping when the parent is set.
+  function lbNarrow(p) {
+    if (!p.deps) return null; const par = paramOf(p.deps.parent); const pv = lbValue(par); const allow = pv && p.deps.allow[pv];
+    return allow ? { par, pv, allow } : null;
+  }
+  function lbOptions(p) { const n = lbNarrow(p); return n ? p.values.filter(v => n.allow.includes(v.v)) : p.values; }
+  function lbIssue(p) {
+    const t = tplState(p); if (t && (t.fixed || t.varies)) return null;
+    const v = (B.vals[p.key] || '').trim(); const label = p.label.toLowerCase();
+    if (!v) return p.rules.includes('required') ? { lvl: 'err', msg: `${p.label} is required` } : null;
+    if (p.format === 'number' && !/^\d+$/.test(v)) return { lvl: 'err', msg: 'Numbers only' };
+    const saved = p.values.find(x => x.v === v);
+    if (p.rules.includes('dropdown') && !saved) return { lvl: 'err', msg: `“${v}” isn't a saved ${label}. Pick one from the list.`, add: !p.attr };
+    const n = lbNarrow(p); if (n && saved && !n.allow.includes(v)) return { lvl: 'err', msg: `“${v}” isn't used with ${n.par.label.toLowerCase()} “${n.pv}”. Pick another ${label}.` };
+    const norm = normalizeValue(p, v); if (norm !== v) return { lvl: 'info', msg: `Will be saved as “${norm}”` };
+    return null;
+  }
+  function lbUrlIssue() {
+    if (B.edit) return null;
+    if (B.multi) { const ls = lbUrls(); if (!ls.length) return { lvl: 'err', msg: 'Paste at least one URL, one per line' }; const bad = ls.filter(u => !validUrl(u)); return bad.length ? { lvl: 'err', msg: `${bad.length === 1 ? 'This line isn\'t' : bad.length + ' lines aren\'t'} a web address: ${bad[0]}` } : null; }
+    const u = B.url.trim(); if (!u) return { lvl: 'err', msg: 'Add the page this link should open' };
+    return validUrl(u) ? null : { lvl: 'err', msg: 'That doesn\'t look like a web address. Try acme.com/page' };
+  }
+  const autoSlug = () => [lbValue(paramOf('campaign')), lbValue(paramOf('source'))].filter(Boolean).join('-').replace(/[_\s]+/g, '-').toLowerCase().slice(0, 36);
+  const lbSlug = () => B.edit ? B.slug : (B.slugEdited ? B.slug.trim() : autoSlug());
+  function lbSlugIssue() {
+    if (B.edit || B.shortener === 'none' || lbCombos().length > 1) return null; const s = lbSlug(); if (!s) return null;
+    if (!/^[a-z0-9-]+$/i.test(s)) return { lvl: 'err', msg: 'Letters, numbers and dashes only' };
+    return D.LINKS.some(l => l.slug === `${B.shortener}/${s}`) ? { lvl: 'err', msg: `${B.shortener}/${s} is already taken. Try another ending.` } : null;
+  }
+  function lbIssues() {
+    const out = []; const u = lbUrlIssue(); if (u && (B.submitted || B.touched.has('url'))) out.push({ key: 'url', label: B.multi ? 'URLs' : 'Destination URL', ...u });
+    else if (u) out.push({ key: 'url', label: B.multi ? 'URLs' : 'Destination URL', ...u, quiet: true });
+    lbAll().forEach(p => { const i = lbIssue(p); if (i && i.lvl === 'err') out.push({ key: p.key, label: p.label, ...i }); });
+    const s = lbSlugIssue(); if (s) out.push({ key: 'slug', label: 'Short link', ...s });
+    return out;
+  }
+  // Every link this form will create: URLs × templates.
+  function lbCombos() { const urls = B.multi ? (lbUrls().length ? lbUrls() : ['']) : [B.url.trim() || '']; const tpls = B.tpls.length ? B.tpls : [null]; const out = []; urls.forEach(u => tpls.forEach(t => out.push({ url: u, tpl: t }))); return out; }
+  function lbQuery(tplKey) {
+    return lbParams().map(p => { let v = lbValue(p); if (tplKey && !p.custom) { const tv = tplOf(tplKey)[p.key]; if (tv && !isDyn(tv)) v = tv; } return { p, v: v ? normalizeValue(p, v) : '' }; });
+  }
+  function lbFullUrl(dest, tplKey) { const q = lbQuery(tplKey).filter(x => x.v).map(x => `${x.p.utm}=${encodeURIComponent(x.v)}`).join('&'); const base = withScheme((dest || '').trim().replace(/[?&]$/, '')); return q ? base + (base.includes('?') ? '&' : '?') + q : base; }
+  function utmFromUrl(u) { const m = u.match(/[?&](utm_[a-z]+)=([^&#]*)/gi); if (!m) return null; const o = {}; m.forEach(s => { const [k, v] = s.slice(1).split('='); const key = k.toLowerCase().replace('utm_', ''); if (paramOf(key)) o[key] = decodeURIComponent(v); }); return Object.keys(o).length ? o : null; }
+  const stripUtm = u => u.replace(/([?&])utm_[a-z]+=[^&#]*/gi, '$1').replace(/[?&]+$/, '').replace(/\?&+/, '?').replace(/&&+/g, '&');
+
+  // GA4 default channel groups, simplified from Google's rules (support.google.com/analytics/answer/9756891).
+  function ga4Channel(src, med) {
+    src = (src || '').toLowerCase(); med = (med || '').toLowerCase(); if (!med) return null;
+    const paid = /^(.*cp.*|ppc|retargeting|paid.*)$/.test(med);
+    const social = /^(facebook|instagram|linkedin|twitter|x|tiktok|snapchat|pinterest|reddit|threads)$/.test(src), search = /^(google|bing|yahoo|duckduckgo|baidu|ecosia)$/.test(src), video = /^(youtube|vimeo|twitch)$/.test(src);
+    if (search && paid) return 'Paid Search'; if (social && paid) return 'Paid Social'; if (video && paid) return 'Paid Video';
+    if (/^(display|banner|expandable|interstitial|cpm)$/.test(med)) return 'Display'; if (paid) return 'Paid Other';
+    if (search || med === 'organic') return 'Organic Search'; if (social || /^(social|social-network|social-media|sm|social network|social media)$/.test(med)) return 'Organic Social';
+    if (video || med.includes('video')) return 'Organic Video'; if (/^(email|e-mail|e_mail|e mail)$/.test(src) || /^(email|e-mail|e_mail|e mail)$/.test(med)) return 'Email';
+    if (med === 'affiliate') return 'Affiliates'; if (med === 'referral' || med === 'app' || med === 'link') return 'Referral'; if (med === 'audio') return 'Audio'; if (src === 'sms' || med === 'sms') return 'SMS';
+    if (med.endsWith('push') || med.includes('mobile') || med.includes('notification')) return 'Mobile Push';
+    return 'Unassigned';
+  }
+  /* Rendering */
+  function lbFieldHTML(p) {
+    const t = tplState(p); const iss = lbIssue(p); const show = iss && (iss.lvl === 'info' || B.touched.has(p.key) || B.submitted);
+    const locked = t && (t.fixed || t.varies); const req = p.rules.includes('required'); const v = B.vals[p.key] || '';
+    const sel = !locked && p.values.find(x => x.v === v.trim());
+    const ph = p.values.length ? `${p.rules.includes('dropdown') ? 'Pick' : 'Pick or type'} ${p.hint ? '· ' + p.hint : ''}` : (p.hint || 'Type a value');
+    return `<div class="lb-f ${show && iss.lvl === 'err' ? 'bad' : ''} ${locked ? 'locked' : ''} ${t && t.asked ? 'asked' : ''}" data-f="${esc(p.key)}">
+      <label class="lb-l" for="lb-${esc(p.key)}"><span class="nm">${esc(p.label)}</span>${req ? '<b class="req" title="Required">*</b>' : ''}${p.attr ? '' : `<span class="k">${esc(p.utm)}</span>`}${t && t.asked ? '<span class="ask">template asks for this</span>' : ''}${p.desc ? `<span class="tipi" tabindex="0" data-tip="${esc(p.desc)}">${I.info}</span>` : ''}</label>
+      ${locked ? `<div class="lb-lock" title="${t.fixed ? 'Set by the template' : 'Each template sets its own value'}">${PI.lock}<span class="code">${esc(t.fixed || t.varies.join(' · '))}</span><span class="sm-muted">${t.fixed ? 'from template' : 'one per template'}</span></div>`
+        : `<div class="lb-in ${p.values.length ? 'combo' : ''}"><input id="lb-${esc(p.key)}" data-lb="${esc(p.key)}" value="${esc(v)}" placeholder="${esc(ph)}" autocomplete="off" spellcheck="false" role="${p.values.length ? 'combobox' : 'textbox'}" aria-expanded="false" ${p.format === 'number' ? 'inputmode="numeric"' : ''}><span class="pretty">${sel && sel.pretty ? esc(sel.pretty) : ''}</span>${p.values.length ? `<span class="chev">${I.chev}</span>` : ''}</div>`}
+      <div class="lb-msg ${show ? iss.lvl : ''}" data-msg="${esc(p.key)}">${lbMsgHTML(p, iss, show)}</div></div>`;
+  }
+  function lbMsgHTML(p, iss, show) {
+    if (show) return `${iss.lvl === 'err' ? LBI.bad : I.info}<span>${esc(iss.msg)}</span>${iss.add ? `<button class="link-btn" data-lb-addval="${esc(p.key)}" type="button">Add it to the list</button>` : ''}`;
+    const n = lbNarrow(p); if (n) return `${PI.branch}<span>${n.allow.length} ${esc(p.label.toLowerCase())} values for ${esc(n.par.label.toLowerCase())} <b>${esc(n.pv)}</b></span>`;
+    return '';
+  }
+  function lbSec(n, icon, title, sub, body, extra = '') { return `<section class="lb-sec" data-sec="${n}"><div class="lb-sec-h"><span class="ic">${icon}</span><h4>${title}</h4>${sub ? `<span class="sub">${sub}</span>` : ''}<span class="grow"></span>${extra}</div>${body}</section>`; }
+  function lbFormHTML() {
+    const ext = B.mode === 'ext'; const urlIss = lbUrlIssue(); const urlShow = urlIss && (B.touched.has('url') || B.submitted);
+    const dest = B.edit ? `<div class="lb-f locked" data-f="url"><label class="lb-l"><span class="nm">Destination URL</span></label><div class="lb-lock">${I.external}<span class="code">${esc(B.url)}</span></div></div>`
+      : B.multi ? `<div class="lb-f ${urlShow ? 'bad' : ''}" data-f="url"><label class="lb-l" for="lb-urls"><span class="nm">Destination URLs</span><b class="req">*</b><span class="sm-muted">one per line</span></label><textarea id="lb-urls" rows="4" placeholder="acme.com/sale&#10;acme.com/black-friday" spellcheck="false">${esc(B.urls)}</textarea><div class="lb-msg ${urlShow ? 'err' : ''}" data-msg="url">${urlShow ? LBI.bad + `<span>${esc(urlIss.msg)}</span>` : `<span>${lbUrls().length} URL${lbUrls().length === 1 ? '' : 's'}</span>`}</div></div>`
+      : `<div class="lb-f ${urlShow ? 'bad' : ''}" data-f="url"><label class="lb-l" for="lb-url"><span class="nm">Destination URL</span><b class="req">*</b></label><div class="lb-in url">${I.globe}<input id="lb-url" value="${esc(B.url)}" placeholder="Paste the page link, e.g. acme.com/sale" spellcheck="false" autocomplete="off" inputmode="url"></div><div class="lb-msg ${urlShow ? 'err' : ''}" data-msg="url">${urlShow ? LBI.bad + `<span>${esc(urlIss.msg)}</span>` : ''}</div></div>`;
+    const offer = B.utmOffer ? `<div class="lb-offer">${I.info}<span>This URL already has ${Object.keys(B.utmOffer).length} UTM tag${Object.keys(B.utmOffer).length === 1 ? '' : 's'} (${Object.entries(B.utmOffer).map(([k, v]) => `<span class="code">${esc(k)}=${esc(v)}</span>`).join(' ')}). Move them into the fields below?</span><button class="btn sm primary" id="lb-utm-use" type="button">Use them</button><button class="btn sm" id="lb-utm-no" type="button">Ignore</button></div>` : '';
+    const modeSeg = B.edit ? '' : `<div class="seg lb-seg" role="tablist"><button type="button" data-lb-multi="0" class="${B.multi ? '' : 'on'}">One URL</button><button type="button" data-lb-multi="1" class="${B.multi ? 'on' : ''}">Several URLs</button></div>`;
+    const s1 = lbSec(1, LBI.target, 'Where should it go?', '', dest + offer, ext ? '' : modeSeg);
+    const tcards = TEMPLATE_LIST.map(t => { const on = B.tpls.includes(t.key); return `<button type="button" class="lb-tpl ${on ? 'on' : ''}" data-tpl-pick="${esc(t.key)}" aria-pressed="${on}"><span class="cb ${on ? 'on' : ''}">${I.check}</span><span class="t"><b>${esc(t.name)}</b><span class="sm-muted">${esc(t.medium)}${t.source && !isDyn(t.source) ? ' · ' + esc(t.source) : ''}</span></span></button>`; }).join('');
+    const tsub = B.tpls.length > 1 ? `${B.tpls.length} picked · one link per template` : B.tpls.length ? 'fills the fixed tags for you' : 'optional · pick several to make one link each';
+    const s2 = lbSec(2, LBI.tpl, 'Start from a template', tsub, `<div class="lb-tpls">${tcards}</div>`, B.tpls.length ? '<button class="link-btn" id="lb-tpl-clear" type="button">Clear</button>' : '');
+    const std = lbParams().filter(p => !p.custom), cus = lbParams().filter(p => p.custom);
+    const byKey = k => std.find(p => p.key === k);
+    // Medium and source sit side by side so the grouping reads left to right.
+    const order = std.map(p => p.key); const pairs = [];
+    for (let i = 0; i < order.length; i++) { const p = byKey(order[i]); const kid = std.find(c => c.deps && c.deps.parent === p.key); if (kid && order[i + 1] === kid.key) { pairs.push([p, kid]); i++; } else pairs.push([p]); }
+    const grid = pairs.map(g => g.length === 2 ? `<div class="lb-pair">${lbFieldHTML(g[0])}<span class="lb-link" title="${esc(g[1].label)} options depend on ${esc(g[0].label.toLowerCase())}">${PI.arrowR}</span>${lbFieldHTML(g[1])}</div>` : lbFieldHTML(g[0])).join('');
+    const sh = usableShorteners(); const slugIss = lbSlugIssue(); const multiLinks = lbCombos().length > 1;
+    const shortRow = `<div class="lb-f ${slugIss ? 'bad' : ''}" data-f="slug"><label class="lb-l" for="lb-slug"><span class="nm">Short link</span>${B.edit ? '<span class="sm-muted">can\'t change after it\'s created</span>' : ''}</label>
+      <div class="lb-short"><select id="lb-sh" ${B.edit ? 'disabled' : ''} aria-label="Short domain">${sh.map(s => `<option value="${esc(s.domain)}" ${B.shortener === s.domain ? 'selected' : ''}>${esc(s.domain)}</option>`).join('')}<option value="none" ${B.shortener === 'none' ? 'selected' : ''} ${B.qr ? 'disabled' : ''}>Don't shorten</option></select>${B.shortener === 'none' ? '' : `<span class="sl">/</span><input id="lb-slug" value="${esc(multiLinks ? '' : lbSlug())}" placeholder="${multiLinks ? 'set for each link automatically' : 'ending, e.g. fall-sale'}" ${B.edit || multiLinks ? 'disabled' : ''} spellcheck="false" autocomplete="off">`}</div>
+      <div class="lb-msg ${slugIss ? 'err' : B.qrNote ? 'info' : ''}" data-msg="slug">${slugIss ? LBI.bad + `<span>${esc(slugIss.msg)}</span>` : B.qrNote ? I.info + `<span>${esc(B.qrNote)}</span>` : (!B.slugEdited && !B.edit && lbSlug() ? '<span>Made from campaign and source. Type to change it.</span>' : '')}</div></div>`;
+    const qrRow = `<div class="lb-qr"><label class="switch ${B.qr ? 'on' : ''}" id="lb-qr"><i></i><span>QR code</span></label>${B.qr && !ext ? `<div class="lb-designs">${QR_DESIGNS.map(d => `<button type="button" class="lb-dz ${B.design === d.id ? 'on' : ''}" data-lb-design="${d.id}" title="${esc(d.desc)}"><span class="sw">${qrSVG('acme.co/new', d, 22)}</span>${esc(d.name)}</button>`).join('')}</div>` : B.qr ? '<span class="sm-muted">workspace default design</span>' : '<span class="sm-muted">for print, packaging and events</span>'}</div>`;
+    if (ext) {
+      const up = std.filter(p => { const t = tplState(p); return p.rules.includes('required') && !(t && (t.fixed || t.varies)) || (t && t.asked); });
+      const rest = [...std.filter(p => !up.includes(p)), ...cus, ...ATTRS];
+      const errIn = rest.some(p => { const i = lbIssue(p); return i && i.lvl === 'err' && B.submitted; });
+      const moreX = `<div class="lb-more ${B.more || errIn ? 'open' : ''}"><button type="button" class="lb-more-h" id="lb-more" aria-expanded="${B.more || errIn}">${I.chevR}<span>More fields</span><span class="n">${rest.length}</span></button><div class="lb-more-b">${rest.map(lbFieldHTML).join('')}<div class="lb-f" data-f="notes"><label class="lb-l" for="lb-notes"><span class="nm">Notes</span></label><textarea id="lb-notes" rows="2" placeholder="Saved in UTM.io, not added to the link">${esc(B.notes)}</textarea></div></div></div>`;
+      const recent = D.LINKS.slice().sort((a, b) => a.created < b.created ? 1 : -1).slice(0, 3);
+      B.recentHTML = `<section class="lb-sec ext-recent"><div class="lb-sec-h"><h4>Recent links</h4><span class="grow"></span><button class="link-btn" id="ext-open-web" type="button">Open UTM.io${I.external}</button></div>${recent.map(l => `<div class="ext-rl"><span class="t"><b>${esc(l.slug)}</b><span class="sm-muted">${esc(l.title)}</span></span><button class="icon-btn" type="button" data-copy-l="${esc(l.slug)}" title="Copy">${I.copy}</button></div>`).join('')}</section>`;
+      return s1 + s2.replace('optional · pick several to make one link each', 'optional') + lbSec(3, LBI.tag, 'Tag it', '', `<div class="lb-grid">${up.map(lbFieldHTML).join('') || '<span class="sm-muted">The template fills every required tag.</span>'}</div>${moreX}`) + lbSec(4, LBI.short, 'Short link', '', shortRow + qrRow);
+    }
+    const cusErr = cus.some(p => { const i = lbIssue(p); return i && i.lvl === 'err'; });
+    const more = cus.length ? `<div class="lb-more ${B.more || cusErr ? 'open' : ''}"><button type="button" class="lb-more-h" id="lb-more" aria-expanded="${B.more || cusErr}">${I.chevR}<span>More parameters</span><span class="n">${cus.length}</span><span class="sm-muted">${cus.map(p => esc(p.label.toLowerCase())).join(', ')}</span></button><div class="lb-more-b">${cus.map(lbFieldHTML).join('')}</div></div>` : '';
+    const hiddenN = PARAMS.filter(p => !p.shown).length;
+    const s3 = lbSec(3, LBI.tag, 'Tag it', 'added to the URL so analytics knows where clicks come from', `<div class="lb-grid">${grid}</div>${more}`, hiddenN && !ext ? `<span class="sm-muted lb-hidn" data-tip="Hidden by Rules: ${PARAMS.filter(p => !p.shown).map(p => p.label).join(', ')}">${PI.eyeOff}${hiddenN} hidden</span>` : '');
+    const s4 = lbSec(4, LBI.note, 'Link details', 'not added to the URL · for search and reports in UTM.io', `<div class="lb-grid two">${ATTRS.map(lbFieldHTML).join('')}<div class="lb-f wide" data-f="notes"><label class="lb-l" for="lb-notes"><span class="nm">Notes</span></label><textarea id="lb-notes" rows="2" placeholder="Anything your team should know about this link">${esc(B.notes)}</textarea></div></div>`);
+    const route = ext ? '' : `<div class="lb-route">${LBI.route}<span><b>Smart routing</b> <span class="sm-muted">send people to different pages by country or device</span></span><span class="grow"></span><span class="sm-muted">Off</span><button class="link-btn" id="lb-route" type="button">Set up</button></div>`;
+    const s5 = lbSec(5, LBI.short, 'Short link &amp; QR', '', shortRow + qrRow + route);
+    return s1 + (B.edit ? '' : s2) + s3 + s4 + s5;
+  }
+  function lbTokensHTML(dest, tplKey) {
+    const base = dest ? withScheme(dest.trim().replace(/[?&]$/, '')) : 'https://your-page.com'; let sep = base.includes('?') ? '&' : '?';
+    const q = lbQuery(tplKey).map(({ p, v }) => { if (!v && !p.rules.includes('required')) return ''; const s = sep; if (v || p.rules.includes('required')) sep = '&';
+      return `<span class="tk ${v ? '' : 'miss'}" data-tk="${esc(p.key)}" title="${v ? esc(p.label) : esc(p.label) + ' is required'}">${s}<span class="k">${esc(p.utm)}</span>=<span class="v">${v ? esc(v) : '?'}</span></span>`; }).join('');
+    return `<span class="tk base ${dest ? '' : 'miss'}" data-tk="url">${esc(base)}</span>${q}`;
+  }
+  function lbSideHTML() {
+    const combos = lbCombos(); const all = lbIssues(); const iss = B.submitted ? all : []; const ready = !all.length; const sh = B.shortener !== 'none';
+    const short = sh ? `${B.shortener}/${combos.length > 1 ? '…' : (lbSlug() || '…')}` : '';
+    const first = combos[0];
+    const head = combos.length > 1
+      ? `<div class="lb-pv-h"><b>${combos.length} links</b><span class="sm-muted">${B.multi ? `${lbUrls().length} URL${lbUrls().length === 1 ? '' : 's'}` : '1 URL'} × ${B.tpls.length || 1} template${(B.tpls.length || 1) === 1 ? '' : 's'}</span></div>
+        <div class="lb-many">${combos.slice(0, 6).map(c => `<div class="lb-one"><span class="d">${esc(c.url || 'your-page.com')}</span><span class="t">${c.tpl ? esc(tplOf(c.tpl).name) : 'no template'}</span><code>${lbTokensHTML(c.url, c.tpl)}</code></div>`).join('')}${combos.length > 6 ? `<div class="sm-muted" style="padding:6px 2px">+ ${combos.length - 6} more</div>` : ''}</div>`
+      : `${sh ? `<div class="lb-pv-short"><span class="lbl">Short link</span><div class="row"><b class="code">${esc(short)}</b><button class="icon-btn" id="lb-copy-short" type="button" title="Copy short link" ${ready ? '' : 'disabled'}>${I.copy}</button></div></div>` : ''}
+        <div class="lb-pv-long"><span class="lbl">${sh ? 'Opens' : 'Full link'}</span><code class="lb-url">${lbTokensHTML(first.url, first.tpl)}</code><span class="sm-muted lb-hint">Click a tag to jump to its field</span></div>
+        ${(() => { const q = lbQuery(first.tpl); const g = ga4Channel((q.find(x => x.p.key === 'source') || {}).v, (q.find(x => x.p.key === 'medium') || {}).v); return g && (q.find(x => x.p.key === 'source') || {}).v ? `<div class="lb-ga ${g === 'Unassigned' ? 'warn' : ''}">${g === 'Unassigned' ? PI.warn : I.analytics}<span>${g === 'Unassigned' ? `<b>GA4 will report this as Unassigned.</b> “${esc((q.find(x => x.p.key === 'medium') || {}).v)}” isn't one of GA4's standard mediums, so clicks won't land in a channel.` : `GA4 channel: <b>${g}</b>`}</span></div>` : ''; })()}
+        ${B.qr ? `<div class="lb-pv-qr"><span class="q">${qrSVG(short || 'acme.co/new', QR_DESIGNS.find(d => d.id === B.design) || QR_DESIGNS[0], 92)}</span><span class="sm-muted">${esc((QR_DESIGNS.find(d => d.id === B.design) || QR_DESIGNS[0]).name)} design · scans open the short link</span></div>` : ''}`;
+    const check = ready ? `<div class="lb-ready ok">${LBI.ok}<span><b>Ready to save</b>${combos.length > 1 ? `Creates ${combos.length} links` : 'Every required tag is filled'}</span></div>`
+      : iss.length ? `<div class="lb-ready"><div class="h">${LBI.bad}<b>${iss.length} thing${iss.length === 1 ? '' : 's'} to fix</b></div>${iss.map(i => `<button type="button" class="lb-todo" data-jump="${esc(i.key)}"><span class="l">${esc(i.label)}</span><span class="m">${esc(i.msg)}</span>${I.chevR}</button>`).join('')}</div>`
+      : `<div class="lb-ready todo">${I.info}<span><b>${all.length} field${all.length === 1 ? '' : 's'} left</b>${all.map(i => esc(i.label)).join(', ')}</span></div>`;
+    return `<div class="lb-pv card">${head}</div>${check}`;
+  }
+  function lbFootHTML() {
+    const n = lbCombos().length; const all = lbIssues();
+    const label = B.edit ? 'Save changes' : n > 1 ? `Create ${n} links` : 'Save &amp; copy link';
+    return `<span class="lb-st ${all.length ? '' : 'ok'}">${all.length ? `${all.length} left to fill in` : B.edit ? 'Only new clicks get the new tags' : n > 1 ? `${n} links ready` : 'Ready · copies the link when saved'}</span><span class="grow"></span>${B.mode === 'ext' ? '' : '<span class="sm-muted lb-kbd"><kbd>⌘</kbd><kbd>↵</kbd></span>'}<button class="btn close" type="button">Cancel</button><button class="btn primary" id="lb-save" type="button">${I.copy}${label}</button>`;
+  }
+  function lbDoneHTML() {
+    const d = B.done; const one = d.links.length === 1;
+    return `<div class="lb-done"><span class="big">${LBI.ok}</span><h3>${B.edit ? 'Link updated' : one ? 'Link created and copied' : `${d.links.length} links created`}</h3>
+      <p class="sm-muted">${B.edit ? 'New clicks carry the new tags. Past clicks keep the tags they had.' : one ? 'Paste it anywhere. It\'s also saved in Links with its tags and details.' : 'They\'re in Links. Copy them all, or export a CSV for your ad platform.'}</p>
+      <div class="lb-done-list">${d.links.slice(0, 8).map(l => `<div class="lb-one done"><b class="code">${esc(l.short || l.long)}</b>${l.short ? `<code>${esc(l.long)}</code>` : ''}<button class="icon-btn" type="button" data-copy-l="${esc(l.short || l.long)}" title="Copy">${I.copy}</button></div>`).join('')}${d.links.length > 8 ? `<div class="sm-muted">+ ${d.links.length - 8} more</div>` : ''}</div>
+      <div class="lb-done-acts">${one ? '' : `<button class="btn" id="lb-copy-all" type="button">${I.copy}Copy all</button><button class="btn" id="lb-csv" type="button">${I.download}Export CSV</button>`}${B.qr && one ? `<button class="btn" id="lb-qr-dl" type="button">${I.download}Download QR</button>` : ''}${B.mode === 'ext' || B.edit ? '' : `<button class="btn" id="lb-to-links" type="button">${I.links}Open Links</button>`}${B.edit ? '' : `<button class="btn primary" id="lb-again" type="button">${PI.plus}Create another like this</button>`}<button class="btn ${B.edit ? 'primary' : ''} close" type="button">Done</button></div></div>`;
+  }
+  function lbShellHTML() {
+    const ext = B.mode === 'ext';
+    const title = B.edit ? `Edit link<span class="sub"><span class="code">${esc(B.edit)}</span></span>` : 'Create link';
+    const head = ext ? `<div class="ext-top"><span class="ext-logo"><svg viewBox="0 0 24 24"><path d="M5 20 10 4h3L8 20zM12 20l5-16h3l-5 16z" fill="#8a64c0"/></svg>utm.io</span><button class="ext-ws" type="button" id="ext-ws">Acme Marketing${I.chev}</button><span class="grow"></span><button class="close" aria-label="Close">${I.close}</button></div>
+        <div class="ext-meter"><span class="bar"><i style="width:48%"></i></span><span><b>12</b> of 25 links this month</span><span class="sm-muted">resets Dec 1</span></div>
+        <div class="ext-tab">${LBI.tab}<span class="sm-muted">Current tab</span><span class="code">acme.com/blog/fall-lookbook</span>${B.url === 'acme.com/blog/fall-lookbook' ? '<span class="tag">used</span>' : '<button class="link-btn" id="ext-use-tab" type="button">Use it</button>'}</div>`
+      : `<div class="modal-h"><h3>${title}</h3><button class="close" aria-label="Close">${I.close}</button></div>`;
+    if (B.done) return `${head}<div class="lb-body done">${lbDoneHTML()}</div>`;
+    return `${head}${B.edit ? `<div class="lb-editnote">${I.info}<span>This link has <b>${fmt.n((Q.linksAll.rows.find(r => r.link.slug === B.edit) || { clicks: 0 }).clicks)}</b> clicks. Changing tags only affects new clicks; the short link and destination stay the same.</span></div>` : ''}
+      <div class="lb-body"><div class="lb-form" id="lb-form">${lbFormHTML()}</div><aside class="lb-side" id="lb-side">${lbSideHTML()}</aside>${B.mode === 'ext' ? B.recentHTML || '' : ''}</div>
+      <div class="lb-foot" id="lb-foot">${lbFootHTML()}</div>`;
+  }
+
+  /* Behaviour */
+  let lbRoot = null;
+  function lbPaint() {
+    if (!lbRoot) return; if (!Q.linksAll) Q.linksAll = D.query({ range: ALL_RANGE, trigger: 'all', filters: [] }); const box = $('.modal', lbRoot); const f = $('#lb-form', box); const top = f ? f.scrollTop : 0; const ae = document.activeElement; const fid = ae && box.contains(ae) ? ae.id : null; const caret = ae && 'selectionStart' in ae ? ae.selectionStart : null;
+    box.classList.toggle('is-done', !!B.done); box.innerHTML = lbShellHTML(); $$('.close', box).forEach(b => b.addEventListener('click', closeModal));
+    const f2 = $('#lb-form', box); if (f2) f2.scrollTop = top;
+    if (fid) { const el = $('#' + CSS.escape(fid), box); if (el) { el.focus({ preventScroll: true }); try { if (caret != null) el.setSelectionRange(caret, caret); } catch (e) { /* not a text input */ } } }
+  }
+  // Light update while typing: preview, checklist, footer and messages. Inputs are left alone so focus and caret stay put.
+  function lbRefresh() {
+    if (!lbRoot || B.done) return; const box = $('.modal', lbRoot);
+    const side = $('#lb-side', box); if (side) side.innerHTML = lbSideHTML(); const foot = $('#lb-foot', box); if (foot) { foot.innerHTML = lbFootHTML(); $$('.close', foot).forEach(b => b.addEventListener('click', closeModal)); }
+    lbAll().forEach(p => { const el = $(`[data-f="${CSS.escape(p.key)}"]`, box); if (!el) return; const iss = lbIssue(p); const show = iss && (iss.lvl === 'info' || B.touched.has(p.key) || B.submitted);
+      el.classList.toggle('bad', !!(show && iss.lvl === 'err')); const m = $('.lb-msg', el); m.className = `lb-msg ${show ? iss.lvl : ''}`; m.innerHTML = lbMsgHTML(p, iss, show);
+      const pr = $('.pretty', el); if (pr) { const s = p.values.find(x => x.v === (B.vals[p.key] || '').trim()); pr.textContent = s && s.pretty ? s.pretty : ''; } });
+    const sl = $('#lb-slug', box); if (sl && !B.slugEdited && !B.edit && document.activeElement !== sl) sl.value = lbCombos().length > 1 ? '' : lbSlug();
+    const ss = $('[data-f="slug"] .lb-msg', box), si = lbSlugIssue(); if (ss) { $('[data-f="slug"]', box).classList.toggle('bad', !!si); ss.className = `lb-msg ${si ? 'err' : ''}`; ss.innerHTML = si ? LBI.bad + `<span>${esc(si.msg)}</span>` : (!B.slugEdited && !B.edit && lbSlug() && lbCombos().length === 1 ? '<span>Made from campaign and source. Type to change it.</span>' : ''); }
+    const um = $('[data-f="url"] .lb-msg', box); if (um && !B.edit) { const ui = lbUrlIssue(); const show = ui && (B.touched.has('url') || B.submitted); $('[data-f="url"]', box).classList.toggle('bad', !!show); um.className = `lb-msg ${show ? 'err' : ''}`; um.innerHTML = show ? LBI.bad + `<span>${esc(ui.msg)}</span>` : B.multi ? `<span>${lbUrls().length} URL${lbUrls().length === 1 ? '' : 's'}</span>` : ''; }
+  }
+  // Combobox: saved values with pretty names and usage; narrowed by groupings; free text only where Rules allow it.
+  function lbComboOpen(key) {
+    const box = $('.modal', lbRoot); const p = lbP(key); const f = $(`[data-f="${CSS.escape(key)}"]`, box); if (!p || !f || !p.values.length && p.rules.includes('dropdown')) return;
+    let pop = $('.lb-pop', f); if (!pop) { pop = document.createElement('div'); pop.className = 'lb-pop'; pop.setAttribute('role', 'listbox'); f.appendChild(pop); }
+    const q = (B.vals[key] || '').trim(); const ql = q.toLowerCase(); const n = p.attr ? null : lbNarrow(p);
+    const base = lbOptions(p); const exact = base.find(x => x.v === q);
+    const list = (exact ? base : base.filter(x => !ql || x.v.toLowerCase().includes(ql) || (x.pretty && x.pretty.toLowerCase().includes(ql)))).slice(0, 60);
+    const uses = x => p.attr ? 0 : linksWith(p, x.v).length;
+    const norm = q ? normalizeValue(p, q) : '';
+    const extra = q && !exact && !base.find(x => x.v === norm) ? (p.rules.includes('dropdown') ? `<div class="lb-opt-none">No saved ${esc(p.label.toLowerCase())} matches “${esc(q)}”.${p.attr ? '' : ` <button type="button" class="link-btn" data-lb-addval="${esc(key)}">Add “${esc(norm)}” to the list</button><span class="sm-muted"> · admins only</span>`}</div>` : `<button type="button" class="lb-opt new" data-opt="${esc(norm)}">${PI.plus}<span>Use “<b class="code">${esc(norm)}</b>”</span>${norm !== q ? '<span class="sm-muted">cleaned up for you</span>' : ''}</button>`) : '';
+    pop.innerHTML = `${list.length ? list.map((x, i) => { const u = uses(x); return `<button type="button" class="lb-opt ${x.v === q ? 'sel' : ''} ${i === (B.combo && B.combo.key === key ? B.combo.i : -1) ? 'act' : ''}" data-opt="${esc(x.v)}" role="option"><span class="v code">${esc(x.v)}</span>${x.pretty ? `<span class="pn">${esc(x.pretty)}</span>` : ''}<span class="grow"></span>${u ? `<span class="u">${u} link${u === 1 ? '' : 's'}</span>` : ''}${x.desc ? `<span class="d">${esc(x.desc)}</span>` : ''}</button>`; }).join('') : ''}${extra}${!list.length && !extra ? `<div class="lb-opt-none">No saved values yet${p.rules.includes('dropdown') ? '' : '. Type one.'}</div>` : ''}${n ? `<div class="lb-pop-f">${PI.branch}Showing ${n.allow.length} of ${p.values.length}: ${esc(p.label.toLowerCase())} values used with ${esc(n.par.label.toLowerCase())} <b>${esc(n.pv)}</b></div>` : ''}`;
+    if (!pop.dataset.shown) { pop.dataset.shown = '1'; requestAnimationFrame(() => pop.scrollIntoView({ block: 'nearest', behavior: 'smooth' })); }
+    const inp = $('input', f); if (inp) inp.setAttribute('aria-expanded', 'true'); B.combo = B.combo && B.combo.key === key ? B.combo : { key, i: -1 };
+  }
+  function lbComboClose() { if (!lbRoot) return; $$('.lb-pop', lbRoot).forEach(p => { const i = $('input', p.parentElement); if (i) i.setAttribute('aria-expanded', 'false'); p.remove(); }); B.combo = null; }
+  function lbPick(key, v) {
+    B.vals[key] = v; B.touched.add(key); lbComboClose();
+    // Changing a parent can leave the child on a value it no longer allows; say so instead of silently clearing it.
+    lbPaint(); const kid = PARAMS.find(c => c.deps && c.deps.parent === key);
+    if (kid && B.vals[kid.key] && lbIssue(kid) && lbIssue(kid).lvl === 'err') B.touched.add(kid.key);
+    lbRefresh();
+    const me = $(`#lb-${CSS.escape(key)}`, lbRoot); if (me) me.blur();
+  }
+  function lbJump(key) {
+    const box = $('.modal', lbRoot); if (lbParams().find(p => p.key === key && p.custom) && !B.more) { B.more = true; lbPaint(); }
+    const f = $(`[data-f="${CSS.escape(key)}"]`, box); if (!f) return; f.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const i = $('input, textarea, select', f); if (i && !i.disabled) setTimeout(() => i.focus({ preventScroll: true }), 250); f.classList.remove('flash'); void f.offsetWidth; f.classList.add('flash');
+  }
+  function lbSave() {
+    const iss = lbIssues(); if (iss.length) { B.submitted = true; lbPaint(); lbJump(iss[0].key); return; }
+    const sh = B.shortener !== 'none'; const combos = lbCombos();
+    const links = combos.map((c, i) => { const long = B.edit ? lbFullUrl(D.LINKS.find(l => l.slug === B.edit).dest, null) : lbFullUrl(c.url, c.tpl); const slug = B.edit ? B.edit : sh ? `${B.shortener}/${combos.length > 1 ? (lbSlug() || 'link').slice(0, 24) + '-' + (i + 1) : (lbSlug() || Math.random().toString(36).slice(2, 7))}` : ''; return { short: slug, long }; });
+    B.done = { links }; lbPaint(); if (links.length === 1) copyText(links[0].short || links[0].long, B.edit ? 'Saved' : 'Link copied');
+  }
+  function lbApplyTemplateDefaults() {
+    if (B.tpls.length !== 1) return; const t = tplOf(B.tpls[0]); if (usableShorteners().find(s => s.domain === t.shortener)) B.shortener = t.shortener; if (t.qr) { B.qr = true; B.design = t.qr; }
+  }
+  document.addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && lbRoot && document.body.contains(lbRoot) && B && !B.done) { e.preventDefault(); lbSave(); } });
+  function openBuilder(o = {}) {
+    if (!Q.linksAll) Q.linksAll = D.query({ range: ALL_RANGE, trigger: 'all', filters: [] });
+    B = newBuilder(o);
+    if (o.tpl) { B.tpls = [o.tpl]; lbApplyTemplateDefaults(); }
+    if (o.edit) { const l = D.LINKS.find(x => x.slug === o.edit); if (l) { B.edit = l.slug; B.url = l.dest; UTM_KEYS.forEach(k => { if (paramOf(k)) B.vals[k] = l[k] || ''; }); const [dom, ...rest] = l.slug.split('/'); B.shortener = dom; B.slug = rest.join('/'); B.qr = l.qr > 0; B.design = designOf(l.slug).id; B.vals.a_team = l.medium === 'email' ? 'lifecycle' : l.medium === 'referral' ? 'partnerships' : 'growth'; } }
+    if (o.dup) { const l = D.LINKS.find(x => x.slug === o.dup); if (l) { B.url = l.dest; UTM_KEYS.forEach(k => { if (paramOf(k)) B.vals[k] = l[k] || ''; }); B.shortener = l.slug.split('/')[0]; B.qr = l.qr > 0; B.design = designOf(l.slug).id; B.touched = new Set(Object.keys(B.vals)); } }
+    if (B.mode === 'ext') B.url = 'acme.com/blog/fall-lookbook';
+    const s = openModal('', { width: B.mode === 'ext' ? 420 : 1120 }); lbRoot = s; const box = $('.modal', s);
+    box.classList.add('lb-modal'); if (B.mode === 'ext') { s.classList.add('ext-scrim'); box.classList.add('ext'); }
+    lbPaint();
+    const first = o.focus ? $(`#lb-${CSS.escape(o.focus)}`, box) : B.edit || B.mode === 'ext' ? null : $('#lb-url', box);
+    setTimeout(() => { if (o.focus) lbJump(o.focus); else if (first) first.focus(); }, 80);
+    // All builder events are delegated from the modal so repaints don't drop listeners.
+    s.addEventListener('input', e => { const t = e.target;
+      if (t.dataset.lb) { B.vals[t.dataset.lb] = t.value; if (B.combo) B.combo.i = -1; lbComboOpen(t.dataset.lb); lbRefresh(); return; }
+      if (t.id === 'lb-url') { B.url = t.value; const u = utmFromUrl(t.value); const was = JSON.stringify(B.utmOffer); B.utmOffer = u; if (JSON.stringify(u) !== was) lbPaint(); else lbRefresh(); return; }
+      if (t.id === 'lb-urls') { B.urls = t.value; lbRefresh(); return; }
+      if (t.id === 'lb-slug') { B.slug = t.value; B.slugEdited = true; lbRefresh(); return; }
+      if (t.id === 'lb-notes') { B.notes = t.value; return; } });
+    s.addEventListener('change', e => { if (e.target.id === 'lb-sh') { B.shortener = e.target.value; B.qrNote = ''; lbPaint(); } });
+    s.addEventListener('focusin', e => { const t = e.target; if (t.dataset && t.dataset.lb) lbComboOpen(t.dataset.lb); });
+    s.addEventListener('focusout', e => { const t = e.target; if (!t.id) return; const key = t.dataset.lb || (t.id === 'lb-url' || t.id === 'lb-urls' ? 'url' : null); if (!key) return;
+      setTimeout(() => { if (!lbRoot || !document.body.contains(t)) return; if (document.activeElement === t) return; if (key !== 'url' && $('.lb-pop', lbRoot) && $('.lb-pop', lbRoot).parentElement.dataset.f === key) lbComboClose(); if ((B.vals[key] || '').trim() || key === 'url' && (B.url || B.urls)) B.touched.add(key); else if (key !== 'url') B.touched.add(key); lbRefresh(); }, 120); });
+    s.addEventListener('mousedown', e => { if (e.target.closest('.lb-opt, .lb-pop')) e.preventDefault(); });
+    s.addEventListener('keydown', e => {
+      const t = e.target; if (!t.dataset || !t.dataset.lb) return; const pop = $('.lb-pop', t.closest('.lb-f')); if (!pop) return; const opts = $$('.lb-opt', pop);
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (!opts.length) return; B.combo.i = (B.combo.i + (e.key === 'ArrowDown' ? 1 : -1) + opts.length) % opts.length; opts.forEach((o, i) => o.classList.toggle('act', i === B.combo.i)); opts[B.combo.i].scrollIntoView({ block: 'nearest' }); }
+      else if (e.key === 'Enter') { e.preventDefault(); const o = opts[B.combo.i] || (opts.length === 1 ? opts[0] : null) || opts.find(x => x.dataset.opt === t.value.trim()); if (o) lbPick(t.dataset.lb, o.dataset.opt); }
+      else if (e.key === 'Escape' && pop) { e.stopPropagation(); lbComboClose(); } });
+    s.addEventListener('click', e => { const h = sel => e.target.closest(sel); let el;
+      if ((el = h('[data-opt]'))) { const f = el.closest('[data-f]'); lbPick(f.dataset.f, el.dataset.opt); return; }
+      if ((el = h('[data-lb-addval]'))) { const p = lbP(el.dataset.lbAddval); const v = normalizeValue(p, (B.vals[p.key] || '').trim()); if (v && !p.values.find(x => x.v === v)) { addValues(p, [v]); toast(`Added “${v}” to ${p.label.toLowerCase()} on Parameters`); } lbPick(p.key, v); return; }
+      if ((el = h('[data-lb-multi]'))) { B.multi = el.dataset.lbMulti === '1'; if (B.multi && !B.urls && B.url) B.urls = B.url; if (!B.multi && !B.url && B.urls) B.url = lbUrls()[0] || ''; lbPaint(); const i = $(B.multi ? '#lb-urls' : '#lb-url', box); if (i) i.focus(); return; }
+      if ((el = h('[data-tpl-pick]'))) { const k = el.dataset.tplPick; B.tpls = B.tpls.includes(k) ? B.tpls.filter(x => x !== k) : [...B.tpls, k]; lbApplyTemplateDefaults(); lbPaint(); return; }
+      if (h('#lb-tpl-clear')) { B.tpls = []; lbPaint(); return; }
+      if (h('#lb-more')) { B.more = !B.more; lbPaint(); return; }
+      if (h('#lb-qr')) { e.preventDefault(); B.qr = !B.qr; B.qrNote = ''; if (B.qr && B.shortener === 'none') { B.shortener = defaultShortener(); B.qrNote = `QR codes need a short link, so ${B.shortener} was picked for you.`; } lbPaint(); return; }
+      if ((el = h('[data-lb-design]'))) { B.design = el.dataset.lbDesign; lbPaint(); return; }
+      if (h('#lb-route')) { toast('Smart routing setup is outside this prototype'); return; }
+      if ((el = h('[data-tk]'))) { lbJump(el.dataset.tk); return; }
+      if ((el = h('[data-jump]'))) { lbJump(el.dataset.jump); return; }
+      if (h('#lb-utm-use')) { Object.entries(B.utmOffer).forEach(([k, v]) => { B.vals[k] = normalizeValue(paramOf(k), v); B.touched.add(k); }); B.url = stripUtm(B.url); B.utmOffer = null; lbPaint(); toast('Moved the URL\'s UTM tags into the fields'); return; }
+      if (h('#lb-utm-no')) { B.utmOffer = null; lbPaint(); return; }
+      if (h('#lb-save')) { lbSave(); return; }
+      if (h('#lb-copy-short')) { copyText(`${B.shortener}/${lbSlug()}`, 'Short link copied'); return; }
+      if ((el = h('[data-copy-l]'))) { copyText(el.dataset.copyL, 'Copied'); return; }
+      if (h('#lb-copy-all')) { copyText(B.done.links.map(l => l.short || l.long).join('\n'), `Copied ${B.done.links.length} links`); return; }
+      if (h('#lb-csv')) { toast(`Exported ${B.done.links.length} links as CSV`); return; }
+      if (h('#lb-qr-dl')) { toast('QR code PNG downloaded'); return; }
+      if (h('#lb-to-links')) { closeModal(); goLinks(); return; }
+      if (h('#lb-again')) { const keep = { tpls: B.tpls, vals: { ...B.vals }, shortener: B.shortener, qr: B.qr, design: B.design, mode: B.mode }; B = newBuilder({ mode: keep.mode }); Object.assign(B, { tpls: keep.tpls, shortener: keep.shortener, qr: keep.qr, design: keep.design }); ['campaign', 'medium', 'a_team', 'a_stage'].forEach(k => { if (k in keep.vals) B.vals[k] = keep.vals[k]; }); lbPaint(); const u = $('#lb-url', box); if (u) u.focus(); return; }
+      if (h('#ext-use-tab')) { B.url = 'acme.com/blog/fall-lookbook'; lbPaint(); return; }
+      if (h('#ext-ws')) { toast('Workspace switching is outside this prototype'); return; }
+      if (h('#ext-open-web')) { closeModal(); goLinks(); return; }
+      if (!h('.lb-f')) lbComboClose(); });
+  }
+
   // Which table a list page draws, so search and sort can redraw just that card.
   const LIST_TABLE = { links: linksTableHTML, qr: qrTableHTML, templates: templatesTableHTML, shorteners: shortenersTableHTML, parameters: () => state.ptab === 'values' ? paramValuesCard() : groupingsHTML(curParam()) };
   const listTableEl = () => $('#links-table') || $('#list-table');
@@ -1538,6 +1862,7 @@
       <h4>Parameters</h4><ul>
       <li>Pick a parameter on the left; its saved values are on the right with how many links use each one. Top-to-bottom order is the link builder order.</li>
       <li><b>Tags</b> on a row flag what needs a look: <i>Not saved</i> (used in links but not in the list), <i>Duplicate?</i> (e.g. <i>Facebook</i> vs <i>facebook</i>), <i>Check</i> (capitals or spaces), <i>Unused</i> (no links for 90 days) and <i>New</i>.</li>
+      <li><b>See in builder</b> opens the link builder at that field, so you can check how a parameter's values, groupings and rules feel for members.</li>
       <li><b>Groupings</b> narrow a list: when medium is <i>paid_social</i>, source offers only paid platforms. Edit them per parent value, or per child value with the branch icon.</li>
       <li>Type in the add row to add a value (paste a list to add several). Delete removes a value from the builder; links that already use it keep working. Merge keeps one value and moves groupings across.</li></ul>
       <h4>Keyboard shortcuts</h4><p>With the date menu open: <kbd>D</kbd> Today · <kbd>E</kbd> Yesterday · <kbd>W</kbd> Last 7 days · <kbd>T</kbd> Last 30 days · <kbd>M</kbd> This month · <kbd>L</kbd> Last month · <kbd>Q</kbd> Last 90 days. <kbd>Esc</kbd> closes any menu.</p></div>`, { width: 560 });
@@ -1581,7 +1906,7 @@
     if ((el = hit('[data-utm]'))) { toggleFilter(el.dataset.utm, el.dataset.val); return; }
     if ((el = hit('[data-copy]'))) { copyText(el.dataset.copy, 'Copied to clipboard'); return; }
     // Links page
-    if (hit('#create-btn') || hit('#create-btn-empty')) { toast('Create link opens the link builder (outside this prototype)'); return; }
+    if (hit('#create-btn') || hit('#create-btn-empty')) { openBuilder(); return; }
     if (hit('#import-btn')) { toast('Import links via CSV is outside this prototype'); return; }
     if (hit('#group-btn')) { groupMenu(hit('#group-btn')); return; }
     if (hit('#lsort-btn')) { lsortMenu(hit('#lsort-btn')); return; }
@@ -1606,7 +1931,7 @@
     if (hit('#create-tpl-btn') || hit('#create-tpl-empty')) { toast('Create template opens the template editor (outside this prototype)'); return; }
     if (hit('#import-tpl-btn')) { toast('Import templates via CSV is outside this prototype'); return; }
     if ((el = hit('[data-tpl-links]'))) { const t = TEMPLATE_LIST.find(x => x.key === el.dataset.tplLinks); goLinks(); state.lq = t.medium; render(); return; }
-    if ((el = hit('[data-tpl-use]'))) { toast(`Link builder would open with “${TEMPLATE_LIST.find(x => x.key === el.dataset.tplUse).name}” applied (outside this prototype)`); return; }
+    if ((el = hit('[data-tpl-use]'))) { openBuilder({ tpl: el.dataset.tplUse }); return; }
     if ((el = hit('[data-tpl-edit]'))) { toast('Template editing is outside this prototype'); return; }
     if ((el = hit('[data-tpl-more]'))) { templateMenu(el, el.dataset.tplMore); return; }
     if ((el = hit('[data-tpl]'))) { templateModal(el.dataset.tpl); return; }
@@ -1618,6 +1943,7 @@
       if (hit('#pm-export')) { toast('Exported all parameters as CSV'); return; }
       if (hit('#pm-import')) { importParamsModal(); return; }
       if (hit('#pm-edit')) { paramModal(p); return; }
+      if (hit('#pm-preview')) { if (!p.shown) { toast(`${p.label} is hidden from the builder by Rules`); return; } openBuilder({ focus: p.key }); return; }
       if (hit('#pm-more')) { paramMoreMenu(hit('#pm-more'), p); return; }
       if (hit('[data-nav-rules]')) { e.preventDefault(); toast('Rules is outside this prototype'); return; }
       if ((el = hit('[data-ptab]'))) { state.ptab = el.dataset.ptab; state.sel.clear(); render(); return; }
@@ -1648,7 +1974,7 @@
     if ((el = hit('.row[data-dim]'))) { toggleFilter(el.dataset.dim, el.dataset.val); return; }
     if (hit('#back')) { e.preventDefault(); goBack(); return; }
     if (hit('#qr-btn')) { qrModal(D.LINKS.find(l => l.slug === state.slug)); return; }
-    if (hit('#edit-btn')) { toast('Edit link opens the link settings (not in this prototype)'); return; }
+    if (hit('#edit-btn')) { openBuilder({ edit: state.slug }); return; }
   });
   $('#view').addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.row, .trow.data, .lrow')) { e.preventDefault(); e.target.click(); } });
   // List search: redraw only the table, keep the caret where it is
@@ -1695,7 +2021,7 @@
   $('#drawer-scrim').addEventListener('click', () => setDrawer(false));
   $('#nav').addEventListener('click', () => setDrawer(false));
   document.addEventListener('keydown', e => { if (e.key === 'Escape') setDrawer(false); });
-  $('#ext-btn').addEventListener('click', () => toast('Chrome extension link is outside this prototype'));
+  $('#ext-btn').addEventListener('click', () => openBuilder({ mode: 'ext' }));
   $('#plan-btn').addEventListener('click', () => toast('Plan management is outside this prototype'));
   $('#help-btn').addEventListener('click', () => tipsModal());
 
