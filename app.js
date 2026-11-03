@@ -92,7 +92,7 @@
     from: 'overview', lq: '', groupBy: 'none', lsort: { key: 'created', dir: -1 }, sel: new Set(), collapsed: new Set(),
     disabledDomains: new Set(),
     // Parameters page
-    param: 'medium', ptab: 'values', gview: 'list', gtry: null,
+    param: 'medium', ptab: 'values', pview: 'board', psel: null, padd: null,
   };
   const LIST_VIEWS = ['links', 'qr', 'templates', 'shorteners', 'parameters'];
 
@@ -859,6 +859,8 @@
   // and which parent values narrow which child values ("groupings"). Usage comes from the same dataset as Analytics,
   // so "used by 4 links" here agrees with the Links page.
   const PI = {
+    list: '<svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>',
+    trash: '<svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
     eye: '<svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
     eyeOff: '<svg viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 10.6a2 2 0 0 0 2.8 2.8M6.7 6.7C4 8.3 2 12 2 12s3.5 7 10 7c1.8 0 3.4-.5 4.8-1.2M9.9 5.2A10 10 0 0 1 12 5c6.5 0 10 7 10 7s-.8 1.6-2.4 3.3"/></svg>',
     branch: '<svg viewBox="0 0 24 24"><circle cx="6" cy="5" r="2.2"/><circle cx="6" cy="19" r="2.2"/><circle cx="18" cy="9" r="2.2"/><path d="M6 7.2v9.6M18 11.2c0 3-3 4-6 4.5-2.5.4-4.5 1-6 1.1"/></svg>',
@@ -988,16 +990,13 @@
       <div class="pm-foot">Top to bottom is the order fields appear in the link builder.</div></aside>`;
   }
   function paramHeadHTML(p) {
-    const child = childOf(p); const vals = p.values.length;
-    const grpN = p.deps ? Object.keys(p.deps.allow).length : 0;
     return `<div class="card pm-head">
       <div class="pm-title"><div class="txt"><h2><span class="k">${esc(p.utm)}</span>${esc(p.label)}${p.custom ? '<span class="tag">Custom</span>' : ''}${p.common ? '<span class="tag" title="Added to every new workspace">All workspaces</span>' : ''}</h2>
           <p>${esc(p.desc)}</p></div>
         <div class="pm-ctl">
           <button class="btn" id="pm-edit">${I.edit}Edit</button><button class="tb-btn icon" id="pm-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button></div></div>
       <div class="pm-meta"><span class="rule-pill fmt" title="Field format">${FORMATS[p.format]}</span>${p.shown ? '' : `<span class="rule-pill hid" title="Hidden from the link builder by a rule. Existing links keep it.">${PI.eyeOff}Hidden in builder</span>`}${ruleChips(p)}${p.rules.length || p.format !== 'text' ? '' : '<span class="sm-muted">Free text, no rules</span>'}<a class="pm-rules-link" href="#" data-nav-rules>${I.rules}Builder rules are set in Rules</a></div>
-      <div class="pm-tabs" role="tablist"><button class="${state.ptab === 'values' ? 'on' : ''}" data-ptab="values" role="tab">Values <span class="n">${vals}</span></button>
-        <button class="${state.ptab === 'groupings' ? 'on' : ''}" data-ptab="groupings" role="tab">Groupings ${grpN ? `<span class="n">${grpN}</span>` : ''}${child ? `<span class="sm-muted" style="font-weight:400">· narrows ${esc(child.label.toLowerCase())}</span>` : ''}</button></div></div>`;
+</div>`;
   }
   function valueRowHTML(r, i) {
     const p = r.p; const val = r.val; const sel = state.sel.has(r.id);
@@ -1025,50 +1024,131 @@
     return `<section class="card" id="list-table"><div class="ltable">${head}${rows.length ? rows.map(valueRowHTML).join('') : empty}</div>
       <div class="tbl-foot"><span>Showing ${rows.length} of ${all.length} values${state.lq ? ` matching “${esc(state.lq)}”` : ''}</span><span class="grow"></span><span>Click a row to edit · ${p.rules.includes('dropdown') ? 'members can only pick from this list' : 'members can also type a new value'}</span></div></section>`;
   }
-  function groupingsHTML(p) {
-    const child = childOf(p);
-    let main;
-    if (p.deps) {
-      const par = paramOf(p.deps.parent); const pvals = par.values.filter(v => v.status !== 'archived');
-      const kids = p.values.filter(v => v.status !== 'archived'); const pl = esc(p.label.toLowerCase()), parl = esc(par.label.toLowerCase());
-      const unrestricted = kids.filter(v => !allowedBy(p, v.v).length);
-      // Try it: pick a parent value and see the child dropdown exactly as members will.
-      const tv = pvals.find(v => v.v === state.gtry) ? state.gtry : (pvals.find(v => p.deps.allow[v.v]) || pvals[0]).v;
-      const tAllow = p.deps.allow[tv]; const shown = tAllow ? kids.filter(k => tAllow.includes(k.v)) : kids;
-      const tryIt = `<div class="grp-try">
-        <div class="side"><span class="lbl">${PI.arrowR}1 · Member picks ${parl}</span><div class="grp-pick">${pvals.map(v => `<button type="button" class="${v.v === tv ? 'on' : ''} ${p.deps.allow[v.v] ? '' : 'all'}" data-gtry="${esc(v.v)}" title="${p.deps.allow[v.v] ? `${p.deps.allow[v.v].length} ${pl} values` : `No grouping: every ${pl}`}">${esc(v.v)}</button>`).join('')}</div></div>
-        <span class="grp-flow">${PI.arrowR}</span>
-        <div class="side"><span class="lbl">${PI.arrowR}2 · The ${pl} dropdown shows</span><div class="grp-dd"><div class="h"><span class="code">${esc(p.utm)}</span><span class="sm-muted">${shown.length} of ${kids.length}</span>${I.chev}</div>
-          ${shown.map(k => `<div class="o"><span class="code">${esc(k.v)}</span>${k.pretty ? `<span class="sm-muted">${esc(k.pretty)}</span>` : ''}</div>`).join('') || `<div class="o none">Nothing. Members can't pick a ${pl}.</div>`}
-          ${tAllow ? `<div class="f">${kids.length - shown.length} hidden for <b>${esc(tv)}</b>: ${kids.filter(k => !tAllow.includes(k.v)).map(k => esc(k.v)).join(', ')}</div>` : `<div class="f">No grouping for <b>${esc(tv)}</b>, so every ${pl} shows.</div>`}</div></div></div>`;
-      const seg = `<div class="seg grp-seg" role="tablist"><button type="button" data-gview="list" class="${state.gview === 'list' ? 'on' : ''}">By ${parl}</button><button type="button" data-gview="grid" class="${state.gview === 'grid' ? 'on' : ''}">Grid</button></div>`;
-      const list = `<div class="grp-list">${pvals.map(pv => { const allow = p.deps.allow[pv.v]; return `<div class="grp-row ${allow ? '' : 'all'}" data-grp-edit="${esc(pv.v)}" role="button" tabindex="0">
-          <div class="parent"><span class="code">${esc(pv.v)}</span>${pv.pretty ? `<span class="sm-muted">${esc(pv.pretty)}</span>` : ''}</div><span class="arr">${PI.arrowR}</span>
-          <div class="kids">${allow ? (allow.length ? allow.map(v => `<span class="kid">${esc(v)}</span>`).join('') : `<span class="untagged">no values: members can't pick a ${pl}</span>`) : `<span class="untagged">all ${kids.length} ${pl} values</span>`}</div>
-          <span class="cnt">${allow ? `${allow.length} of ${kids.length}` : 'all'}</span><span class="edit">${I.edit}</span></div>`; }).join('')}</div>`;
-      const grid = `<div class="grp-mx-wrap"><table class="grp-mx"><thead><tr><th class="corner"><span>${parl} ↓</span><span>${pl} →</span></th>${kids.map(k => `<th class="col ${unrestricted.includes(k) ? 'loose' : ''}" title="${unrestricted.includes(k) ? `In no grouping, so it shows for every ${parl}` : esc(k.pretty || k.v)}"><span>${esc(k.v)}</span></th>`).join('')}<th></th></tr></thead>
-        <tbody>${pvals.map(pv => { const allow = p.deps.allow[pv.v]; return `<tr class="${allow ? '' : 'all'}"><th class="rh"><span class="code">${esc(pv.v)}</span>${allow ? '' : '<span class="allp">all</span>'}</th>${kids.map(k => { const on = !allow || allow.includes(k.v); return `<td><button type="button" class="mx ${on ? 'on' : ''}" data-mx="${esc(pv.v)}" data-mx-k="${esc(k.v)}" aria-pressed="${on}" title="${esc(pv.v)} → ${esc(k.v)}: ${on ? 'shown' : 'hidden'}. Click to ${on ? 'hide' : 'show'}.">${on ? I.check : ''}</button></td>`; }).join('')}<td class="n">${allow ? allow.length : 'all'}</td></tr>`; }).join('')}</tbody></table></div>
-        <div class="grp-legend"><span><i class="mx on">${I.check}</i>shown in the dropdown</span><span><i class="mx"></i>hidden</span><span><i class="mx on soft">${I.check}</i>no grouping yet, so everything shows</span>${unrestricted.length ? `<span><b class="loose">orange</b>in no grouping yet</span>` : ''}<span class="sm-muted">Click a square to change it.</span></div>`;
-      main = `<div class="grp-intro"><div class="txt"><b>Groupings keep the ${pl} list short and correct.</b><span class="sm-muted" style="white-space:normal">When someone builds a link, they pick a ${parl} first. The ${pl} dropdown then only shows the values that belong with it, so nobody tags a Google ad as <span class="code">facebook</span>.</span></div><button class="btn" id="grp-parent">${PI.branch}Change parent…</button></div>
-        ${tryIt}
-        <div class="grp-bar"><b>All groupings</b><span class="sm-muted">${Object.keys(p.deps.allow).length} of ${pvals.length} ${parl} values narrow the list</span><span class="grow"></span>${seg}</div>
-        ${state.gview === 'grid' ? grid : list}
-        ${unrestricted.length ? `<div class="grp-note">${PI.warn}<span><b>${unrestricted.length}</b> ${pl} value${unrestricted.length === 1 ? ' isn\'t' : 's aren\'t'} in any grouping, so they show for every ${parl} without one: ${unrestricted.map(v => `<span class="code">${esc(v.v)}</span>`).join(' ')}</span></div>` : ''}`;
-    } else {
-      main = `<div class="empty" style="min-height:200px"><strong>No groupings on ${esc(p.label.toLowerCase())}</strong>Pick a parent parameter to narrow this list in the builder, e.g. show only paid sources once <span class="code">utm_medium</span> is <span class="code">paid_social</span>.<div style="margin-top:12px"><button class="btn primary" id="grp-parent">${PI.branch}Choose parent parameter</button></div></div>`;
-    }
-    const asParent = child ? `<div class="grp-asparent"><span class="ic">${PI.branch}</span><div class="txt"><b>${esc(p.label)} narrows ${esc(child.label.toLowerCase())}.</b><span class="sm-muted" style="white-space:normal">${Object.keys(child.deps.allow).length} of ${p.values.filter(v => v.status !== 'archived').length} ${esc(p.label.toLowerCase())} values have their own ${esc(child.label.toLowerCase())} list.</span></div><button class="btn" data-pm="${esc(child.key)}" data-ptab="groupings">Edit on ${esc(child.label)}${I.chevR}</button></div>` : '';
-    return `<section class="card pm-grp" id="list-table">${asParent}${main}</section>`;
-  }
+  const pviewSeg = () => `<div class="seg pm-view" role="tablist" aria-label="View"><button type="button" data-pview="board" class="${state.pview === 'list' ? '' : 'on'}">${PI.branch}Board</button><button type="button" data-pview="list" class="${state.pview === 'list' ? 'on' : ''}">${PI.list}List</button></div>`;
   function parametersHTML() {
+    if (state.pview !== 'list') return boardPageHTML();
+    state.ptab = 'values';
     const p = curParam(); const s = PSORTS.find(x => x[0] === state.lsort.key) || PSORTS[0];
     const tools = state.ptab === 'values' ? `<div class="toolbar links-tb pm-tb"><div class="search lq">${I.search}<input id="lq" placeholder="Search values, pretty names, people…" value="${esc(state.lq)}" aria-label="Search values"><button class="icon-btn" id="lq-clear" aria-label="Clear search" ${state.lq ? '' : 'hidden'}>${I.close}</button></div>
         <div class="controls"><button class="tb-btn" id="lsort-btn" aria-haspopup="menu" aria-expanded="false">${I.sort}${s[1]}<span class="chev">${I.chev}</span></button>
           <button class="tb-btn icon" id="list-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button></div></div>
       <form class="pm-addrow" id="pv-add-form" autocomplete="off"><span class="ic">${PI.plus}</span><input id="pv-add" placeholder="New ${esc(p.label.toLowerCase())} value, ${esc(p.hint)}" aria-label="Add value" ${p.format === 'number' ? 'inputmode="numeric"' : ''}><span class="hint" id="pv-hint">${p.rules.includes('lowercase') ? 'lowercase · ' : ''}${p.format === 'number' ? 'numbers only · ' : ''}spaces become “-” · Enter to add, paste a list to add several</span><button class="btn sm pm-addbtn" type="submit">${PI.plus}Add value</button></form>` : '';
     return `<div class="view"><div class="page-head"><div class="title"><h1>Parameters</h1></div>
-        <div class="actions"><button class="btn" id="pm-import">${PI.upload}Import CSV</button><button class="btn" id="pm-export">${I.download}Export CSV</button></div></div>
+        <div class="actions">${pviewSeg()}<button class="btn" id="pm-import">${PI.upload}Import CSV</button><button class="btn" id="pm-export">${I.download}Export CSV</button></div></div>
       <div class="pm-layout">${railHTML()}<div class="pm-main">${paramHeadHTML(p)}${state.ptab === 'values' ? tools + paramValuesCard(p) : groupingsHTML(p)}</div></div>${bulkBarHTML()}</div>`;
+  }
+
+  /* ---------- Parameters board: every parameter side by side, groupings drawn as lines ----------
+     A grouping links a value to values in the next column (e.g. medium "cpc" → source "google", "bing").
+     Hover a value to trace its chain. Click it, then tick values in a neighbouring column to group them. */
+  const BK = (k, v) => k + '\u0001' + v;
+  let pbHover = null, pbEdges = [];
+  const pbTag = r => r.status === 'unplanned' ? ['warn', 'Not saved'] : r.issues.length ? ['warn', r.issues[0].type === 'dup' ? 'Duplicate?' : r.issues[0].type === 'stale' ? 'Unused' : 'Check'] : daysAgo(r.created) <= 14 ? ['', 'New'] : null;
+  // Which neighbouring column a parameter can group with: the one to its left as parent, the one to its right as child.
+  function pbNeighbours(p) {
+    const i = PARAMS.indexOf(p); const L = PARAMS[i - 1], R = PARAMS[i + 1];
+    return { L: L && (!p.deps || p.deps.parent === L.key) ? L : null, R: R && (!R.deps || R.deps.parent === p.key) ? R : null };
+  }
+  function pbChain(key, v) {
+    const on = new Set([BK(key, v)]); const idx = PARAMS.findIndex(p => p.key === key); let cur = [v];
+    for (let i = idx; i > 0; i--) { const c = PARAMS[i], L = PARAMS[i - 1]; if (!c.deps || c.deps.parent !== L.key) break; const nx = new Set(); cur.forEach(x => Object.entries(c.deps.allow).forEach(([pv, vs]) => { if (vs.includes(x)) nx.add(pv); })); if (!nx.size) break; nx.forEach(x => on.add(BK(L.key, x))); cur = [...nx]; }
+    cur = [v];
+    for (let i = idx; i < PARAMS.length - 1; i++) { const P = PARAMS[i], R = PARAMS[i + 1]; if (!R.deps || R.deps.parent !== P.key) break; const nx = new Set(); cur.forEach(x => (R.deps.allow[x] || []).forEach(y => nx.add(y))); if (!nx.size) break; nx.forEach(y => on.add(BK(R.key, y))); cur = [...nx]; }
+    return on;
+  }
+  function pbToggle(child, parent, pv, cv) {
+    if (!child.deps) child.deps = { parent: parent.key, allow: {} };
+    const was = child.deps.allow[pv]; const a = was || [];
+    child.deps.allow[pv] = a.includes(cv) ? a.filter(x => x !== cv) : [...a, cv];
+    if (!child.deps.allow[pv].length) { delete child.deps.allow[pv]; toast(`${parent.label} “${pv}” shows every ${child.label.toLowerCase()} again`); }
+    else if (!was) toast(`${parent.label} “${pv}” now only offers the ${child.label.toLowerCase()} values grouped with it`);
+    if (!Object.keys(child.deps.allow).length) child.deps = null;
+  }
+  function pbRowHTML(r) {
+    const val = r.val; const tag = pbTag(r);
+    return `<div class="pb-v ${r.status === 'unplanned' ? 'unplanned' : ''}" data-bk="${esc(r.p.key)}" data-bv="${esc(r.v)}" tabindex="0" title="${r.links ? `Used by ${r.links} link${r.links === 1 ? '' : 's'} · ${fmt.n(r.clicks)} clicks` : 'Not used by any link yet'}">
+      <button type="button" class="pb-lk" tabindex="-1" aria-label="Group with the selected value">${I.check}</button>
+      <span class="v">${esc(r.v)}</span>${val && val.pretty ? `<span class="pn">${esc(val.pretty)}</span>` : ''}<span class="grow"></span>
+      ${tag ? `<span class="pb-tag ${tag[0]}">${tag[1]}</span>` : ''}<span class="n">${r.links || ''}</span></div>`;
+  }
+  function pbColHTML(p) {
+    const q = state.lq.trim().toLowerCase(); const all = paramValueRows(p, { all: true });
+    const rows = q ? all.filter(r => [r.v, r.val && r.val.pretty].some(x => x && x.toLowerCase().includes(q))) : all;
+    const rules = [p.rules.includes('required') && '<span title="Required in the builder">Required</span>', p.rules.includes('dropdown') && `<span class="ico" title="List only: members can only pick from this list">${PI.lock}</span>`, p.rules.includes('lowercase') && '<span title="Forced to lowercase">aa</span>'].filter(Boolean).join('');
+    const dep = p.deps ? `<span class="dep" title="Values here are grouped under ${esc(paramOf(p.deps.parent).label.toLowerCase())}">${PI.branch}by ${esc(paramOf(p.deps.parent).label.toLowerCase())}</span>` : '';
+    const add = state.padd === p.key ? `<form class="pb-add" data-badd-form="${esc(p.key)}" autocomplete="off"><input data-badd-in="${esc(p.key)}" placeholder="${esc(p.hint || 'New value')}" aria-label="New ${esc(p.label.toLowerCase())} value" spellcheck="false" ${p.format === 'number' ? 'inputmode="numeric"' : ''}><span class="sm-muted">Enter to add · Esc to close</span></form>`
+      : `<button type="button" class="pb-addbtn" data-badd="${esc(p.key)}">${PI.plus}Add ${esc(p.label.toLowerCase())}</button>`;
+    return `<section class="pb-col ${p.shown ? '' : 'hid'}" data-bcol="${esc(p.key)}">
+      <div class="pb-h">${lbIcon(p)}<button type="button" class="t" data-bedit="${esc(p.key)}" title="Edit parameter"><b>${esc(p.label)}</b><span class="k">${esc(p.utm)}</span></button><span class="cnt">${p.values.length}</span><button type="button" class="icon-btn" data-bmore="${esc(p.key)}" aria-label="${esc(p.label)} options" aria-haspopup="menu">${I.more}</button></div>
+      <div class="pb-r">${p.shown ? '' : `<span class="hid">${PI.eyeOff}Hidden in builder</span>`}${rules}${dep}</div>
+      <div class="pb-list">${rows.map(pbRowHTML).join('') || `<div class="pb-empty">${q ? 'No matches' : p.format === 'number' ? 'Typed per link. No saved values.' : 'No values yet'}</div>`}</div>${add}</section>`;
+  }
+  function pbBarHTML() {
+    const s = state.psel; const p = s && paramOf(s.key); const r = p && paramValueRows(p, { all: true }).find(x => x.v === s.v);
+    if (!r) { state.psel = null; return `<div class="pb-bar" id="pb-bar">${I.info}<span>Hover a value to see what it's grouped with. <b>Click it</b> to select it, then tick values in the next column to group them.</span></div>`; }
+    const { L, R } = pbNeighbours(p); const bits = [];
+    if (p.deps) { const par = paramOf(p.deps.parent); const ps = allowedBy(p, r.v); bits.push(ps.length ? `Offered when ${esc(par.label.toLowerCase())} is ${ps.map(x => `<b>${esc(x)}</b>`).join(', ')}` : `Offered for every ${esc(par.label.toLowerCase())}`); }
+    const kid = childOf(p); if (kid) { const a = kid.deps.allow[r.v]; bits.push(a ? `Narrows ${esc(kid.label.toLowerCase())} to ${a.map(x => `<b>${esc(x)}</b>`).join(', ')}` : `Shows every ${esc(kid.label.toLowerCase())}`); }
+    const how = [L, R].filter(Boolean).map(x => esc(x.label.toLowerCase())).join(' or ');
+    return `<div class="pb-bar on" id="pb-bar">${lbIcon(p)}<span class="who"><b class="code">${esc(r.v)}</b>${r.val && r.val.pretty ? `<span class="sm-muted">${esc(r.val.pretty)}</span>` : ''}</span>
+      <span class="sm-muted">${r.links ? `${r.links} link${r.links === 1 ? '' : 's'} · ${fmt.n(r.clicks)} clicks` : 'not used yet'}</span>
+      <span class="what">${bits.join('<span class="dotsep">·</span>') || (how ? `Tick a ${how} value to group it with <b>${esc(r.v)}</b>` : 'No neighbouring column to group with')}</span><span class="grow"></span>
+      ${r.status === 'unplanned' ? '<button class="btn sm primary" data-bact="add">Add to list</button>' : `${r.links && !p.custom ? '<button class="btn sm" data-bact="links">Show links</button>' : ''}<button class="btn sm" data-bact="edit">${I.edit}Edit</button><button class="icon-btn" data-bact="delete" title="Delete value">${PI.trash}</button>`}<button class="icon-btn" data-bact="close" title="Done (Esc)">${I.close}</button></div>`;
+  }
+  const pbAreaHTML = () => `<div class="pb-area" id="list-table">${pbBarHTML()}<div class="pb" id="pb"><svg class="pb-svg" id="pb-svg" aria-hidden="true"></svg>${PARAMS.map(pbColHTML).join('')}<button type="button" class="pb-ghost" id="pm-add-param">${PI.plus}Add parameter</button></div></div>`;
+  function boardPageHTML() {
+    const grouped = PARAMS.filter(p => p.deps).length;
+    return `<div class="view"><div class="page-head"><div class="title"><h1>Parameters</h1><span class="sm-muted">${PARAMS.length} parameters · ${grouped ? `${grouped} grouped` : 'no groupings yet'}</span></div>
+        <div class="actions">${pviewSeg()}<button class="btn" id="pm-import">${PI.upload}Import CSV</button><button class="btn" id="pm-export">${I.download}Export CSV</button></div></div>
+      <div class="toolbar links-tb pm-tb"><div class="search lq">${I.search}<input id="lq" placeholder="Search every parameter's values…" value="${esc(state.lq)}" aria-label="Search values"><button class="icon-btn" id="lq-clear" aria-label="Clear search" ${state.lq ? '' : 'hidden'}>${I.close}</button></div>
+        <div class="pb-legend"><span><i class="ln"></i>grouped</span><span><i class="ln on"></i>selected chain</span><span class="sm-muted">Left to right is the order fields appear in the builder</span></div></div>
+      ${pbAreaHTML()}</div>`;
+  }
+  // Lines: measured after layout, redrawn on resize, search and grouping changes.
+  function pbDraw() {
+    const wrap = $('#pb'); if (!wrap) return; const svg = $('#pb-svg', wrap); const box = wrap.getBoundingClientRect();
+    const els = new Map(); $$('.pb-v', wrap).forEach(el => { el.classList.remove('pl', 'pr'); els.set(BK(el.dataset.bk, el.dataset.bv), el); });
+    const pt = (el, side) => { const r = el.getBoundingClientRect(); return [(side === 'r' ? r.right : r.left) - box.left + wrap.scrollLeft, r.top + r.height / 2 - box.top + wrap.scrollTop]; };
+    pbEdges = []; let d = '';
+    PARAMS.forEach((R, i) => { const L = PARAMS[i - 1]; if (!L || !R.deps || R.deps.parent !== L.key) return;
+      Object.entries(R.deps.allow).forEach(([pv, vs]) => { const a = els.get(BK(L.key, pv)); if (!a) return; vs.forEach(cv => { const b = els.get(BK(R.key, cv)); if (!b) return;
+        const [x1, y1] = pt(a, 'r'), [x2, y2] = pt(b, 'l'); const c = (x2 - x1) * .5; a.classList.add('pr'); b.classList.add('pl');
+        d += `<path data-i="${pbEdges.length}" d="M${x1} ${y1}C${x1 + c} ${y1} ${x2 - c} ${y2} ${x2} ${y2}"/>`; pbEdges.push({ a: BK(L.key, pv), b: BK(R.key, cv) }); }); }); });
+    svg.setAttribute('width', wrap.scrollWidth); svg.setAttribute('height', wrap.scrollHeight); svg.innerHTML = d; pbApply();
+  }
+  function pbApply() {
+    const wrap = $('#pb'); if (!wrap) return; const f = pbHover || state.psel; const chain = f ? pbChain(f.key, f.v) : null;
+    wrap.classList.toggle('focus', !!chain); wrap.classList.toggle('pinned', !!state.psel);
+    $$('.pb-v', wrap).forEach(el => { const id = BK(el.dataset.bk, el.dataset.bv); el.classList.toggle('hl', !!chain && chain.has(id)); el.classList.toggle('me', !!f && el.dataset.bk === f.key && el.dataset.bv === f.v); el.classList.toggle('sel', !!state.psel && el.dataset.bk === state.psel.key && el.dataset.bv === state.psel.v); });
+    $$('path', $('#pb-svg', wrap)).forEach(pth => { const e = pbEdges[+pth.dataset.i]; pth.classList.toggle('on', !!chain && chain.has(e.a) && chain.has(e.b)); });
+    $$('.pb-col', wrap).forEach(c => { c.classList.toggle('dim', !!chain && !!$('.pb-v.hl', c)); c.classList.remove('link-l', 'link-r'); $$('.pb-lk.on', c).forEach(b => b.classList.remove('on')); });
+    const s = state.psel; const p = s && paramOf(s.key); if (!p) return; const { L, R } = pbNeighbours(p);
+    if (L) { const c = $(`[data-bcol="${CSS.escape(L.key)}"]`, wrap); c.classList.add('link-r'); $$('.pb-v', c).forEach(el => { if (p.deps && (p.deps.allow[el.dataset.bv] || []).includes(s.v)) $('.pb-lk', el).classList.add('on'); }); }
+    if (R) { const c = $(`[data-bcol="${CSS.escape(R.key)}"]`, wrap); c.classList.add('link-l'); $$('.pb-v', c).forEach(el => { if (R.deps && (R.deps.allow[s.v] || []).includes(el.dataset.bv)) $('.pb-lk', el).classList.add('on'); }); }
+  }
+  // Redraw just the board, keeping its sideways scroll.
+  function pbRefresh(focusAdd) {
+    const old = $('.pb-area'); if (!old) return; const x = $('#pb') ? $('#pb').scrollLeft : 0;
+    old.outerHTML = pbAreaHTML(); const wrap = $('#pb'); wrap.scrollLeft = x; pbDraw();
+    const sub = $('.page-head .title .sm-muted'); if (sub) { const g = PARAMS.filter(p => p.deps).length; sub.textContent = `${PARAMS.length} parameters · ${g ? g + ' grouped' : 'no groupings yet'}`; }
+    if (focusAdd) { const i = $(`[data-badd-in="${CSS.escape(focusAdd)}"]`); if (i) i.focus(); }
+  }
+  function pbClick(e) {
+    const hit = s => e.target.closest(s); let el;
+    if ((el = hit('[data-bmore]'))) { paramMoreMenu(el, paramOf(el.dataset.bmore)); return true; }
+    if ((el = hit('[data-bedit]'))) { paramModal(paramOf(el.dataset.bedit)); return true; }
+    if ((el = hit('[data-badd]'))) { state.padd = el.dataset.badd; pbRefresh(state.padd); return true; }
+    if (hit('.pb-add')) return true;
+    if ((el = hit('[data-bact]'))) { const s = state.psel; const p = paramOf(s.key); const r = paramValueRows(p, { all: true }).find(x => x.v === s.v); const a = el.dataset.bact;
+      if (a === 'close') { state.psel = null; pbRefresh(); } else if (a === 'edit') editValueModal(p, r.v); else if (a === 'links') showValueLinks(p, r.v); else if (a === 'delete') confirmDeleteValue(p, r); else if (a === 'add') { applyFix(p, r, { fix: 'add' }); pbRefresh(); }
+      return true; }
+    if ((el = hit('.pb-v'))) {
+      const k = el.dataset.bk, v = el.dataset.bv; const s = state.psel;
+      if (hit('.pb-lk') && s) { const me = paramOf(s.key), them = paramOf(k); const { L, R } = pbNeighbours(me);
+        if (them === L) pbToggle(me, L, v, s.v); else if (them === R) pbToggle(R, me, s.v, v); pbRefresh(); return true; }
+      state.psel = s && s.key === k && s.v === v ? null : { key: k, v }; pbHover = null; $('#pb-bar').outerHTML = pbBarHTML(); pbApply(); return true; }
+    if (hit('#pb') && !hit('button') && state.psel) { state.psel = null; $('#pb-bar').outerHTML = pbBarHTML(); pbApply(); return true; }
+    return false;
   }
 
   /* Parameters: actions */
@@ -1244,18 +1324,17 @@
     const i = PARAMS.indexOf(p);
     openPop(anchor, `<div class="menu" style="width:250px"><div class="group">${esc(p.label)}</div>
       <button class="mi" data-r="edit">${I.edit}<span class="grow">Edit parameter…</span></button>
-      <button class="mi" data-r="grp">${PI.branch}<span class="grow">Groupings…</span></button>
       <button class="mi" data-r="rules">${I.rules}<span class="grow">Builder rules in Rules</span>${I.external}</button>
       <div class="sep"></div>
-      <button class="mi" data-r="up" ${i === 0 ? 'disabled' : ''}><svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg><span class="grow">Move up in builder</span></button>
-      <button class="mi" data-r="down" ${i === PARAMS.length - 1 ? 'disabled' : ''}><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7"/></svg><span class="grow">Move down in builder</span></button>
+      <button class="mi" data-r="up" ${i === 0 ? 'disabled' : ''}><svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg><span class="grow">Move earlier in builder</span></button>
+      <button class="mi" data-r="down" ${i === PARAMS.length - 1 ? 'disabled' : ''}><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7"/></svg><span class="grow">Move later in builder</span></button>
       <div class="sep"></div>
       <button class="mi" data-r="paste">${I.copy}<span class="grow">Paste a list of values…</span></button>
       <button class="mi" data-r="csv">${I.download}<span class="grow">Export values as CSV</span></button>
       <button class="mi" data-r="ga">${I.analytics}<span class="grow">Import from Google Analytics</span></button>
       ${p.custom ? `<div class="sep"></div><button class="mi danger" data-r="delete">${I.close}<span class="grow">Delete parameter</span></button>` : ''}</div>`, { align: 'right', onMount(el) {
         el.addEventListener('click', e => { const b = e.target.closest('[data-r]'); if (!b || b.disabled) return; closePop(); const a = b.dataset.r;
-          if (a === 'edit') paramModal(p); else if (a === 'grp') { state.ptab = 'groupings'; render(); } else if (a === 'rules') toast('Rules is outside this prototype'); else if (a === 'up' || a === 'down') { const j = a === 'up' ? i - 1 : i + 1; PARAMS.splice(i, 1); PARAMS.splice(j, 0, p); render(); toast(`${p.label} moved ${a} in the builder`); }
+          if (a === 'edit') paramModal(p); else if (a === 'rules') toast('Rules is outside this prototype'); else if (a === 'up' || a === 'down') { const j = a === 'up' ? i - 1 : i + 1; PARAMS.splice(i, 1); PARAMS.splice(j, 0, p); render(); toast(`${p.label} moved ${a} in the builder`); }
           else if (a === 'paste') pasteModal(p); else if (a === 'csv') toast(`Exported ${p.values.length} ${p.label.toLowerCase()} values as CSV`); else if (a === 'ga') toast('Google Analytics import is outside this prototype'); else if (a === 'delete') confirmDeleteParam(p); });
       } });
   }
@@ -1623,7 +1702,7 @@
   }
 
   // Which table a list page draws, so search and sort can redraw just that card.
-  const LIST_TABLE = { links: linksTableHTML, qr: qrTableHTML, templates: templatesTableHTML, shorteners: shortenersTableHTML, parameters: () => state.ptab === 'values' ? paramValuesCard() : groupingsHTML(curParam()) };
+  const LIST_TABLE = { links: linksTableHTML, qr: qrTableHTML, templates: templatesTableHTML, shorteners: shortenersTableHTML, parameters: () => state.pview === 'list' ? paramValuesCard() : pbAreaHTML() };
   const listTableEl = () => $('#links-table') || $('#list-table');
   function listMoreMenu(anchor) {
     const what = state.view === 'qr' ? 'QR codes' : state.view === 'templates' ? 'templates' : 'shorteners';
@@ -1657,7 +1736,7 @@
         const step = now => { const k = Math.min(1, (now - t0) / dur); const e = 1 - Math.pow(1 - k, 3); el.textContent = fmt.n(from + (to - from) * e); if (k < 1) requestAnimationFrame(step); };
         requestAnimationFrame(step);
       });
-      drawChart();
+      drawChart(); if (state.view === 'parameters' && state.pview !== 'list') pbDraw();
     });
     const section = state.view === 'build' ? (LIST_VIEWS.includes(B.back.view) ? B.back.view : B.back.view === 'link' && LIST_VIEWS.includes(B.back.from) ? B.back.from : 'links') : state.view === 'link' ? (LIST_VIEWS.includes(state.from) ? state.from : 'analytics') : LIST_VIEWS.includes(state.view) ? state.view : 'analytics';
     $$('.nav a').forEach(a => a.classList.toggle('active', a.dataset.nav === section));
@@ -1665,7 +1744,7 @@
     $('#topbar-title').textContent = state.view === 'link' ? state.slug : state.view === 'build' ? (B.edit ? 'Edit link' : 'Create link') : TITLES[state.view] || 'Acme Marketing';
     try { location.hash = state.view === 'build' ? (B.edit ? 'edit-link' : 'create-link') : state.view === 'link' ? 'link-' + state.slug.replace(/[^a-z0-9]+/gi, '-') : state.view === 'parameters' ? 'parameters-' + state.param : state.view; } catch (e) { /* ignore */ }
   }
-  window.addEventListener('resize', (() => { let t; return () => { clearTimeout(t); t = setTimeout(drawChart, 120); }; })());
+  window.addEventListener('resize', (() => { let t; return () => { clearTimeout(t); t = setTimeout(() => { drawChart(); pbDraw(); }, 120); }; })());
 
   /* ---------- Popover manager ---------- */
   const layer = $('#layer');
@@ -1894,7 +1973,7 @@
       <h4>Parameters</h4><ul>
       <li>Pick a parameter on the left; its saved values are on the right with how many links use each one. Top-to-bottom order is the link builder order.</li>
       <li><b>Tags</b> on a row flag what needs a look: <i>Not saved</i> (used in links but not in the list), <i>Duplicate?</i> (e.g. <i>Facebook</i> vs <i>facebook</i>), <i>Check</i> (capitals or spaces), <i>Unused</i> (no links for 90 days) and <i>New</i>.</li>
-      <li><b>Groupings</b> narrow a list: when medium is <i>paid_social</i>, source offers only paid platforms. Edit them per parent value, or per child value with the branch icon.</li>
+      <li><b>Groupings</b> narrow a list: when medium is <i>paid_social</i>, source offers only paid platforms. On the Board, hover a value to see its lines; click it, then tick values in the next column to group them. Esc to finish.</li>
       <li>Type in the add row to add a value (paste a list to add several). Delete removes a value from the builder; links that already use it keep working. Merge keeps one value and moves groupings across.</li></ul>
       <h4>Keyboard shortcuts</h4><p>With the date menu open: <kbd>D</kbd> Today · <kbd>E</kbd> Yesterday · <kbd>W</kbd> Last 7 days · <kbd>T</kbd> Last 30 days · <kbd>M</kbd> This month · <kbd>L</kbd> Last month · <kbd>Q</kbd> Last 90 days. <kbd>Esc</kbd> closes any menu.</p></div>`, { width: 560 });
   }
@@ -1969,6 +2048,8 @@
     // Parameters page
     if (state.view === 'parameters') {
       const p = curParam(); const pvId = el => el.dataset.pvId || el.dataset.pvEdit || el.dataset.pvMore || el.dataset.pvLinks || el.dataset.pv; const rowOf = id => paramValueRows(p, { all: true }).find(r => r.id === id);
+      if ((el = hit('[data-pview]'))) { state.pview = el.dataset.pview; state.psel = null; state.padd = null; state.sel.clear(); render(); return; }
+      if (state.pview !== 'list' && pbClick(e)) return;
       if ((el = hit('[data-pm]'))) { goParam(el.dataset.pm, el.dataset.ptab || null); return; }
       if (hit('#pm-add-param')) { paramModal(null); return; }
       if (hit('#pm-export')) { toast('Exported all parameters as CSV'); return; }
@@ -1984,12 +2065,6 @@
       if ((el = hit('[data-pv-grp]'))) { groupingPicker(p, el.dataset.pvGrp); return; }
       if ((el = hit('[data-pv-more]'))) { valueMenu(el, el.dataset.pvMore); return; }
       if ((el = hit('[data-grp-edit]'))) { groupingEditor(p, el.dataset.grpEdit); return; }
-      if ((el = hit('[data-gtry]'))) { state.gtry = el.dataset.gtry; render(); return; }
-      if ((el = hit('[data-gview]'))) { state.gview = el.dataset.gview; render(); return; }
-      if ((el = hit('[data-mx]'))) { const pv = el.dataset.mx, k = el.dataset.mxK; const all = p.values.filter(v => v.status !== 'archived').map(v => v.v);
-        const cur = p.deps.allow[pv] ? [...p.deps.allow[pv]] : all; const next = cur.includes(k) ? cur.filter(x => x !== k) : [...cur, k];
-        if (next.length === all.length) delete p.deps.allow[pv]; else p.deps.allow[pv] = all.filter(x => next.includes(x));
-        state.gtry = pv; render(); return; }
       if (hit('#grp-parent')) { chooseParent(p); return; }
       if (hit('#pv-add-form')) { if (!hit('.pm-addbtn')) { const i = $('#pv-add'); if (i && e.target !== i) i.focus(); } return; }
       if ((el = hit('[data-pv]'))) { const r = rowOf(el.dataset.pv); if (!r) return; if (r.val) editValueModal(p, r.v); else valueMenu($('[data-pv-more]', el) || el, r.id); return; }
@@ -2012,9 +2087,9 @@
     if (hit('#qr-btn')) { qrModal(D.LINKS.find(l => l.slug === state.slug)); return; }
     if (hit('#edit-btn')) { openBuilder({ edit: state.slug }); return; }
   });
-  $('#view').addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.row, .trow.data, .lrow')) { e.preventDefault(); e.target.click(); } });
+  $('#view').addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.row, .trow.data, .lrow, .pb-v')) { e.preventDefault(); e.target.click(); } });
   // List search: redraw only the table, keep the caret where it is
-  $('#view').addEventListener('input', (() => { let t; return e => { if (e.target.id !== 'lq') return; state.lq = e.target.value; const c = $('#lq-clear'); if (c) c.hidden = !state.lq; clearTimeout(t); t = setTimeout(() => { swapSection(listTableEl(), LIST_TABLE[state.view]()); if (state.view === 'parameters') { const rail = $('.pm-rail'); if (rail) rail.outerHTML = railHTML(); } }, 120); }; })());
+  $('#view').addEventListener('input', (() => { let t; return e => { if (e.target.id !== 'lq') return; state.lq = e.target.value; const c = $('#lq-clear'); if (c) c.hidden = !state.lq; clearTimeout(t); t = setTimeout(() => { if (state.view === 'parameters' && state.pview !== 'list') { pbRefresh(); return; } swapSection(listTableEl(), LIST_TABLE[state.view]()); if (state.view === 'parameters') { const rail = $('.pm-rail'); if (rail) rail.outerHTML = railHTML(); } }, 120); }; })());
   // Parameters: inline add-value row (validates as you type, Enter adds, a pasted list adds several)
   $('#view').addEventListener('input', e => { if (e.target.id !== 'pv-add') return; const p = curParam(); const hint = $('#pv-hint'), btn = $('#pv-add-form .btn'); const raw = e.target.value;
     if (!raw.trim()) { hint.textContent = `${p.rules.includes('lowercase') ? 'lowercase · ' : ''}${p.format === 'number' ? 'numbers only · ' : ''}spaces become “-” · Enter to add, paste a list to add several`; hint.classList.remove('bad'); btn.classList.remove('ready'); return; }
@@ -2033,6 +2108,11 @@
   }
 
   // Map hover tooltip
+  $('#view').addEventListener('mouseover', e => { if (!$('#pb')) return; const v = e.target.closest('.pb-v'); const next = v ? { key: v.dataset.bk, v: v.dataset.bv } : null;
+    if ((next && next.key + next.v) === (pbHover && pbHover.key + pbHover.v)) return; pbHover = next; pbApply(); });
+  $('#view').addEventListener('submit', e => { const f = e.target.closest('[data-badd-form]'); if (!f) return; e.preventDefault(); const p = paramOf(f.dataset.baddForm); const inp = $('input', f); const raws = inp.value.split(/[\n,]+/).map(x => x.trim()).filter(Boolean); if (!raws.length) return;
+    const added = addValues(p, raws); if (added.length) toast(`Added ${added.length === 1 ? `“${added[0]}”` : added.length + ' values'} to ${p.label.toLowerCase()}`); else toast(validateValue(p, raws[0]).msg || 'Nothing to add'); pbRefresh(p.key); });
+  document.addEventListener('keydown', e => { if (e.key !== 'Escape' || !$('#pb') || $('.scrim') || pop) return; if (state.padd) { state.padd = null; pbRefresh(); } else if (state.psel) { state.psel = null; $('#pb-bar').outerHTML = pbBarHTML(); pbApply(); } });
   $('#view').addEventListener('mousemove', e => {
     const p = e.target.closest && e.target.closest('[data-country]'); const map = $('#map'); if (!map) return; const tip = $('#map-tip');
     if (!p) { tip.classList.remove('show'); return; }
