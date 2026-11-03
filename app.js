@@ -92,7 +92,7 @@
     from: 'overview', lq: '', groupBy: 'none', lsort: { key: 'created', dir: -1 }, sel: new Set(), collapsed: new Set(),
     disabledDomains: new Set(),
     // Parameters page
-    param: 'medium', ptab: 'values', pfilter: 'all',
+    param: 'medium', ptab: 'values',
   };
   const LIST_VIEWS = ['links', 'qr', 'templates', 'shorteners', 'parameters'];
 
@@ -465,7 +465,7 @@
   function bulkBarHTML() {
     const n = state.sel.size; if (!n) return '';
     const acts = state.view === 'parameters'
-      ? `<button data-bulk="merge" ${n < 2 ? 'disabled title="Select 2 or more values to merge"' : ''}>${PI.merge}Merge</button><button data-bulk="parchive">${PI.archive}Archive</button><button data-bulk="pcsv">${I.download}Export CSV</button><button data-bulk="pdelete" class="danger">${I.close}Delete</button>`
+      ? `<button data-bulk="merge" ${n < 2 ? 'disabled title="Select 2 or more values to merge"' : ''}>${PI.merge}Merge</button><button data-bulk="pcsv">${I.download}Export CSV</button><button data-bulk="pdelete" class="danger">${I.close}Delete</button>`
       : state.view === 'qr'
       ? `<button data-bulk="png">${I.download}Download PNGs</button><button data-bulk="copy">${I.copy}Copy links</button><button data-bulk="csv">${I.download}Export CSV</button><button data-bulk="design">${I.swatch}Change design</button><button data-bulk="delete" class="danger">${I.close}Delete</button>`
       : `<button data-bulk="copy">${I.copy}Copy links</button><button data-bulk="csv">${I.download}Export CSV</button><button data-bulk="tag">${I.tag}Add tag</button><button data-bulk="archive">${I.reset}Archive</button><button data-bulk="delete" class="danger">${I.close}Delete</button>`;
@@ -540,11 +540,9 @@
     if (act === 'delete') { confirmDelete(slugs); return; }
     if (state.view === 'parameters') { const p = curParam(); const vs = slugs.map(s => s.slice(p.key.length + 1));
       if (act === 'merge') { if (vs.length >= 2) mergeModal(p, vs); return; }
-      if (act === 'parchive') { archiveValues(p, vs); return; }
       if (act === 'pcsv') { toast(`Exported ${vs.length} values as CSV`); return; }
-      if (act === 'pdelete') { openModal(`<div class="modal-h"><h3>Delete ${vs.length} values?</h3><button class="close" aria-label="Close">${I.close}</button></div><div class="modal-b about"><p>Links that use them keep working, but the values leave the builder and any grouping. Archiving is reversible; deleting is not.</p><div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px"><button class="btn close">Cancel</button><button class="btn" id="bd-arch">${PI.archive}Archive instead</button><button class="btn primary danger" id="bd-ok">Delete</button></div></div>`, { width: 440, onMount(s) {
-          $('#bd-ok', s).addEventListener('click', () => { closeModal(); vs.forEach(v => { const j = p.values.findIndex(x => x.v === v); if (j > -1) p.values.splice(j, 1); if (p.deps) Object.values(p.deps.allow).forEach(a => { const k = a.indexOf(v); if (k > -1) a.splice(k, 1); }); const c = childOf(p); if (c) delete c.deps.allow[v]; }); state.sel.clear(); render(); toast(`Deleted ${vs.length} values`); });
-          $('#bd-arch', s).addEventListener('click', () => { closeModal(); archiveValues(p, vs); }); } }); return; } }
+      if (act === 'pdelete') { openModal(`<div class="modal-h"><h3>Delete ${vs.length} values?</h3><button class="close" aria-label="Close">${I.close}</button></div><div class="modal-b about"><p>Links that use them keep working, but the values leave the builder and any grouping. This can't be undone.</p><div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px"><button class="btn close">Cancel</button><button class="btn primary danger" id="bd-ok">Delete</button></div></div>`, { width: 440, onMount(s) {
+          $('#bd-ok', s).addEventListener('click', () => { closeModal(); vs.forEach(v => { const j = p.values.findIndex(x => x.v === v); if (j > -1) p.values.splice(j, 1); if (p.deps) Object.values(p.deps.allow).forEach(a => { const k = a.indexOf(v); if (k > -1) a.splice(k, 1); }); const c = childOf(p); if (c) delete c.deps.allow[v]; }); state.sel.clear(); render(); toast(`Deleted ${vs.length} values`); }); } }); return; } }
     toast(`${act === 'tag' ? 'Add tag' : 'Archive'} is outside this prototype`);
   }
   function goLinks(opts = {}) { state.view = 'links'; state.slug = null; if (!opts.keepFilters) { state.filters = []; } state.sel.clear(); state.lq = ''; state.lsort = { key: 'created', dir: -1 }; render({ top: true }); }
@@ -553,7 +551,7 @@
     state.view = view; state.slug = null; state.sel.clear(); state.lq = opts.q || '';
     if (!opts.keepFilters) state.filters = [];
     state.lsort = view === 'qr' ? { key: 'clicks', dir: -1 } : view === 'templates' ? { key: 'uses', dir: -1 } : { key: 'links', dir: -1 };
-    if (view === 'parameters') { state.pfilter = 'all'; state.ptab = 'values'; }
+    if (view === 'parameters') { state.ptab = 'values'; }
     render({ top: true });
   }
 
@@ -863,6 +861,7 @@
     eyeOff: '<svg viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 10.6a2 2 0 0 0 2.8 2.8M6.7 6.7C4 8.3 2 12 2 12s3.5 7 10 7c1.8 0 3.4-.5 4.8-1.2M9.9 5.2A10 10 0 0 1 12 5c6.5 0 10 7 10 7s-.8 1.6-2.4 3.3"/></svg>',
     branch: '<svg viewBox="0 0 24 24"><circle cx="6" cy="5" r="2.2"/><circle cx="6" cy="19" r="2.2"/><circle cx="18" cy="9" r="2.2"/><path d="M6 7.2v9.6M18 11.2c0 3-3 4-6 4.5-2.5.4-4.5 1-6 1.1"/></svg>',
     merge: '<svg viewBox="0 0 24 24"><path d="M5 5v4a4 4 0 0 0 4 4h6a4 4 0 0 1 4 4v2M5 19v-4a4 4 0 0 1 4-4"/><path d="m16 16 3 3 3-3"/></svg>',
+    upload: '<svg viewBox="0 0 24 24"><path d="M12 16V4M6 10l6-6 6 6M4 20h16"/></svg>',
     archive: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4"/></svg>',
     warn: '<svg viewBox="0 0 24 24"><path d="M12 4 2.5 20h19z"/><path d="M12 10v4M12 17h.01"/></svg>',
     plus: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
@@ -914,7 +913,6 @@
   const PARAMS = PARAM_SEED.map(p => ({ ...p, shown: p.shown !== false, deps: p.deps ? { parent: p.deps.parent, allow: Object.fromEntries(Object.entries(p.deps.allow).map(([k, v]) => [k, [...v]])) } : null,
     values: p.values.map(([v, pretty, desc, by, created]) => ({ v, pretty, desc, by, created, status: 'active' })) }));
   const PSORTS = [['links', 'Most used'], ['clicks', 'Most clicks'], ['last', 'Recently used'], ['created', 'Newest first'], ['value', 'Value A–Z']];
-  const PFILTERS = [['all', 'All'], ['active', 'Active'], ['review', 'Needs review'], ['archived', 'Archived']];
   const paramOf = key => PARAMS.find(p => p.key === key);
   const curParam = () => paramOf(state.param) || PARAMS[0];
   const STALE_DAYS = 90;
@@ -943,7 +941,7 @@
     const rows = p.values.map(val => {
       const links = linksWith(p, val.v); const issues = issuesFor(p, val, p.values);
       const stale = val.status === 'active' && !links.length && daysAgo(val.created) > STALE_DAYS;
-      if (stale) issues.push({ type: 'stale', label: `Not used by any link, added ${fmt.d(new Date(val.created + 'T00:00:00'), { month: 'short', day: 'numeric', year: 'numeric' })}`, fix: 'archive' });
+      if (stale) issues.push({ type: 'stale', label: `Not used by any link, added ${fmt.d(new Date(val.created + 'T00:00:00'), { month: 'short', day: 'numeric', year: 'numeric' })}` });
       return { id: `${p.key}:${val.v}`, p, val, v: val.v, status: val.status, links: links.length, clicks: links.reduce((a, r) => a + r.clicks, 0), last: lastUsed(links), issues, created: val.created };
     });
     // Seen in links but never saved: the builder let someone type it, or it came in via import.
@@ -952,37 +950,43 @@
       Object.entries(extra).forEach(([v, links]) => rows.push({ id: `${p.key}:${v}`, p, val: null, v, status: 'unplanned', links: links.length, clicks: links.reduce((a, r) => a + r.clicks, 0), last: lastUsed(links), issues: [{ type: 'unplanned', label: `Used by ${links.length} link${links.length === 1 ? '' : 's'} but not in this list, so members can't pick it`, fix: 'add' }], created: links.map(r => r.link.created).sort()[0] })); }
     let out = rows;
     if (!opts.all) {
-      const f = state.pfilter;
-      out = out.filter(r => f === 'all' ? r.status !== 'archived' : f === 'active' ? r.status === 'active' && !r.issues.length : f === 'review' ? r.issues.length > 0 : r.status === 'archived');
       if (q) out = out.filter(r => [r.v, r.val && r.val.pretty, r.val && r.val.desc, r.val && r.val.by].some(s => s && s.toLowerCase().includes(q)));
       const { key, dir } = state.lsort;
       out.sort((a, b) => { let v = 0; if (key === 'value') v = a.v.localeCompare(b.v, undefined, { sensitivity: 'base' }); else if (key === 'created') v = a.created < b.created ? -1 : a.created > b.created ? 1 : 0; else if (key === 'last') v = (a.last || 0) - (b.last || 0); else v = a[key] - b[key]; if (!v && key !== 'value') v = a.v.localeCompare(b.v); return v * dir; });
     }
     return out;
   }
-  const reviewCount = p => paramValueRows(p, { all: true }).filter(r => r.issues.length).length;
   const childOf = p => PARAMS.find(c => c.deps && c.deps.parent === p.key);
   // Which parent values allow this child value (null = not restricted by any grouping)
   function allowedBy(p, v) { if (!p.deps) return null; return Object.entries(p.deps.allow).filter(([, vs]) => vs.includes(v)).map(([k]) => k); }
 
   function ruleChips(p) { return p.rules.map(r => `<span class="rule-pill" title="${esc(RULE_LABEL[r][1])}">${r === 'dropdown' ? PI.lock : r === 'required' ? '<b>*</b>' : r === 'lowercase' ? '<b>aa</b>' : I.check}${RULE_LABEL[r][0]}</span>`).join(''); }
+  // Rail icons: one simple glyph per standard UTM field, a shared one for custom fields
+  const P_ICON = {
+    campaign: '<svg viewBox="0 0 24 24"><path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1zM15 9a3 3 0 0 1 0 6M18 6a7 7 0 0 1 0 12"/></svg>',
+    medium: '<svg viewBox="0 0 24 24"><path d="M12 3 3 8l9 5 9-5-9-5zM3 13l9 5 9-5"/></svg>',
+    source: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>',
+    content: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="m21 16-5-5-9 9"/></svg>',
+    term: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="m20 20-4.5-4.5"/></svg>',
+    custom: '<svg viewBox="0 0 24 24"><path d="M8 4H6a2 2 0 0 0-2 2v4l-2 2 2 2v4a2 2 0 0 0 2 2h2M16 4h2a2 2 0 0 1 2 2v4l2 2-2 2v4a2 2 0 0 1-2 2h-2"/></svg>',
+  };
   function railHTML() {
     const q = state.lq.trim().toLowerCase();
-    const item = p => { const n = p.values.filter(v => v.status !== 'archived').length; const rev = reviewCount(p); const m = q ? paramValueRows(p, { all: true }).filter(r => [r.v, r.val && r.val.pretty].some(s => s && s.toLowerCase().includes(q))).length : null;
+    const item = p => { const n = p.values.length; const m = q ? paramValueRows(p, { all: true }).filter(r => [r.v, r.val && r.val.pretty].some(s => s && s.toLowerCase().includes(q))).length : null;
       return `<button class="pm-item ${p.key === state.param ? 'on' : ''} ${p.shown ? '' : 'hidden-p'}" data-pm="${esc(p.key)}" role="tab" aria-selected="${p.key === state.param}">
         <span class="grip" title="Drag to reorder (order = link builder order)">${PI.grip}</span>
+        <span class="pi ${p.custom ? 'cus' : 'p-' + esc(p.key)}" aria-hidden="true">${P_ICON[p.custom ? 'custom' : p.key] || P_ICON.custom}</span>
         <span class="txt"><span class="k">${esc(p.utm)}</span><span class="l">${esc(p.label)}${p.shown ? '' : `<span class="off" title="Hidden from the link builder">${PI.eyeOff}</span>`}</span></span>
-        <span class="cnt">${m != null ? `<b class="num ${m ? 'hit' : ''}">${m}</b><span class="sm-muted">of ${n}</span>` : `<b class="num">${p.values.length ? n : '–'}</b>`}</span>
-        ${rev ? `<span class="dot warn" title="${rev} value${rev === 1 ? '' : 's'} to review"></span>` : `<span class="dot"></span>`}</button>`; };
+        <span class="cnt">${m != null ? `<b class="num ${m ? 'hit' : ''}">${m}</b><span class="sm-muted">of ${n}</span>` : `<b class="num">${p.values.length ? n : '–'}</b>`}</span></button>`; };
     const std = PARAMS.filter(p => !p.custom), cus = PARAMS.filter(p => p.custom);
-    return `<aside class="card pm-rail" role="tablist" aria-label="Parameters">
+    return `<aside class="card pm-rail" aria-label="Parameters">
+      <button class="btn primary pm-add" id="pm-add-param">${PI.plus}Add parameter</button>
       <div class="pm-sec">Standard UTM</div>${std.map(item).join('')}
       <div class="pm-sec">Custom <span class="sm-muted" style="font-weight:400;text-transform:none;letter-spacing:0">· Professional</span></div>${cus.map(item).join('')}
-      <button class="pm-add" id="pm-add-param">${PI.plus}Add parameter</button>
       <div class="pm-foot">Top to bottom is the order fields appear in the link builder.</div></aside>`;
   }
   function paramHeadHTML(p) {
-    const child = childOf(p); const vals = p.values.filter(v => v.status !== 'archived').length; const rev = reviewCount(p);
+    const child = childOf(p); const vals = p.values.length;
     const grpN = p.deps ? Object.keys(p.deps.allow).length : 0;
     return `<div class="card pm-head">
       <div class="pm-title"><div class="txt"><h2><span class="k">${esc(p.utm)}</span>${esc(p.label)}${p.custom ? '<span class="tag">Custom</span>' : ''}${p.common ? '<span class="tag" title="Added to every new workspace">All workspaces</span>' : ''}</h2>
@@ -990,24 +994,18 @@
         <div class="pm-ctl"><label class="switch ${p.shown ? 'on' : ''}" id="pm-shown" title="${p.shown ? 'Members see this field in the link builder' : 'Hidden from the link builder; existing links keep it'}"><i></i><span>${p.shown ? 'In builder' : 'Hidden'}</span></label>
           <button class="btn" id="pm-edit">${I.edit}Edit</button><button class="tb-btn icon" id="pm-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button></div></div>
       <div class="pm-meta"><span class="rule-pill fmt" title="Field format">${FORMATS[p.format]}</span>${ruleChips(p)}${p.rules.length || p.format !== 'text' ? '' : '<span class="sm-muted">Free text, no rules</span>'}<a class="pm-rules-link" href="#" data-nav-rules>${I.rules}Builder rules are set in Rules</a></div>
-      <div class="pm-tabs" role="tablist"><button class="${state.ptab === 'values' ? 'on' : ''}" data-ptab="values" role="tab">Values <span class="n">${vals}</span>${rev ? `<span class="n warn">${rev}</span>` : ''}</button>
+      <div class="pm-tabs" role="tablist"><button class="${state.ptab === 'values' ? 'on' : ''}" data-ptab="values" role="tab">Values <span class="n">${vals}</span></button>
         <button class="${state.ptab === 'groupings' ? 'on' : ''}" data-ptab="groupings" role="tab">Groupings ${grpN ? `<span class="n">${grpN}</span>` : ''}${child ? `<span class="sm-muted" style="font-weight:400">· narrows ${esc(child.label.toLowerCase())}</span>` : ''}</button></div></div>`;
-  }
-  function reviewBannerHTML(p) {
-    const rows = paramValueRows(p, { all: true }).filter(r => r.issues.length); if (!rows.length || state.pfilter === 'review') return '';
-    const by = {}; rows.forEach(r => r.issues.forEach(i => { by[i.type] = (by[i.type] || 0) + 1; }));
-    const parts = [['unplanned', 'used in links but not saved'], ['dup', 'likely duplicate'], ['case', 'wrong case'], ['space', 'with a space'], ['stale', `unused for ${STALE_DAYS}+ days`]].filter(([k]) => by[k]).map(([k, l]) => `<b>${by[k]}</b> ${l}`);
-    return `<div class="pm-review"><span class="ic">${PI.spark}</span><div class="txt"><b>${rows.length} value${rows.length === 1 ? '' : 's'} to review</b><span>${parts.join(' · ')}</span></div><button class="btn" data-pfilter="review">Show them</button><button class="btn primary" id="pm-review">Review &amp; fix</button></div>`;
   }
   function valueRowHTML(r, i) {
     const p = r.p; const val = r.val; const sel = state.sel.has(r.id);
     const parents = allowedBy(p, r.v); const child = childOf(p); const narrows = child && child.deps.allow[r.v];
     const grp = r.status === 'unplanned' ? '' : parents ? (parents.length ? `<span class="grp-chip" data-pv-grp="${esc(r.v)}" title="Shown in the builder only after ${esc(paramOf(p.deps.parent).label.toLowerCase())} is ${parents.join(' or ')}">${PI.branch}<span class="k">${esc(paramOf(p.deps.parent).label.toLowerCase())}:</span>${parents.slice(0, 2).map(x => `<b>${esc(x)}</b>`).join(', ')}${parents.length > 2 ? `<span class="k">+${parents.length - 2}</span>` : ''}</span>` : `<span class="grp-chip none" data-pv-grp="${esc(r.v)}" title="Not in any grouping: always available">${PI.branch}any ${esc(paramOf(p.deps.parent).label.toLowerCase())}</span>`)
       : narrows ? `<span class="grp-chip" data-pv-grp="${esc(r.v)}" title="Picking this narrows ${esc(child.label.toLowerCase())} to ${narrows.length} value${narrows.length === 1 ? '' : 's'}">${PI.branch}<span class="k">narrows ${esc(child.label.toLowerCase())} to</span><b>${narrows.length}</b></span>` : '';
-    const status = r.status === 'unplanned' ? '<span class="status-pill warn">Not saved</span>' : r.status === 'archived' ? '<span class="status-pill off">Archived</span>' : r.issues.length ? `<span class="status-pill warn" title="${esc(r.issues[0].label)}">${r.issues[0].type === 'dup' ? 'Duplicate?' : r.issues[0].type === 'stale' ? 'Unused' : 'Check'}</span>` : daysAgo(r.created) <= 14 ? '<span class="status-pill">New</span>' : '';
+    const status = r.status === 'unplanned' ? '<span class="status-pill warn">Not saved</span>' : r.issues.length ? `<span class="status-pill warn" title="${esc(r.issues[0].label)}">${r.issues[0].type === 'dup' ? 'Duplicate?' : r.issues[0].type === 'stale' ? 'Unused' : 'Check'}</span>` : daysAgo(r.created) <= 14 ? '<span class="status-pill">New</span>' : '';
     const acts = r.status === 'unplanned' ? `<button class="btn sm" data-fix="add" data-pv-id="${esc(r.id)}">${PI.plus}Add to list</button><button class="icon-btn" data-pv-more="${esc(r.id)}" title="More" aria-haspopup="menu">${I.more}</button>`
       : `<button class="icon-btn" data-pv-edit="${esc(r.id)}" title="Edit value">${I.edit}</button><button class="icon-btn" data-pv-grp="${esc(r.v)}" title="Groupings">${PI.branch}</button><button class="icon-btn" data-pv-more="${esc(r.id)}" title="More" aria-haspopup="menu">${I.more}</button>`;
-    return `<div class="lrow prow ${sel ? 'sel' : ''} ${r.status === 'archived' ? 'off' : ''} ${r.status === 'unplanned' ? 'unplanned' : ''}" data-pv="${esc(r.id)}" role="row" tabindex="0" style="animation-delay:${Math.min(i, 12) * 20}ms">
+    return `<div class="lrow prow ${sel ? 'sel' : ''} ${r.status === 'unplanned' ? 'unplanned' : ''}" data-pv="${esc(r.id)}" role="row" tabindex="0" style="animation-delay:${Math.min(i, 12) * 20}ms">
       <span class="cb ${sel ? 'on' : ''} ${r.status === 'unplanned' ? 'dis' : ''}" role="checkbox" aria-checked="${sel}" ${r.status === 'unplanned' ? '' : `data-sel="${esc(r.id)}"`} tabindex="-1">${I.check}</span>
       <div class="pv"><span class="pv-v"><span class="code v">${esc(r.v)}</span>${status}</span><span class="pv-sub">${val && val.pretty ? `<span class="pretty" title="Pretty name: what members see in the builder">${esc(val.pretty)}</span>` : ''}${val && val.pretty && val.desc ? '<span class="dotsep">·</span>' : ''}${val && val.desc ? `<span>${esc(val.desc)}</span>` : ''}${r.issues.length && !(val && (val.pretty || val.desc)) ? `<span class="issue" title="${esc(r.issues[0].label)}">${esc(r.issues[0].label)}</span>` : ''}</span></div>
       <div class="pgrp">${grp}</div>
@@ -1017,13 +1015,13 @@
       <div class="acts">${acts}</div></div>`;
   }
   function paramValuesCard(p = curParam()) {
-    const rows = paramValueRows(p); const all = paramValueRows(p, { all: true }); const f = state.pfilter;
+    const rows = paramValueRows(p); const all = paramValueRows(p, { all: true });
     const sortBtn = (key, label) => `<button data-lsort="${key}" class="${state.lsort.key === key ? 'on' : ''} ${state.lsort.key === key && state.lsort.dir === 1 ? 'asc' : ''}">${label}${I.sort}</button>`;
     const head = `<div class="lrow prow head" role="row"><span class="cb" id="sel-all" role="checkbox" aria-checked="false" title="Select all">${I.check}</span><div>${sortBtn('value', 'Value')}</div><div>Groupings</div><div>${sortBtn('links', 'Used by')}</div><div>${sortBtn('last', 'Last used')}</div><div>${sortBtn('created', 'Added')}</div><div></div></div>`;
     const empty = !p.values.length && !all.length ? `<div class="empty" style="min-height:180px"><strong>No saved values yet</strong>${p.format === 'number' ? 'Members type a number per link. Add values here to offer a dropdown instead.' : 'Add values above, paste a list, or import a CSV.'}</div>`
-      : `<div class="empty" style="min-height:160px"><strong>${f === 'review' ? 'Nothing to review' : f === 'archived' ? 'No archived values' : 'No values match'}</strong>${f === 'review' ? 'Every value is saved, unique and in use.' : state.lq ? 'Try a different search.' : 'Try another filter.'}${state.lq || f !== 'all' ? `<div style="margin-top:10px"><button class="btn" id="pm-clear">Show all values</button></div>` : ''}</div>`;
+      : `<div class="empty" style="min-height:160px"><strong>No values match</strong>Try a different search.${state.lq ? `<div style="margin-top:10px"><button class="btn" id="pm-clear">Show all values</button></div>` : ''}</div>`;
     return `<section class="card" id="list-table"><div class="ltable">${head}${rows.length ? rows.map(valueRowHTML).join('') : empty}</div>
-      <div class="tbl-foot"><span>Showing ${rows.length} of ${all.filter(r => r.status !== 'archived').length} values${state.lq ? ` matching “${esc(state.lq)}”` : ''}${all.some(r => r.status === 'archived') && f !== 'archived' ? ` · <button class="link-btn" data-pfilter="archived">${all.filter(r => r.status === 'archived').length} archived</button>` : ''}</span><span class="grow"></span><span>Click a row to edit · ${p.rules.includes('dropdown') ? 'members can only pick from this list' : 'members can also type a new value'}</span></div></section>`;
+      <div class="tbl-foot"><span>Showing ${rows.length} of ${all.length} values${state.lq ? ` matching “${esc(state.lq)}”` : ''}</span><span class="grow"></span><span>Click a row to edit · ${p.rules.includes('dropdown') ? 'members can only pick from this list' : 'members can also type a new value'}</span></div></section>`;
   }
   function groupingsHTML(p) {
     const child = childOf(p);
@@ -1045,24 +1043,22 @@
   }
   function parametersHTML() {
     const p = curParam(); const s = PSORTS.find(x => x[0] === state.lsort.key) || PSORTS[0];
-    const totalV = PARAMS.reduce((a, q) => a + q.values.filter(v => v.status !== 'archived').length, 0); const totalR = PARAMS.reduce((a, q) => a + reviewCount(q), 0);
     const tools = state.ptab === 'values' ? `<div class="toolbar links-tb pm-tb"><div class="search lq">${I.search}<input id="lq" placeholder="Search values, pretty names, people…" value="${esc(state.lq)}" aria-label="Search values"><button class="icon-btn" id="lq-clear" aria-label="Clear search" ${state.lq ? '' : 'hidden'}>${I.close}</button></div>
-        <div class="controls"><div class="seg pf">${PFILTERS.map(([k, l]) => `<button data-pfilter="${k}" class="${state.pfilter === k ? 'on' : ''}">${l}${k === 'review' && reviewCount(p) ? `<span class="badge">${reviewCount(p)}</span>` : ''}</button>`).join('')}</div>
-          <button class="tb-btn" id="lsort-btn" aria-haspopup="menu" aria-expanded="false">${I.sort}${s[1]}<span class="chev">${I.chev}</span></button>
+        <div class="controls"><button class="tb-btn" id="lsort-btn" aria-haspopup="menu" aria-expanded="false">${I.sort}${s[1]}<span class="chev">${I.chev}</span></button>
           <button class="tb-btn icon" id="list-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button></div></div>
       <form class="pm-addrow" id="pv-add-form" autocomplete="off"><span class="ic">${PI.plus}</span><input id="pv-add" placeholder="Add a ${esc(p.label.toLowerCase())} value… ${esc(p.hint)}" aria-label="Add value" ${p.format === 'number' ? 'inputmode="numeric"' : ''}><span class="hint" id="pv-hint">${p.rules.includes('lowercase') ? 'lowercase · ' : ''}${p.format === 'number' ? 'numbers only · ' : ''}spaces become “-” · Enter to add, paste a list to add several</span><button class="btn primary sm" type="submit" disabled>Add</button></form>` : '';
-    return `<div class="view"><div class="page-head"><div class="title"><h1>Parameters</h1><span class="status" tabindex="0" data-tip="${PARAMS.length} parameters · ${totalV} saved values · ${totalR} to review">${PARAMS.length} parameters · ${totalV} values${totalR ? ` · <b class="warn-t">${totalR} to review</b>` : ''}</span></div>
-        <div class="actions"><button class="btn" id="pm-import">${I.download}Import CSV</button><button class="btn primary" id="pm-add-param-top">${PI.plus}Add parameter</button></div></div>
-      <div class="pm-layout">${railHTML()}<div class="pm-main">${paramHeadHTML(p)}${state.ptab === 'values' ? reviewBannerHTML(p) + tools + paramValuesCard(p) : groupingsHTML(p)}</div></div>${bulkBarHTML()}</div>`;
+    return `<div class="view"><div class="page-head"><div class="title"><h1>Parameters</h1></div>
+        <div class="actions"><button class="btn" id="pm-import">${PI.upload}Import CSV</button><button class="btn" id="pm-export">${I.download}Export CSV</button></div></div>
+      <div class="pm-layout">${railHTML()}<div class="pm-main">${paramHeadHTML(p)}${state.ptab === 'values' ? tools + paramValuesCard(p) : groupingsHTML(p)}</div></div>${bulkBarHTML()}</div>`;
   }
 
   /* Parameters: actions */
-  function goParam(key, tab) { state.param = key; if (tab) state.ptab = tab; state.sel.clear(); state.lq = ''; state.pfilter = 'all'; render(); }
+  function goParam(key, tab) { state.param = key; if (tab) state.ptab = tab; state.sel.clear(); state.lq = ''; render(); }
   function normalizeValue(p, raw) { let v = raw.trim().replace(/\s+/g, '-'); if (p.rules.includes('lowercase')) v = v.toLowerCase(); return v; }
   function validateValue(p, raw) {
     const v = normalizeValue(p, raw); if (!v) return { ok: false };
     if (p.format === 'number' && !/^\d+$/.test(v)) return { ok: false, msg: 'Numbers only for this parameter' };
-    const exact = p.values.find(x => x.v === v); if (exact) return { ok: false, msg: exact.status === 'archived' ? `“${v}” is archived. Restore it instead?` : `“${v}” is already in the list`, restore: exact.status === 'archived' ? v : null };
+    const exact = p.values.find(x => x.v === v); if (exact) return { ok: false, msg: `“${v}” is already in the list` };
     const twin = p.values.find(x => x.status !== 'archived' && x.v.toLowerCase() === v.toLowerCase()); if (twin) return { ok: false, msg: `“${twin.v}” already exists with different capitals` };
     const changed = v !== raw.trim(); return { ok: true, v, msg: changed ? `Will be saved as “${v}”` : '' };
   }
@@ -1080,20 +1076,16 @@
         <div class="field"><label for="ev-d">Description <span class="sm-muted">when to use it (optional)</span></label><div class="search"><input id="ev-d" value="${esc(val.desc)}" placeholder="Shown as help text in the builder" style="font-family:var(--font-ui)"></div></div>
         ${p.deps ? `<div class="field"><label>Available when <span class="code">${esc(paramOf(p.deps.parent).utm)}</span> is</label><div class="ev-grp">${parents.length ? parents.map(x => `<span class="kid">${esc(x)}</span>`).join('') : '<span class="untagged">any value (not in a grouping)</span>'}<button class="btn sm" id="ev-grp">${PI.branch}Edit groupings</button></div></div>` : ''}
         <div class="tpl-foot"><span class="sm-muted">${row.links ? `Used by <b>${row.links}</b> link${row.links === 1 ? '' : 's'} · ${fmt.n(row.clicks)} clicks` : 'Not used by any link'} · added ${fmt.d(new Date(val.created + 'T00:00:00'), { month: 'short', day: 'numeric', year: 'numeric' })} by ${esc(val.by)}</span><span class="grow"></span>
-          <button class="btn" id="ev-arch">${val.status === 'archived' ? I.reset : PI.archive}${val.status === 'archived' ? 'Restore' : 'Archive'}</button><button class="btn primary" id="ev-save">Save</button></div></div>`, { width: 560, onMount(s) {
+          <button class="btn danger-t" id="ev-del">${I.close}Delete</button><button class="btn primary" id="ev-save">Save</button></div></div>`, { width: 560, onMount(s) {
         const iv = $('#ev-v', s), hint = $('#ev-hint', s);
         iv.addEventListener('input', () => { if (iv.value.trim() === val.v) { hint.textContent = ''; return; } const r = validateValue(p, iv.value); hint.textContent = r.ok ? (r.msg || '') : (r.msg || ''); hint.style.color = r.ok ? '' : 'var(--down)'; $('#ev-save', s).disabled = !r.ok; });
         $('#ev-save', s).addEventListener('click', () => { const nv = iv.value.trim() === val.v ? val.v : validateValue(p, iv.value).v; const old = val.v;
           if (nv !== old) { val.v = nv; if (p.deps) Object.values(p.deps.allow).forEach(a => { const i = a.indexOf(old); if (i > -1) a[i] = nv; }); const c = childOf(p); if (c && c.deps.allow[old]) { c.deps.allow[nv] = c.deps.allow[old]; delete c.deps.allow[old]; } }
           val.pretty = $('#ev-p', s).value.trim(); val.desc = $('#ev-d', s).value.trim(); closeModal(); render(); toast(nv !== old ? `Renamed “${old}” to “${nv}”` : `Saved “${nv}”`); });
-        $('#ev-arch', s).addEventListener('click', () => { closeModal(); if (val.status === 'archived') { val.status = 'active'; render(); toast(`Restored “${val.v}”`); } else archiveValues(p, [val.v]); });
+        $('#ev-del', s).addEventListener('click', () => { closeModal(); confirmDeleteValue(p, paramValueRows(p, { all: true }).find(r => r.v === val.v)); });
         const g = $('#ev-grp', s); if (g) g.addEventListener('click', () => { closeModal(); groupingPicker(p, val.v); });
         setTimeout(() => $('#ev-p', s).focus(), 60);
       } });
-  }
-  function archiveValues(p, vs) {
-    vs.forEach(v => { const val = p.values.find(x => x.v === v); if (val) val.status = 'archived'; }); state.sel.clear(); render();
-    toast(`Archived ${vs.length === 1 ? `“${vs[0]}”` : vs.length + ' values'}: hidden from the builder, links unchanged`);
   }
   function mergeModal(p, vs, into) {
     const rows = vs.map(v => paramValueRows(p, { all: true }).find(r => r.v === v)).filter(Boolean);
@@ -1113,24 +1105,8 @@
           closeModal(); state.sel.clear(); render(); toast(`Merged into “${keep}”`); });
       } });
   }
-  function reviewModal(p) {
-    const ORDER = { unplanned: 0, dup: 1, case: 2, space: 3, stale: 4 };
-    const items = paramValueRows(p, { all: true }).filter(r => r.issues.length).flatMap(r => r.issues.map(i => ({ r, i }))).sort((x, y) => ORDER[x.i.type] - ORDER[y.i.type] || y.r.links - x.r.links);
-    const row = ({ r, i }, idx) => `<div class="rv-row" data-rv="${idx}"><span class="cb on" role="checkbox" aria-checked="true" data-rv-cb="${idx}">${I.check}</span>
-      <div class="txt"><span class="code v">${esc(r.v)}</span><span class="sm-muted" style="white-space:normal">${esc(i.label)}</span></div>
-      <span class="rv-fix">${i.fix === 'merge' ? `${PI.merge}Merge into <span class="code">${esc(i.into)}</span>` : i.fix === 'rename' ? `${I.edit}Rename to <span class="code">${esc(i.to)}</span>` : i.fix === 'add' ? `${PI.plus}Add to list` : `${PI.archive}Archive`}</span></div>`;
-    openModal(`<div class="modal-h"><h3>Review ${esc(p.label.toLowerCase())} values<span class="sub">${items.length} suggestion${items.length === 1 ? '' : 's'}</span></h3><button class="close" aria-label="Close">${I.close}</button></div>
-      <div class="modal-b"><p class="sm-muted" style="white-space:normal;margin:4px 0 12px">Untick anything you want to keep as it is. Nothing here deletes a link or changes a URL that's already out there.</p>
-        <div class="rv-list">${items.map(row).join('')}</div>
-        <div class="tpl-foot"><span class="sm-muted" id="rv-n"><b>${items.length}</b> selected</span><span class="grow"></span><button class="btn close">Not now</button><button class="btn primary" id="rv-ok">Apply</button></div></div>`, { width: 600, onMount(s) {
-        const on = new Set(items.map((_, i) => i));
-        s.addEventListener('click', e => { const b = e.target.closest('[data-rv-cb]'); if (!b) return; const i = +b.dataset.rvCb; if (on.has(i)) on.delete(i); else on.add(i); b.classList.toggle('on', on.has(i)); b.setAttribute('aria-checked', on.has(i)); b.closest('.rv-row').classList.toggle('skip', !on.has(i)); $('#rv-n b', s).textContent = on.size; });
-        $('#rv-ok', s).addEventListener('click', () => { let n = 0; [...on].sort((a, b) => a - b).forEach(idx => { const { r, i } = items[idx]; n++; applyFix(p, r, i, true); }); closeModal(); state.sel.clear(); render(); toast(`Applied ${n} fix${n === 1 ? '' : 'es'}`); });
-      } });
-  }
   function applyFix(p, r, i, silent) {
     if (i.fix === 'add') { addValues(p, [r.v]); if (!silent) { render(); toast(`Added “${r.v}” to ${p.label.toLowerCase()}`); } return; }
-    if (i.fix === 'archive') { const val = p.values.find(x => x.v === r.v); if (val) val.status = 'archived'; if (!silent) { render(); toast(`Archived “${r.v}”`); } return; }
     if (i.fix === 'rename') { const val = p.values.find(x => x.v === r.v); if (val && !p.values.find(x => x.v === i.to)) { val.v = i.to; } else if (val) { const j = p.values.indexOf(val); p.values.splice(j, 1); } if (!silent) { render(); toast(`Renamed to “${i.to}”`); } return; }
     if (i.fix === 'merge') { const j = p.values.findIndex(x => x.v === r.v); if (j > -1) p.values.splice(j, 1); if (p.deps) Object.values(p.deps.allow).forEach(a => { if (a.includes(r.v) && !a.includes(i.into)) a.push(i.into); const k = a.indexOf(r.v); if (k > -1) a.splice(k, 1); }); if (!silent) { render(); toast(`Merged “${r.v}” into “${i.into}”`); } }
   }
@@ -1142,13 +1118,13 @@
       ${r.links ? `<button class="mi" data-r="links">${I.links}<span class="grow">Show ${r.links} link${r.links === 1 ? '' : 's'}</span></button><button class="mi" data-r="analytics">${I.analytics}<span class="grow">Analytics for this value</span></button>` : ''}
       <button class="mi" data-r="copy">${I.copy}<span class="grow">Copy value</span></button>
       <div class="sep"></div>
-      ${un ? `<button class="mi" data-r="ignore">${PI.eyeOff}<span class="grow">Ignore (keep unsaved)</span></button>` : r.status === 'archived' ? `<button class="mi" data-r="restore">${I.reset}<span class="grow">Restore</span></button>` : `<button class="mi" data-r="archive">${PI.archive}<span class="grow">Archive</span></button>`}
+      ${un ? `<button class="mi" data-r="ignore">${PI.eyeOff}<span class="grow">Ignore (keep unsaved)</span></button>` : ''}
       ${!un ? `<button class="mi danger" data-r="delete">${I.close}<span class="grow">Delete${r.links ? ` <span class="sm-muted">(used by ${r.links})</span>` : ''}</span></button>` : ''}</div>`, { align: 'right', onMount(el) {
         el.addEventListener('click', e => { const b = e.target.closest('[data-r]'); if (!b) return; closePop(); const a = b.dataset.r;
           if (a === 'add') applyFix(p, r, { fix: 'add' }); else if (a === 'edit') editValueModal(p, r.v); else if (a === 'grp') groupingPicker(p, r.v); else if (a === 'merge') mergeWithPicker(p, r.v); else if (a === 'mergeinto') mergeWithPicker(p, r.v, true);
           else if (a === 'links') showValueLinks(p, r.v); else if (a === 'analytics') { if (!p.custom) { state.filters = [{ dim: p.key, op: 'is', values: [r.v] }]; goOverview(); } else toast('Custom parameters aren\'t in Analytics yet'); }
-          else if (a === 'copy') copyText(r.v, 'Value copied'); else if (a === 'ignore') toast(`“${r.v}” stays unsaved; it won't be suggested again`); else if (a === 'restore') { r.val.status = 'active'; render(); toast(`Restored “${r.v}”`); }
-          else if (a === 'archive') archiveValues(p, [r.v]); else if (a === 'delete') confirmDeleteValue(p, r); });
+          else if (a === 'copy') copyText(r.v, 'Value copied'); else if (a === 'ignore') toast(`“${r.v}” stays unsaved; it won't be suggested again`);
+          else if (a === 'delete') confirmDeleteValue(p, r); });
       } });
   }
   function mergeWithPicker(p, v, intoOnly) {
@@ -1162,10 +1138,9 @@
   }
   function confirmDeleteValue(p, r) {
     openModal(`<div class="modal-h"><h3>Delete “${esc(r.v)}”?</h3><button class="close" aria-label="Close">${I.close}</button></div>
-      <div class="modal-b about"><p>${r.links ? `<b>${r.links}</b> link${r.links === 1 ? '' : 's'} use this value. They keep working, but the value disappears from the builder and from any grouping. <b>Archiving</b> keeps it on record and is reversible.` : 'Nothing uses this value. It will be removed from the list and from any grouping.'}</p>
-      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px"><button class="btn close">Cancel</button>${r.links ? `<button class="btn" id="dv-arch">${PI.archive}Archive instead</button>` : ''}<button class="btn primary danger" id="dv-ok">Delete</button></div></div>`, { width: 460, onMount(s) {
+      <div class="modal-b about"><p>${r.links ? `<b>${r.links}</b> link${r.links === 1 ? '' : 's'} use this value. They keep working, but the value disappears from the builder and from any grouping. This can't be undone.` : 'Nothing uses this value. It will be removed from the list and from any grouping.'}</p>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px"><button class="btn close">Cancel</button><button class="btn primary danger" id="dv-ok">Delete</button></div></div>`, { width: 460, onMount(s) {
         $('#dv-ok', s).addEventListener('click', () => { closeModal(); const j = p.values.findIndex(x => x.v === r.v); if (j > -1) p.values.splice(j, 1); if (p.deps) Object.values(p.deps.allow).forEach(a => { const k = a.indexOf(r.v); if (k > -1) a.splice(k, 1); }); const c = childOf(p); if (c) delete c.deps.allow[r.v]; state.sel.clear(); render(); toast(`Deleted “${r.v}”`); });
-        const a = $('#dv-arch', s); if (a) a.addEventListener('click', () => { closeModal(); archiveValues(p, [r.v]); });
       } });
   }
   function showValueLinks(p, v) { if (p.custom) { toast('Custom parameters aren\'t searchable on Links yet'); return; } state.from = 'parameters'; goLinks(); state.filters = [{ dim: p.key, op: 'is', values: [v] }]; render(); }
@@ -1287,12 +1262,11 @@
   function paramsMoreMenu(anchor) {
     openPop(anchor, `<div class="menu" style="width:240px">
       <button class="mi" data-act="csv">${I.download}<span class="grow">Export all parameters as CSV</span></button>
-      <button class="mi" data-act="import">${I.download}<span class="grow">Import parameters via CSV</span></button>
+      <button class="mi" data-act="import">${PI.upload}<span class="grow">Import parameters via CSV</span></button>
       <button class="mi" data-act="ga">${I.analytics}<span class="grow">Import from Google Analytics</span></button>
       <div class="sep"></div>
-      <button class="mi" data-act="review-all">${PI.spark}<span class="grow">Review every parameter</span>${PARAMS.reduce((a, q) => a + reviewCount(q), 0) ? `<span class="pro">${PARAMS.reduce((a, q) => a + reviewCount(q), 0)}</span>` : ''}</button>
       <button class="mi" data-act="about">${I.info}<span class="grow">Tips &amp; shortcuts</span></button></div>`, { align: 'right', onMount(el) { el.addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (!b) return; closePop(); const a = b.dataset.act;
-        if (a === 'csv') toast('Exported all parameters as CSV'); else if (a === 'import') importParamsModal(); else if (a === 'about') tipsModal(); else if (a === 'review-all') { const p = PARAMS.find(q => reviewCount(q)); if (p) { goParam(p.key, 'values'); reviewModal(p); } else toast('Nothing to review'); } else toast(`${b.textContent.trim()} is outside this prototype`); }); } });
+        if (a === 'csv') toast('Exported all parameters as CSV'); else if (a === 'import') importParamsModal(); else if (a === 'about') tipsModal(); else toast(`${b.textContent.trim()} is outside this prototype`); }); } });
   }
 
   // Which table a list page draws, so search and sort can redraw just that card.
@@ -1565,9 +1539,9 @@
       <li><b>Link shorteners</b>: switch a domain off to hide it from the builder without breaking links. "Needs DNS" shows the record to add.</li></ul>
       <h4>Parameters</h4><ul>
       <li>Pick a parameter on the left; its saved values are on the right with how many links use each one. Top-to-bottom order is the link builder order.</li>
-      <li><b>Needs review</b> lists values used in links but never saved, likely duplicates (<i>Facebook</i> vs <i>facebook</i>), values with capitals or spaces, and values unused for 90 days. "Review &amp; fix" applies the suggested merges, renames and archives in one go.</li>
+      <li><b>Tags</b> on a row flag what needs a look: <i>Not saved</i> (used in links but not in the list), <i>Duplicate?</i> (e.g. <i>Facebook</i> vs <i>facebook</i>), <i>Check</i> (capitals or spaces), <i>Unused</i> (no links for 90 days) and <i>New</i>.</li>
       <li><b>Groupings</b> narrow a list: when medium is <i>paid_social</i>, source offers only paid platforms. Edit them per parent value, or per child value with the branch icon.</li>
-      <li>Type in the add row to add a value (paste a list to add several). Archive hides a value from the builder without touching links; Merge keeps one value and moves groupings across.</li></ul>
+      <li>Type in the add row to add a value (paste a list to add several). Delete removes a value from the builder; links that already use it keep working. Merge keeps one value and moves groupings across.</li></ul>
       <h4>Keyboard shortcuts</h4><p>With the date menu open: <kbd>D</kbd> Today · <kbd>E</kbd> Yesterday · <kbd>W</kbd> Last 7 days · <kbd>T</kbd> Last 30 days · <kbd>M</kbd> This month · <kbd>L</kbd> Last month · <kbd>Q</kbd> Last 90 days. <kbd>Esc</kbd> closes any menu.</p></div>`, { width: 560 });
   }
 
@@ -1642,16 +1616,15 @@
     if (state.view === 'parameters') {
       const p = curParam(); const pvId = el => el.dataset.pvId || el.dataset.pvEdit || el.dataset.pvMore || el.dataset.pvLinks || el.dataset.pv; const rowOf = id => paramValueRows(p, { all: true }).find(r => r.id === id);
       if ((el = hit('[data-pm]'))) { goParam(el.dataset.pm, el.dataset.ptab || null); return; }
-      if (hit('#pm-add-param') || hit('#pm-add-param-top')) { paramModal(null); return; }
+      if (hit('#pm-add-param')) { paramModal(null); return; }
+      if (hit('#pm-export')) { toast('Exported all parameters as CSV'); return; }
       if (hit('#pm-import')) { importParamsModal(); return; }
       if (hit('#pm-edit')) { paramModal(p); return; }
       if (hit('#pm-more')) { paramMoreMenu(hit('#pm-more'), p); return; }
       if (hit('#pm-shown')) { e.preventDefault(); p.shown = !p.shown; render(); toast(p.shown ? `${p.label} is back in the link builder` : `${p.label} hidden from the builder; existing links keep it`); return; }
       if (hit('[data-nav-rules]')) { e.preventDefault(); toast('Rules is outside this prototype'); return; }
       if ((el = hit('[data-ptab]'))) { state.ptab = el.dataset.ptab; state.sel.clear(); render(); return; }
-      if ((el = hit('[data-pfilter]'))) { state.pfilter = el.dataset.pfilter; state.sel.clear(); render(); return; }
-      if (hit('#pm-review')) { reviewModal(p); return; }
-      if (hit('#pm-clear')) { state.lq = ''; state.pfilter = 'all'; render(); return; }
+      if (hit('#pm-clear')) { state.lq = ''; render(); return; }
       if ((el = hit('[data-fix]'))) { const r = rowOf(el.dataset.pvId); if (r) applyFix(p, r, { fix: el.dataset.fix }); return; }
       if ((el = hit('[data-pv-links]'))) { const r = rowOf(el.dataset.pvLinks); if (r) showValueLinks(p, r.v); return; }
       if ((el = hit('[data-pv-edit]'))) { const r = rowOf(el.dataset.pvEdit); if (r && r.val) editValueModal(p, r.v); return; }
@@ -1687,9 +1660,8 @@
   $('#view').addEventListener('input', e => { if (e.target.id !== 'pv-add') return; const p = curParam(); const hint = $('#pv-hint'), btn = $('#pv-add-form .btn'); const raw = e.target.value;
     if (!raw.trim()) { hint.textContent = `${p.rules.includes('lowercase') ? 'lowercase · ' : ''}${p.format === 'number' ? 'numbers only · ' : ''}spaces become “-” · Enter to add, paste a list to add several`; hint.classList.remove('bad'); btn.disabled = true; return; }
     if (/[\n,]/.test(raw)) { const n = raw.split(/[\n,]/).map(x => x.trim()).filter(x => validateValue(p, x).ok).length; hint.textContent = `${n} new value${n === 1 ? '' : 's'} will be added`; hint.classList.remove('bad'); btn.disabled = !n; return; }
-    const r = validateValue(p, raw); hint.textContent = r.msg || 'Press Enter to add'; hint.classList.toggle('bad', !r.ok && !r.restore); btn.disabled = !r.ok && !r.restore; btn.textContent = r.restore ? 'Restore' : 'Add'; });
+    const r = validateValue(p, raw); hint.textContent = r.msg || 'Press Enter to add'; hint.classList.toggle('bad', !r.ok); btn.disabled = !r.ok; });
   $('#view').addEventListener('submit', e => { if (e.target.id !== 'pv-add-form') return; e.preventDefault(); const p = curParam(); const inp = $('#pv-add'); const raw = inp.value; const r = validateValue(p, raw);
-    if (r.restore) { p.values.find(x => x.v === r.restore).status = 'active'; render(); toast(`Restored “${r.restore}”`); return; }
     const added = addValues(p, raw.split(/[\n,]/)); if (!added.length) return; render(); const i = $('#pv-add'); if (i) i.focus();
     toast(added.length === 1 ? `Added “${added[0]}” to ${p.label.toLowerCase()}` : `Added ${added.length} values to ${p.label.toLowerCase()}`); });
   // Selection: update checkboxes + bulk bar in place, no re-render
