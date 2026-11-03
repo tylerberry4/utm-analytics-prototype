@@ -1046,7 +1046,7 @@
     const tools = state.ptab === 'values' ? `<div class="toolbar links-tb pm-tb"><div class="search lq">${I.search}<input id="lq" placeholder="Search values, pretty names, people…" value="${esc(state.lq)}" aria-label="Search values"><button class="icon-btn" id="lq-clear" aria-label="Clear search" ${state.lq ? '' : 'hidden'}>${I.close}</button></div>
         <div class="controls"><button class="tb-btn" id="lsort-btn" aria-haspopup="menu" aria-expanded="false">${I.sort}${s[1]}<span class="chev">${I.chev}</span></button>
           <button class="tb-btn icon" id="list-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button></div></div>
-      <form class="pm-addrow" id="pv-add-form" autocomplete="off"><span class="ic">${PI.plus}</span><input id="pv-add" placeholder="Add a ${esc(p.label.toLowerCase())} value… ${esc(p.hint)}" aria-label="Add value" ${p.format === 'number' ? 'inputmode="numeric"' : ''}><span class="hint" id="pv-hint">${p.rules.includes('lowercase') ? 'lowercase · ' : ''}${p.format === 'number' ? 'numbers only · ' : ''}spaces become “-” · Enter to add, paste a list to add several</span><button class="btn primary sm" type="submit" disabled>Add</button></form>` : '';
+      <form class="pm-addrow" id="pv-add-form" autocomplete="off"><span class="ic">${PI.plus}</span><input id="pv-add" placeholder="New ${esc(p.label.toLowerCase())} value, ${esc(p.hint)}" aria-label="Add value" ${p.format === 'number' ? 'inputmode="numeric"' : ''}><span class="hint" id="pv-hint">${p.rules.includes('lowercase') ? 'lowercase · ' : ''}${p.format === 'number' ? 'numbers only · ' : ''}spaces become “-” · Enter to add, paste a list to add several</span><button class="btn sm pm-addbtn" type="submit">${PI.plus}Add value</button></form>` : '';
     return `<div class="view"><div class="page-head"><div class="title"><h1>Parameters</h1></div>
         <div class="actions"><button class="btn" id="pm-import">${PI.upload}Import CSV</button><button class="btn" id="pm-export">${I.download}Export CSV</button></div></div>
       <div class="pm-layout">${railHTML()}<div class="pm-main">${paramHeadHTML(p)}${state.ptab === 'values' ? tools + paramValuesCard(p) : groupingsHTML(p)}</div></div>${bulkBarHTML()}</div>`;
@@ -1632,7 +1632,7 @@
       if ((el = hit('[data-pv-more]'))) { valueMenu(el, el.dataset.pvMore); return; }
       if ((el = hit('[data-grp-edit]'))) { groupingEditor(p, el.dataset.grpEdit); return; }
       if (hit('#grp-parent')) { chooseParent(p); return; }
-      if (hit('#pv-add-form')) { return; }
+      if (hit('#pv-add-form')) { if (!hit('.pm-addbtn')) { const i = $('#pv-add'); if (i && e.target !== i) i.focus(); } return; }
       if ((el = hit('[data-pv]'))) { const r = rowOf(el.dataset.pv); if (!r) return; if (r.val) editValueModal(p, r.v); else valueMenu($('[data-pv-more]', el) || el, r.id); return; }
     }
     // Link shorteners page
@@ -1658,10 +1658,10 @@
   $('#view').addEventListener('input', (() => { let t; return e => { if (e.target.id !== 'lq') return; state.lq = e.target.value; const c = $('#lq-clear'); if (c) c.hidden = !state.lq; clearTimeout(t); t = setTimeout(() => { swapSection(listTableEl(), LIST_TABLE[state.view]()); if (state.view === 'parameters') { const rail = $('.pm-rail'); if (rail) rail.outerHTML = railHTML(); } }, 120); }; })());
   // Parameters: inline add-value row (validates as you type, Enter adds, a pasted list adds several)
   $('#view').addEventListener('input', e => { if (e.target.id !== 'pv-add') return; const p = curParam(); const hint = $('#pv-hint'), btn = $('#pv-add-form .btn'); const raw = e.target.value;
-    if (!raw.trim()) { hint.textContent = `${p.rules.includes('lowercase') ? 'lowercase · ' : ''}${p.format === 'number' ? 'numbers only · ' : ''}spaces become “-” · Enter to add, paste a list to add several`; hint.classList.remove('bad'); btn.disabled = true; return; }
-    if (/[\n,]/.test(raw)) { const n = raw.split(/[\n,]/).map(x => x.trim()).filter(x => validateValue(p, x).ok).length; hint.textContent = `${n} new value${n === 1 ? '' : 's'} will be added`; hint.classList.remove('bad'); btn.disabled = !n; return; }
-    const r = validateValue(p, raw); hint.textContent = r.msg || 'Press Enter to add'; hint.classList.toggle('bad', !r.ok); btn.disabled = !r.ok; });
-  $('#view').addEventListener('submit', e => { if (e.target.id !== 'pv-add-form') return; e.preventDefault(); const p = curParam(); const inp = $('#pv-add'); const raw = inp.value; const r = validateValue(p, raw);
+    if (!raw.trim()) { hint.textContent = `${p.rules.includes('lowercase') ? 'lowercase · ' : ''}${p.format === 'number' ? 'numbers only · ' : ''}spaces become “-” · Enter to add, paste a list to add several`; hint.classList.remove('bad'); btn.classList.remove('ready'); return; }
+    if (/[\n,]/.test(raw)) { const n = raw.split(/[\n,]/).map(x => x.trim()).filter(x => validateValue(p, x).ok).length; hint.textContent = `${n} new value${n === 1 ? '' : 's'} will be added`; hint.classList.remove('bad'); btn.classList.toggle('ready', n > 0); return; }
+    const r = validateValue(p, raw); hint.textContent = r.msg || 'Press Enter to add'; hint.classList.toggle('bad', !r.ok); btn.classList.toggle('ready', r.ok); });
+  $('#view').addEventListener('submit', e => { if (e.target.id !== 'pv-add-form') return; e.preventDefault(); const p = curParam(); const inp = $('#pv-add'); const raw = inp.value; if (!raw.trim()) { inp.focus(); return; }
     const added = addValues(p, raw.split(/[\n,]/)); if (!added.length) return; render(); const i = $('#pv-add'); if (i) i.focus();
     toast(added.length === 1 ? `Added “${added[0]}” to ${p.label.toLowerCase()}` : `Added ${added.length} values to ${p.label.toLowerCase()}`); });
   // Selection: update checkboxes + bulk bar in place, no re-render
