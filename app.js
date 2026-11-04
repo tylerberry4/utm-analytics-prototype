@@ -1057,11 +1057,10 @@
     if (state.pview !== 'list') return boardPageHTML();
     state.ptab = 'values';
     const p = curParam(); const s = PSORTS.find(x => x[0] === state.lsort.key) || PSORTS[0];
-    const tools = state.ptab === 'values' ? `${listBarHTML('Search values, pretty names, people…', `<button class="tb-btn" id="lsort-btn" aria-haspopup="menu" aria-expanded="false">${I.sort}${s[1]}<span class="chev">${I.chev}</span></button>
-          <button class="tb-btn icon" id="list-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button>`)}
-      <form class="pm-addrow" id="pv-add-form" autocomplete="off"><span class="ic">${PI.plus}</span><input id="pv-add" placeholder="New ${esc(p.label.toLowerCase())} value, ${esc(p.hint)}" aria-label="Add value" ${p.format === 'number' ? 'inputmode="numeric"' : ''}><span class="hint" id="pv-hint">${p.rules.includes('lowercase') ? 'lowercase · ' : ''}${p.format === 'number' ? 'numbers only · ' : ''}spaces become “-” · Enter to add, paste a list to add several</span><button class="btn sm pm-addbtn" type="submit">${PI.plus}Add value</button></form>` : '';
+    const tools = state.ptab === 'values' ? `${listBarHTML('Search values, pretty names, people…', `<button class="tb-btn" id="lsort-btn" aria-haspopup="menu" aria-expanded="false">${I.sort}${s[1]}<span class="chev">${I.chev}</span></button>`)}
+      <form class="pm-addrow" id="pv-add-form" autocomplete="off"><label class="ic" for="pv-add" title="Add a value">${PI.plus}</label><div class="pm-addtxt"><input id="pv-add" placeholder="Add a ${esc(p.label.toLowerCase())} value…" aria-label="Add value" ${p.format === 'number' ? 'inputmode="numeric"' : ''}><span class="hint" id="pv-hint">${esc(p.hint)} · ${p.rules.includes('lowercase') ? 'lowercase · ' : ''}${p.format === 'number' ? 'numbers only · ' : ''}spaces become “-” · paste a list to add several</span></div><button class="btn sm pm-addbtn" type="submit">${PI.plus}Add value</button></form>` : '';
     return `<div class="view"><div class="page-head"><div class="title"><h1>Parameters</h1></div>
-        <div class="actions">${pviewSeg()}<button class="btn" id="pm-import">${PI.upload}Import CSV</button><button class="btn" id="pm-export">${I.download}Export CSV</button></div></div>
+        <div class="actions">${pviewSeg()}<button class="btn icon-only" id="pm-page-more" aria-haspopup="menu" aria-expanded="false" aria-label="Import, export and more" title="Import, export and more">${I.more}</button></div></div>
       <div class="pm-layout">${railHTML()}<div class="pm-main">${paramHeadHTML(p)}${state.ptab === 'values' ? tools + paramValuesCard(p) : groupingsHTML(p)}</div></div>${bulkBarHTML()}</div>`;
   }
 
@@ -1126,7 +1125,7 @@
   function boardPageHTML() {
     const grouped = PARAMS.filter(p => p.deps).length;
     return `<div class="view"><div class="page-head"><div class="title"><h1>Parameters</h1><span class="sm-muted">${PARAMS.length} parameters · ${grouped ? `${grouped} grouped` : 'no groupings yet'}</span></div>
-        <div class="actions">${pviewSeg()}<button class="btn" id="pm-import">${PI.upload}Import CSV</button><button class="btn" id="pm-export">${I.download}Export CSV</button></div></div>
+        <div class="actions">${pviewSeg()}<button class="btn icon-only" id="pm-page-more" aria-haspopup="menu" aria-expanded="false" aria-label="Import, export and more" title="Import, export and more">${I.more}</button></div></div>
       ${listBarHTML("Search every parameter's values…", '', { after: `<div class="pb-legend"><span><i class="ln"></i>grouped</span><span><i class="ln on"></i>selected chain</span><span class="sm-muted">Left to right is the order fields appear in the builder</span></div>` })}
       ${pbAreaHTML()}</div>`;
   }
@@ -2166,6 +2165,7 @@
       if (state.pview !== 'list' && pbClick(e)) return;
       if ((el = hit('[data-pm]'))) { goParam(el.dataset.pm, el.dataset.ptab || null); return; }
       if (hit('#pm-add-param')) { paramModal(null); return; }
+      if (hit('#pm-page-more')) { paramsMoreMenu(hit('#pm-page-more')); return; }
       if (hit('#pm-export')) { toast('Exported all parameters as CSV'); return; }
       if (hit('#pm-import')) { importParamsModal(); return; }
       if (hit('#pm-edit')) { paramModal(p); return; }
@@ -2206,7 +2206,7 @@
   $('#view').addEventListener('input', (() => { let t; return e => { if (e.target.id !== 'lq') return; state.lq = e.target.value; const c = $('#lq-clear'); if (c) c.hidden = !state.lq; clearTimeout(t); t = setTimeout(() => { if (state.view === 'parameters' && state.pview !== 'list') { pbRefresh(); return; } swapSection(listTableEl(), LIST_TABLE[state.view]()); if (state.view === 'parameters') { const rail = $('.pm-rail'); if (rail) rail.outerHTML = railHTML(); } }, 120); }; })());
   // Parameters: inline add-value row (validates as you type, Enter adds, a pasted list adds several)
   $('#view').addEventListener('input', e => { if (e.target.id !== 'pv-add') return; const p = curParam(); const hint = $('#pv-hint'), btn = $('#pv-add-form .btn'); const raw = e.target.value;
-    if (!raw.trim()) { hint.textContent = `${p.rules.includes('lowercase') ? 'lowercase · ' : ''}${p.format === 'number' ? 'numbers only · ' : ''}spaces become “-” · Enter to add, paste a list to add several`; hint.classList.remove('bad'); btn.classList.remove('ready'); return; }
+    if (!raw.trim()) { hint.textContent = `${p.hint} · ${p.rules.includes('lowercase') ? 'lowercase · ' : ''}${p.format === 'number' ? 'numbers only · ' : ''}spaces become “-” · paste a list to add several`; hint.classList.remove('bad'); btn.classList.remove('ready'); return; }
     if (/[\n,]/.test(raw)) { const n = raw.split(/[\n,]/).map(x => x.trim()).filter(x => validateValue(p, x).ok).length; hint.textContent = `${n} new value${n === 1 ? '' : 's'} will be added`; hint.classList.remove('bad'); btn.classList.toggle('ready', n > 0); return; }
     const r = validateValue(p, raw); hint.textContent = r.msg || 'Press Enter to add'; hint.classList.toggle('bad', !r.ok); btn.classList.toggle('ready', r.ok); });
   $('#view').addEventListener('submit', e => { if (e.target.id !== 'pv-add-form') return; e.preventDefault(); const p = curParam(); const inp = $('#pv-add'); const raw = inp.value; if (!raw.trim()) { inp.focus(); return; }

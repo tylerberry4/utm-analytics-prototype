@@ -735,7 +735,9 @@ button.status-pill { cursor: pointer; transition: box-shadow var(--dur) var(--ea
 .pm-rail .pm-add { justify-content: center; margin: 2px 2px 6px; flex: none; }
 .pm-foot { padding: 10px 10px 4px; font-size: 11px; color: var(--text-faint); line-height: 1.4; }
 .pm-main { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.pm-head { padding: 18px 20px 0; }
+.pm-head { padding: 20px 20px 18px; }
+.page-head + .pm-layout { margin-top: 12px; }
+.btn.icon-only { width: 34px; padding: 0; } .btn.icon-only svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .pm-title { display: flex; align-items: flex-start; gap: 16px; }
 .pm-title .txt { flex: 1; min-width: 0; }
 .pm-title h2 { margin: 0; font-size: 18px; font-weight: 600; color: var(--text-strong); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; letter-spacing: -.01em; }
@@ -758,17 +760,22 @@ button.status-pill { cursor: pointer; transition: box-shadow var(--dur) var(--ea
 .pm-tabs .n { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: var(--hover); color: var(--text-muted); font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; }
 .pm-tabs .n.warn { background: var(--qr-bg); color: #b45309; }
 .pm-tb { margin-top: 2px; } .pm-tb .controls { margin-left: auto; display: flex; align-items: center; gap: 6px; }
-.pm-addrow { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 8px 0 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); box-shadow: 0 1px 2px rgba(16,24,40,.04); cursor: text; transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
-.pm-addrow:hover { border-color: rgba(var(--accent-rgb), .45); }
-.pm-addrow:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), .12); }
-.pm-addrow .ic { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 8px; flex: none; background: var(--accent-faint); color: var(--accent-strong); } .pm-addrow .ic svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; }
-.pm-addbtn { color: var(--accent-strong); border-color: rgba(var(--accent-rgb), .35); background: var(--card); } .pm-addbtn svg { stroke: currentColor; }
+.pm-addrow { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 8px 8px 10px; border: 1.5px dashed rgba(var(--accent-rgb), .45); border-radius: var(--radius); background: var(--accent-faint); cursor: text; transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
+.pm-addrow:hover { border-color: var(--accent); background: var(--accent-subtle); }
+.pm-addrow:focus-within { border-style: solid; border-color: var(--accent); background: var(--card); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), .12); }
+.pm-addrow .ic { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; flex: none; background: var(--accent); color: #fff; cursor: pointer; }
+.pm-addrow .ic svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; }
+.pm-addtxt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pm-addrow input { width: 100%; border: 0; outline: none; background: none; padding: 0; font-family: var(--font-mono); font-size: 14px; color: var(--text-strong); }
+.pm-addrow input::placeholder { font-family: var(--font-ui); font-weight: 600; color: var(--accent-strong); }
+.pm-addrow:focus-within input::placeholder { color: var(--text-faint); font-weight: 400; }
+.pm-addrow .hint { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .pm-addrow .hint.bad { color: var(--down); }
+.pm-addrow .pm-addbtn { flex: none; }
+.pm-addbtn { color: var(--accent-strong); border-color: rgba(var(--accent-rgb), .35); background: var(--card); }
 .pm-addbtn:hover { background: var(--accent-faint); border-color: var(--accent); }
 .pm-addbtn.ready { background: var(--accent); border-color: var(--accent); color: #fff; }
 .pm-addbtn.ready:hover { background: var(--accent-strong); border-color: var(--accent-strong); }
-.pm-addrow input { flex: 1; min-width: 120px; border: 0; outline: none; background: none; font-family: var(--font-mono); font-size: 13px; color: var(--text-strong); }
-.pm-addrow input::placeholder { font-family: var(--font-ui); color: var(--text-muted); }
-.pm-addrow .hint { font-size: 12px; color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 46%; } .pm-addrow .hint.bad { color: var(--down); }
+.pm-addrow .pm-addbtn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; }
 .btn.sm { height: 28px; padding: 0 10px; font-size: 12px; } .btn.sm svg { width: 13px; height: 13px; }
 .lrow.prow { grid-template-columns: 20px minmax(200px, 1.6fr) minmax(150px, 1.1fr) 100px 84px 140px 120px; min-width: 880px; }
 .btn.sm { white-space: nowrap; }
@@ -1093,8 +1100,8 @@ button.status-pill { cursor: pointer; transition: box-shadow var(--dur) var(--ea
 .pb-lk svg { width: 11px; height: 11px; stroke: #fff; fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; opacity: 0; }
 .pb-lk:hover { border-color: var(--accent); transform: scale(1.1); } .pb-lk.on { background: var(--accent); border-color: var(--accent); } .pb-lk.on svg { opacity: 1; }
 .pb-empty { padding: 14px 12px; font-size: 12px; color: var(--text-faint); }
-.pb-addbtn { display: flex; align-items: center; gap: 6px; margin: 2px 6px 8px; padding: 0 8px; height: 32px; border-radius: 6px; font-size: 12.5px; font-weight: 500; color: var(--accent-strong); }
-.pb-addbtn:hover { background: var(--accent-faint); } .pb-addbtn svg, .pb-ghost svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; }
+.pb-addbtn { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 6px 8px 10px; padding: 0 8px; height: 34px; border: 1.5px dashed rgba(var(--accent-rgb), .4); border-radius: 8px; background: var(--accent-faint); font-size: 12.5px; font-weight: 600; color: var(--accent-strong); cursor: pointer; transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease); width: calc(100% - 16px); }
+.pb-addbtn:hover { border-color: var(--accent); background: var(--accent-subtle); } .pb-addbtn svg, .pb-ghost svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; }
 .pb-add { display: flex; flex-direction: column; gap: 4px; margin: 2px 8px 10px; }
 .pb-add input { height: 32px; padding: 0 8px; border: 1px solid var(--accent); border-radius: 6px; outline: 0; font: 13px var(--font-mono); color: var(--text-strong); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), .14); } .pb-add .sm-muted { font-size: 11px; padding-left: 2px; }
 .pb-ghost { flex: none; width: 168px; height: 120px; display: flex; align-items: center; justify-content: center; gap: 6px; border: 1.5px dashed var(--border-strong); border-radius: 10px; font-size: 13px; color: var(--text-muted); transition: border-color var(--dur-fast), color var(--dur-fast), background var(--dur-fast); }
