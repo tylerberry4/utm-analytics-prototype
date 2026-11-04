@@ -14,6 +14,26 @@
 - **New pages (light, example data):** Attributes, Rules, Members, Workspace settings (absorbs QR design defaults), and the seven Account pages. Edit/add actions show "outside this prototype" toasts.
 - Code: shell markup in `index.html`; the v5 block in `app.js` starts at "v5: two scopes"; styles at the end of `styles.css` ("v5 shell").
 
+## Synced with v4 (2026-11-05)
+
+Everything built in v4 up to 2026-11-05 00:42 (live commit a8a5225) is now in v5 too, with the v5 organization kept: filter field with value search and contains, one 44px control row on Analytics and the list pages, Parameters top row, color-coded link builder, the "Link created" overlay, and the rest listed below. Method: a three-way merge of v4-at-fork + v5's re-org changes + v4's later work, so v5's shell, scopes, Account pages and Shared tags are untouched. v4 itself was not changed. The previous v5 is backed up outside the project (Claude's scratchpad) for this session only.
+
+## Analytics filter bar + city location (2026-11-04, from the 2026-10-29 review)
+
+- **One control row** under the page title (updated the same day after Tyler's feedback): filter bar → date → All / link icon / QR icon (3 equal 44px sections) → ⋮, on Analytics and on each link's page. The filter value picker has **is / is not / contains**; contains previews the matching values and counts.
+- **After save** (2026-11-05): back to Links, the new link added at the top (tinted briefly), and a "Link created" overlay (short link, tagged URL, QR with PNG/JPEG/SVG + transparent + download, View analytics / Edit / Create another). `lbFinish()` + `createdModal()` in `app.js`. Links/QR typing is a live quick search again; Analytics typing shows value suggestions.
+- **Link builder colors** (2026-11-05): parameter fields are tiles tinted in each parameter's color; the preview tags use the same colors; hover/focus links a field and its tag (`pTone()`, `lbHL()`).
+- **Parameters top row** (2026-11-05): search · How grouping works (popover with the steps + line key) · Board / List · ⋮. Selected value bar floats at the bottom only when something is selected.
+- **Parameters tidy-up** (2026-11-04): Import/Export moved into a ⋮ next to Board / List; detail header padding fixed; add-value row is a dashed purple "Add a … value" box (white input on focus); board columns get dashed "+ Add …" buttons.
+- **Filter field** (2026-11-04, latest): outlined **Filter ▾** button (browse fields) + chips + a real search box. Typing in it, or anywhere on the page, drops down suggestions (Links/QR: "matching" text search first, then values and "contains"); focus alone opens nothing; "/" focuses. Links' Import CSV lives in ⋮. Code: `filterFieldHTML()` and the `#fq` handlers in `app.js`.
+- **List pages use the same row** (2026-11-04): Links and QR codes put Filter + chips + search in one 44px field, then Group / Sort / ⋮ as 44px buttons. Templates, Shorteners and Parameters get the same field (search only). Code: `listBarHTML()` in `app.js`.
+- **Value search in the filter menu** (2026-11-04): one box searches fields *and* their values. Typing "sale" lists `fall_sale_2026` (Campaign) and `acme.co/fall-sale` (Link) to add in one click, plus "Campaign contains “sale”" rows. ↑↓ + Enter. Picking a second value of the same field ORs it into the existing chip.
+- **Filter bar:** Empty, it reads "Filter by campaign, source, country, city…"; click anywhere on it or press **F**. Chips sit inside the bar, then "+ Add filter", the matching click count and Clear. Links and QR codes pages keep their own search + Filter button for now.
+- **Location is country → region → city.** Every city belongs to one region and country in the data, so filters stay consistent (City = Austin shows Texas and United States only). Region and city rows show the country flag; cities also show "Texas, US". The value picker finds places by country name ("kingdom" → UK cities).
+- **Map drill-down:** with one country filtered, the map footer offers "See cities in …". Hovering a country lists its top 3 cities.
+- A note under Regions / Cities says location is estimated from IP and cities are approximate.
+- Top links' "Top country" column now follows country/region/city filters.
+
 ## Files
 
 | File | What |
@@ -60,7 +80,7 @@ A full page (`#create-link`) with a breadcrumb back to where it was opened from;
 - Five steps: destination (one or several URLs, https/http picker; pasted UTM tags can be moved into fields) → template (pick several to bulk create) → tag it (required tags and whatever the template sets or asks for, in Parameters order, medium → source side by side; every other parameter under "Optional parameters", split UTM / Custom; field icons match the Parameters rail; hidden ones left out) → notes (optional, not in the URL) → short link & QR (domain + suggested ending, QR on by default with a design picker, smart routing row). "Don't shorten" turns QR off with a note. Example attributes were removed 2026-11-03.
 - Fields read Parameters and Rules: saved values with pretty names and usage, groupings narrow lists, dropdown-only refuses typed values (admin can add), lowercase/spaces cleaned with a note. Checks run when you leave a field and on Save.
 - Right panel: short link, full URL as clickable tags, GA4 channel hint, QR thumbnail, checklist. Save is always enabled; ⌘↵ saves. Success screen: copy, QR download, "Create another like this".
-- Saved links are not added to the Links table.
+- Saved links are added to the top of the Links table (0 clicks) for this session.
 
 ## Not wired
 

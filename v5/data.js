@@ -24,36 +24,30 @@
 
   /* ---------- Reference tables ---------- */
 
+  // Each country is split into cities; every city sits in one region, so country → region → city
+  // always agree when filtered. Region shares are the sum of their cities. 'Other' = clicks we can't place.
   const COUNTRIES = {
-    US: { name: 'United States',  flag: '🇺🇸', regions: { California: .28, Texas: .18, 'New York': .17, Florida: .12, Illinois: .09, Washington: .08, Other: .08 },
-          cities: { 'New York': .2, 'Los Angeles': .16, Austin: .12, Chicago: .1, 'San Francisco': .1, Seattle: .08, Miami: .07, Other: .17 } },
-    GB: { name: 'United Kingdom', flag: '🇬🇧', regions: { England: .82, Scotland: .1, Wales: .05, 'Northern Ireland': .03 },
-          cities: { London: .55, Manchester: .14, Birmingham: .1, Edinburgh: .08, Bristol: .06, Other: .07 } },
-    CA: { name: 'Canada',         flag: '🇨🇦', regions: { Ontario: .5, 'British Columbia': .22, Quebec: .18, Alberta: .1 },
-          cities: { Toronto: .42, Vancouver: .22, Montreal: .18, Calgary: .1, Other: .08 } },
-    DE: { name: 'Germany',        flag: '🇩🇪', regions: { Berlin: .3, Bavaria: .26, Hesse: .18, Hamburg: .14, Other: .12 },
-          cities: { Berlin: .34, Munich: .26, Frankfurt: .18, Hamburg: .14, Other: .08 } },
-    AU: { name: 'Australia',      flag: '🇦🇺', regions: { 'New South Wales': .45, Victoria: .32, Queensland: .15, Other: .08 },
-          cities: { Sydney: .46, Melbourne: .32, Brisbane: .14, Other: .08 } },
-    FR: { name: 'France',         flag: '🇫🇷', regions: { 'Île-de-France': .55, 'Auvergne-Rhône-Alpes': .2, Occitanie: .13, Other: .12 },
-          cities: { Paris: .58, Lyon: .18, Toulouse: .12, Other: .12 } },
-    NL: { name: 'Netherlands',    flag: '🇳🇱', regions: { 'North Holland': .55, 'South Holland': .3, Utrecht: .15 },
-          cities: { Amsterdam: .56, Rotterdam: .24, Utrecht: .2 } },
-    ES: { name: 'Spain',          flag: '🇪🇸', regions: { Madrid: .48, Catalonia: .36, Andalusia: .16 },
-          cities: { Madrid: .5, Barcelona: .36, Seville: .14 } },
-    IN: { name: 'India',          flag: '🇮🇳', regions: { Maharashtra: .4, Karnataka: .35, Delhi: .25 },
-          cities: { Mumbai: .4, Bengaluru: .35, 'New Delhi': .25 } },
-    BR: { name: 'Brazil',         flag: '🇧🇷', regions: { 'São Paulo': .62, 'Rio de Janeiro': .38 },
-          cities: { 'São Paulo': .62, 'Rio de Janeiro': .38 } },
-    MX: { name: 'Mexico',         flag: '🇲🇽', regions: { 'Mexico City': .7, Jalisco: .3 },
-          cities: { 'Mexico City': .7, Guadalajara: .3 } },
-    IE: { name: 'Ireland',        flag: '🇮🇪', regions: { Leinster: .85, Munster: .15 },
-          cities: { Dublin: .85, Cork: .15 } },
-    SE: { name: 'Sweden',         flag: '🇸🇪', regions: { Stockholm: .7, Skåne: .3 },
-          cities: { Stockholm: .7, Malmö: .3 } },
-    JP: { name: 'Japan',          flag: '🇯🇵', regions: { Tokyo: .75, Osaka: .25 },
-          cities: { Tokyo: .75, Osaka: .25 } },
+    US: { name: 'United States',  flag: '🇺🇸', cities: { 'New York': ['New York', .2], 'Los Angeles': ['California', .16], Austin: ['Texas', .12], Chicago: ['Illinois', .1], 'San Francisco': ['California', .1], Seattle: ['Washington', .08], Miami: ['Florida', .07], Other: [null, .17] } },
+    GB: { name: 'United Kingdom', flag: '🇬🇧', cities: { London: ['England', .55], Manchester: ['England', .14], Birmingham: ['England', .1], Edinburgh: ['Scotland', .08], Cardiff: ['Wales', .05], Belfast: ['Northern Ireland', .03], Other: [null, .05] } },
+    CA: { name: 'Canada',         flag: '🇨🇦', cities: { Toronto: ['Ontario', .42], Vancouver: ['British Columbia', .22], Montreal: ['Quebec', .18], Calgary: ['Alberta', .1], Other: [null, .08] } },
+    DE: { name: 'Germany',        flag: '🇩🇪', cities: { Berlin: ['Berlin', .34], Munich: ['Bavaria', .26], Frankfurt: ['Hesse', .18], Hamburg: ['Hamburg', .14], Other: [null, .08] } },
+    AU: { name: 'Australia',      flag: '🇦🇺', cities: { Sydney: ['New South Wales', .46], Melbourne: ['Victoria', .32], Brisbane: ['Queensland', .14], Other: [null, .08] } },
+    FR: { name: 'France',         flag: '🇫🇷', cities: { Paris: ['Île-de-France', .58], Lyon: ['Auvergne-Rhône-Alpes', .18], Toulouse: ['Occitanie', .12], Other: [null, .12] } },
+    NL: { name: 'Netherlands',    flag: '🇳🇱', cities: { Amsterdam: ['North Holland', .56], Rotterdam: ['South Holland', .24], Utrecht: ['Utrecht', .2] } },
+    ES: { name: 'Spain',          flag: '🇪🇸', cities: { Madrid: ['Madrid', .5], Barcelona: ['Catalonia', .36], Seville: ['Andalusia', .14] } },
+    IN: { name: 'India',          flag: '🇮🇳', cities: { Mumbai: ['Maharashtra', .4], Bengaluru: ['Karnataka', .35], 'New Delhi': ['Delhi', .25] } },
+    BR: { name: 'Brazil',         flag: '🇧🇷', cities: { 'São Paulo': ['São Paulo', .62], 'Rio de Janeiro': ['Rio de Janeiro', .38] } },
+    MX: { name: 'Mexico',         flag: '🇲🇽', cities: { 'Mexico City': ['Mexico City', .7], Guadalajara: ['Jalisco', .3] } },
+    IE: { name: 'Ireland',        flag: '🇮🇪', cities: { Dublin: ['Leinster', .85], Cork: ['Munster', .15] } },
+    SE: { name: 'Sweden',         flag: '🇸🇪', cities: { Stockholm: ['Stockholm', .7], Malmö: ['Skåne', .3] } },
+    JP: { name: 'Japan',          flag: '🇯🇵', cities: { Tokyo: ['Tokyo', .75], Osaka: ['Osaka', .25] } },
   };
+  // Flat list of places: one entry per city, with the labels used for the region and city dimensions.
+  const PLACES = []; const PLACE = { region: {}, city: {} };
+  for (const [cc, c] of Object.entries(COUNTRIES)) for (const [name, [region, share]] of Object.entries(c.cities)) {
+    const pl = { cc, share, city: name === 'Other' ? `Other (${cc})` : name, region: region || `Other (${cc})` };
+    PLACES.push(pl); PLACE.city[pl.city] = { cc, region: region }; PLACE.region[pl.region] = { cc };
+  }
 
   const BROWSERS = { Chrome: .58, Safari: .25, Edge: .08, Firefox: .06, Other: .03 };
   const OS_BY_DEVICE = {
@@ -161,8 +155,8 @@
   function weights(link, key, part) {
     switch (key) {
       case 'country':  return link.geo;
-      case 'region':   return derive(link.geo, 'regions');
-      case 'city':     return derive(link.geo, 'cities');
+      case 'region':
+      case 'city':     return derive(link.geo, key);
       case 'device':   return part === 'qr' ? QR_DEVICE : link.dev;
       case 'browser':  return BROWSERS;
       case 'os':       return deriveOS(part === 'qr' ? QR_DEVICE : link.dev);
@@ -171,15 +165,35 @@
     return {};
   }
   const deriveCache = {};
-  function derive(geo, sub) {
-    const k = sub + JSON.stringify(geo);
+  function derive(geo, key) {
+    const k = key + JSON.stringify(geo);
     if (deriveCache[k]) return deriveCache[k];
     const out = {};
-    for (const [c, w] of Object.entries(geo)) for (const [name, s] of Object.entries(COUNTRIES[c][sub])) {
-      const label = name === 'Other' ? `Other (${c})` : name;
-      out[label] = (out[label] || 0) + w * s;
-    }
+    for (const pl of PLACES) if (geo[pl.cc]) out[pl[key]] = (out[pl[key]] || 0) + geo[pl.cc] * pl.share;
     return (deriveCache[k] = out);
+  }
+  // Country, region and city filters are nested, so they're applied together per place, not multiplied.
+  const GEO = ['country', 'region', 'city'];
+  const placeLabel = (pl, key) => key === 'country' ? pl.cc : pl[key];
+  // Does value v pass filter f? ops: 'is', 'is not', 'contains' (part of the value, any case; countries match by name too).
+  function passes(f, v) {
+    let hit;
+    if (f.op === 'contains') {
+      const t = String(v).toLowerCase(), name = f.dim === 'country' && COUNTRIES[v] ? COUNTRIES[v].name.toLowerCase() : '';
+      hit = f.values.some(x => { x = x.toLowerCase(); return t.includes(x) || (name && name.includes(x)); });
+    } else hit = f.values.includes(v);
+    return f.op === 'is not' ? !hit : hit;
+  }
+  function geoPlaces(link, geoFilters) {
+    return PLACES.filter(pl => link.geo[pl.cc] && geoFilters.every(f => passes(f, placeLabel(pl, f.dim))))
+      .map(pl => ({ pl, w: link.geo[pl.cc] * pl.share }));
+  }
+  // A link's country mix after any country/region/city filters (shares add up to 1).
+  function linkCountries(link, filters) {
+    const ps = geoPlaces(link, filters.filter(f => GEO.includes(f.dim))), out = {}; let t = 0;
+    for (const { pl, w } of ps) { out[pl.cc] = (out[pl.cc] || 0) + w; t += w; }
+    for (const k in out) out[k] /= t || 1;
+    return out;
   }
   function deriveOS(dev) {
     const out = {};
@@ -202,22 +216,22 @@
     const i0 = clamp(dayIndex(range.start), 0, DAYS - 1);
     const i1 = clamp(dayIndex(range.end), 0, DAYS - 1);
     const linkFilters = filters.filter(f => DIM[f.dim] && DIM[f.dim].kind === 'link');
-    const attrFilters = filters.filter(f => DIM[f.dim] && DIM[f.dim].kind === 'attr');
+    const attrFilters = filters.filter(f => DIM[f.dim] && DIM[f.dim].kind === 'attr' && !GEO.includes(f.dim));
+    const geoFilters = filters.filter(f => GEO.includes(f.dim));
     const trig = filters.find(f => f.dim === 'trigger');
     let parts = trigger === 'all' ? ['link', 'qr'] : [trigger];
-    if (trig) parts = parts.filter(p => (trig.op === 'is') === trig.values.includes(p === 'qr' ? 'QR scan' : 'Link click'));
+    if (trig) parts = parts.filter(p => passes(trig, p === 'qr' ? 'QR scan' : 'Link click'));
 
     const rows = [];
     for (const link of LINKS) {
-      if (!linkFilters.every(f => (f.op === 'is') === f.values.includes(linkValue(link, f.dim)))) continue;
+      if (!linkFilters.every(f => passes(f, linkValue(link, f.dim)))) continue;
       const row = { link, clicks: 0, unique: 0, linkClicks: 0, qr: 0, series: [], mult: {} };
       for (const part of parts) {
         // multiplier from attribute filters for this part
-        let m = 1;
+        let m = geoFilters.length ? geoPlaces(link, geoFilters).reduce((a, x) => a + x.w, 0) : 1;
         for (const f of attrFilters) {
           const w = weights(link, f.dim, part);
-          const sel = f.values.reduce((a, v) => a + (w[v] || 0), 0);
-          m *= f.op === 'is' ? sel : 1 - sel;
+          m *= Object.entries(w).reduce((a, [v, x]) => a + (passes(f, v) ? x : 0), 0);
         }
         row.mult[part] = m;
       }
@@ -232,7 +246,7 @@
       row.qr = sum(row.series, 'qr');
       row.clicks = row.linkClicks + row.qr;
       row.unique = row.clicks * link.uniq;
-      if (row.clicks > 0.5) rows.push(row);
+      if (row.clicks > 0.5 || link.fresh) rows.push(row); // fresh = just made in the builder, no clicks yet
     }
     rows.sort((a, b) => b.clicks - a.clicks);
 
@@ -254,6 +268,11 @@
         for (const r of rows) { const v = linkValue(r.link, key); agg[v] = (agg[v] || 0) + r.clicks; }
       } else if (key === 'trigger') {
         agg['Link click'] = totals.linkClicks; agg['QR scan'] = totals.qr;
+      } else if (GEO.includes(key)) {
+        for (const r of rows) {
+          const ps = geoPlaces(r.link, geoFilters); const norm = ps.reduce((a, x) => a + x.w, 0) || 1;
+          for (const { pl, w } of ps) { const v = placeLabel(pl, key); agg[v] = (agg[v] || 0) + r.clicks * w / norm; }
+        }
       } else {
         const f = attrFilters.find(x => x.dim === key);
         for (const r of rows) for (const part of parts) {
@@ -262,7 +281,7 @@
           if (!partClicks) continue;
           let allowed = w, norm = 1;
           if (f) {
-            allowed = Object.fromEntries(Object.entries(w).filter(([v]) => (f.op === 'is') === f.values.includes(v)));
+            allowed = Object.fromEntries(Object.entries(w).filter(([v]) => passes(f, v)));
             norm = Object.values(allowed).reduce((a, b) => a + b, 0) || 1;
           }
           for (const [v, wt] of Object.entries(allowed)) agg[v] = (agg[v] || 0) + partClicks * wt / norm;
@@ -270,7 +289,7 @@
       }
       const total = totals.clicks || 1;
       return Object.entries(agg).filter(([, v]) => v >= 0.5).sort((a, b) => b[1] - a[1])
-        .map(([label, value]) => ({ label, value, share: value / total, code: key === 'country' ? label : null }));
+        .map(([label, value]) => ({ label, value, share: value / total, code: key === 'country' ? label : PLACE[key] ? PLACE[key][label].cc : null }));
     }
 
     return { rows, series, totals, breakdown, range: { start: dateAt(i0), end: dateAt(i1) }, days: n };
@@ -293,5 +312,5 @@
     return q.breakdown(key);
   }
 
-  window.DATA = { TODAY, DAYS, LINKS, COUNTRIES, DIMS, DIM, query, priorRange, valuesFor, linkValue, stripTime };
+  window.DATA = { TODAY, DAYS, LINKS, COUNTRIES, PLACE, linkCountries, DIMS, DIM, query, priorRange, valuesFor, linkValue, stripTime };
 })();

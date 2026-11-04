@@ -19,7 +19,7 @@
     parameters: '<svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M12 4v16"/></svg>',
     attributes: '<svg viewBox="0 0 24 24"><path d="M5 5h14M5 12h14M5 19h14"/><circle cx="8" cy="5" r="1.2" fill="currentColor"/><circle cx="8" cy="12" r="1.2" fill="currentColor"/><circle cx="8" cy="19" r="1.2" fill="currentColor"/></svg>',
     shorteners: '<svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><path d="M6 8.5v7M8.5 6h7M15.5 6c-6 0-9 5-9 9"/></svg>',
-    rules: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/></svg>',
+    rules: '<svg viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.5 3 8 7 10 4-2 7-5.5 7-10V6l-7-3z"/><path d="m9 12 2 2 4-4"/></svg>',
     members: '<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-4 3-6.5 6.5-6.5S15.5 16 15.5 20"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.5c3 0 5.5 2 5.5 5.5"/></svg>',
     support: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5"/><path d="M5.6 5.6l4 4M14.4 14.4l4 4M5.6 18.4l4-4M14.4 9.6l4-4"/></svg>',
     filter: '<svg viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg>',
@@ -129,6 +129,13 @@
     return `<span class="delta ${cls}" title="vs ${fmt.range(D.priorRange(state.range))}">${ic}<span>${Math.abs(Math.round(d * 100))}%</span></span>`;
   }
   function countrySpan(code) { const c = D.COUNTRIES[code]; return c ? `<span class="flag">${c.flag}</span>${esc(c.name)}` : esc(code); }
+  // Region / city label with its country's flag; cities also name their region.
+  function placeSpan(dim, label) {
+    const p = D.PLACE[dim][label]; if (!p) return esc(label);
+    const c = D.COUNTRIES[p.cc], where = label.startsWith('Other') ? '' : dim === 'city' && p.region ? `${p.region}, ${p.cc}` : c.name;
+    return `<span class="flag" title="${esc(c.name)}">${c.flag}</span>${esc(label)}<span class="where">${esc(where)}</span>`;
+  }
+  const geoLabel = (dim, label) => dim === 'country' ? countrySpan(label) : dim === 'region' || dim === 'city' ? placeSpan(dim, label) : null;
 
   function rowsHTML(items, opts) {
     const { dim, bar, limit = 6, showPct = true, filterable = true } = opts;
@@ -137,7 +144,7 @@
     const max = items[0].value || 1;
     return items.slice(0, limit).map(it => {
       const active = f && f.values.includes(it.label);
-      const label = dim === 'country' ? countrySpan(it.label) : dim === 'link' ? `<span class="code">${esc(it.label)}</span>` : esc(it.label);
+      const label = geoLabel(dim, it.label) || (dim === 'link' ? `<span class="code">${esc(it.label)}</span>` : esc(it.label));
       return `<div class="row ${active ? 'active-filter' : ''}" data-dim="${dim}" data-val="${esc(it.label)}" role="button" tabindex="0" style="--bar:${bar}">
         <div class="track"><div class="bar" data-w="${(it.value / max * 100).toFixed(1)}"></div><span class="lbl">${label}</span>${filterable ? `<span class="filter-hint">${active ? 'Remove filter' : 'Filter'}</span>` : ''}</div>
         <span class="val num">${fmt.n(it.value)}</span>${showPct ? `<span class="pct num">${fmt.pct(it.share)}</span>` : ''}
@@ -153,37 +160,63 @@
       <div class="card-body">${bodyHTML}</div></section>`;
   }
   function listCard(id, tabs, headers, items, dim, extra = {}) {
-    const body = `<div class="cols"><span>${esc(headers[0])}</span><span class="r">${esc(headers[1])}</span><span class="r">%</span></div><div class="rows">${rowsHTML(items, { dim, bar: CARD_BARS[id], ...extra })}</div>`;
+    const body = `<div class="cols"><span>${esc(headers[0])}</span><span class="r">${esc(headers[1])}</span><span class="r">%</span></div><div class="rows">${rowsHTML(items, { dim, bar: CARD_BARS[id], ...extra })}</div>${extra.note || ''}`;
     return card(id, tabs, body);
   }
 
   /* ---------- Toolbar ---------- */
   function toolbarHTML(title) {
     const status = 'Updated 4 min ago · suspected bots excluded';
+    return `<div class="tb-wrap"><div class="toolbar">
+      <div class="title"><h1>${esc(title)}</h1><span class="status" tabindex="0" data-tip="${esc(status)}" aria-label="${esc(status)}">4 min ago</span></div></div>${filterBarHTML()}</div>`;
+  }
+  // Analytics filter: a wide bar that holds the chips, first in the row: filter, date, All / Links / QR, ⋮ (2026-10-29 review).
+  function filterBarHTML() {
     const n = state.filters.length;
-    return `<div class="toolbar">
-      <div class="title"><h1>${esc(title)}</h1><span class="status" tabindex="0" data-tip="${esc(status)}" aria-label="${esc(status)}">4 min ago</span></div>
-      <div class="controls">
-        <div class="seg" role="radiogroup" aria-label="Trigger">
-          <button data-trigger="all" class="${state.trigger === 'all' ? 'on' : ''}">All</button>
-          <button data-trigger="link" class="${state.trigger === 'link' ? 'on' : ''}">${I.links}Links</button>
-          <button data-trigger="qr" class="${state.trigger === 'qr' ? 'on' : ''}">${I.qr}QR</button>
-        </div>
-        <button class="tb-btn" id="filter-btn" aria-haspopup="menu" aria-expanded="false">${I.filter}Filter${n ? `<span class="badge">${n}</span>` : ''}</button>
-        <button class="tb-btn" id="date-btn" aria-haspopup="dialog" aria-expanded="false">${I.calendar}<span>${esc(rangeLabel())}</span><span class="chev">${I.chev}</span></button>
-        <button class="tb-btn icon" id="more-btn" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button>
-      </div></div>`;
+    const total = Q.unfiltered.totals.clicks, cur = Q.cur.totals.clicks;
+    const ctx = n ? `<span class="fbar-ctx num" title="Clicks that match these filters">${fmt.n(cur)} of ${fmt.n(total)} clicks</span><button class="clear" id="clear-filters">Clear</button>` : '';
+    return `<div class="fbar-row">
+      ${filterFieldHTML('Search values: fall_sale, linkedin, London…', n, state.filters.map(chipHTML).join(''), ctx)}
+      <button class="tb-btn date" id="date-btn" aria-haspopup="dialog" aria-expanded="false">${I.calendar}<span>${esc(rangeLabel())}</span><span class="chev">${I.chev}</span></button>
+      <div class="seg trig" role="radiogroup" aria-label="Clicks to show">
+        <button data-trigger="all" class="${state.trigger === 'all' ? 'on' : ''}" title="Links and QR codes">All</button>
+        <button data-trigger="link" class="${state.trigger === 'link' ? 'on' : ''}" title="Link clicks only" aria-label="Links">${I.links}</button>
+        <button data-trigger="qr" class="${state.trigger === 'qr' ? 'on' : ''}" title="QR scans only" aria-label="QR">${I.qr}</button>
+      </div>
+      <button class="tb-btn icon" id="more-btn" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button></div>`;
+  }
+  // The filter field: a clear "Filter" button (browse fields) + chips + a real search box.
+  // Typing in the box (or anywhere on the page) drops down matching values; focusing it alone opens nothing.
+  function filterFieldHTML(placeholder, n, chips, ctx, quick = false) {
+    const nf = state.filters.length;
+    // quick = list pages: typing filters the list immediately (text search), no dropdown.
+    const box = quick ? `<input id="lq" class="fbar-input" placeholder="${esc(placeholder)}" value="${esc(state.lq)}" autocomplete="off" spellcheck="false" aria-label="${esc(placeholder)}"><button class="icon-btn" id="lq-clear" aria-label="Clear search" ${state.lq ? '' : 'hidden'}>${I.close}</button>` : '';
+    return `<div class="fbar ${n ? 'has' : ''}" id="fbar"><button class="fbar-fbtn" id="filter-btn" aria-haspopup="menu" aria-expanded="false" title="Browse fields to filter by">${I.filter}<span>Filter</span>${nf ? `<span class="badge">${nf}</span>` : ''}<span class="chev">${I.chev}</span></button>${chips}${quick ? box : `<input id="fq" class="fbar-input" placeholder="${esc(n ? 'Type to add another…' : placeholder)}" autocomplete="off" spellcheck="false" aria-label="Search values to filter by">`}${ctx || '<span class="kbd" title="Or just start typing">/</span>'}</div>`;
+  }
+  // List pages (Links, QR codes, Templates, Shorteners, Parameters) use the Analytics bar too: one 44px field
+  // holding Filter + chips + search text, then the page's own buttons in the same style.
+  function listBarHTML(placeholder, controls, opts = {}) {
+    if (opts.filter) {
+      const n = state.filters.length;
+      const end = n ? `<span class="fbar-ctx num">${opts.ctx || ''}</span><button class="clear" id="clear-search">Clear</button>` : '';
+      return `<div class="fbar-row lbar-row">${filterFieldHTML(placeholder, n, state.filters.map(chipHTML).join(''), end, true)}${controls}</div>`;
+    }
+    const n = opts.filter ? state.filters.length : 0;
+    const lead = opts.filter ? `<button class="fbar-fbtn" id="filter-btn" aria-haspopup="menu" aria-expanded="false">${I.filter}<span>Filter</span></button><span class="fbar-sep"></span>${state.filters.map(chipHTML).join('')}` : `<span class="fbar-ic">${I.search}</span>`;
+    const end = n ? `<span class="fbar-ctx num">${opts.ctx || ''}</span><button class="clear" id="clear-filters">Clear</button>` : '';
+    return `<div class="fbar-row lbar-row"><div class="fbar lbar ${n ? 'has' : ''}">${lead}<input id="lq" class="fbar-input" placeholder="${esc(n ? 'Search…' : placeholder)}" value="${esc(state.lq)}" aria-label="${esc(placeholder)}"><button class="icon-btn" id="lq-clear" aria-label="Clear search" ${state.lq ? '' : 'hidden'}>${I.close}</button>${end}</div>${controls}${opts.after || ''}</div>`;
   }
   function rangeLabel() { const p = PRESETS.find(p => p.id === state.preset); return p ? p.label : fmt.range(state.range); }
 
+  function chipHTML(f, i) {
+    const d = D.DIM[f.dim];
+    const vals = f.op === 'contains' ? `“${esc(f.values[0])}”` : f.values.length > 2 ? `${esc(f.values[0])} <span class="op">+${f.values.length - 1} more</span>` : f.values.map(esc).join('<span class="op"> or </span>');
+    return `<span class="chip"><span class="k">${esc(d.label)}</span><span class="op">${f.op}</span><span class="v"><button data-edit-filter="${i}" title="Edit">${vals}</button></span><button class="x" data-remove-filter="${i}" aria-label="Remove filter">${I.close}</button></span>`;
+  }
   function chipsHTML() {
     if (!state.filters.length) return '<div class="chips"></div>';
     const total = Q.unfiltered.totals.clicks, cur = Q.cur.totals.clicks;
-    const chips = state.filters.map((f, i) => {
-      const d = D.DIM[f.dim];
-      const vals = f.values.length > 2 ? `${esc(f.values[0])} <span class="op">+${f.values.length - 1} more</span>` : f.values.map(esc).join('<span class="op"> or </span>');
-      return `<span class="chip"><span class="k">${esc(d.label)}</span><span class="op">${f.op}</span><span class="v"><button data-edit-filter="${i}" title="Edit">${vals}</button></span><button class="x" data-remove-filter="${i}" aria-label="Remove filter">${I.close}</button></span>`;
-    }).join('');
+    const chips = state.filters.map(chipHTML).join('');
     const ctx = state.view === 'links' ? `Showing <b>${Q.links.rows.length}</b> of ${Q.linksAll.rows.length} links` : state.view === 'qr' ? `Showing <b>${qrRows().length}</b> of ${Q.linksAll.rows.filter(r => r.link.qr > 0).length} QR codes` : `Showing <b>${fmt.n(cur)}</b> of ${fmt.n(total)} clicks (${fmt.pct(total ? cur / total : 0)})`;
     return `<div class="chips">${chips}<button class="clear" id="clear-filters">Clear all</button><span class="context num">${ctx}</span></div>`;
   }
@@ -291,7 +324,7 @@
     const body = rows.slice(0, limit).map((r, i) => {
       const pr = Q.priorBySlug[r.link.slug];
       const qrShare = r.clicks ? r.qr / r.clicks : 0;
-      const top = Object.entries(r.link.geo).sort((a, b) => b[1] - a[1])[0];
+      const top = Object.entries(D.linkCountries(r.link, state.filters)).sort((a, b) => b[1] - a[1])[0];
       const hasQR = r.link.qr > 0;
       const typeTip = hasQR ? `Has a QR code · ${Math.round(qrShare * 100)}% of clicks from scans` : 'Link only · no QR code';
       return `<div class="trow data" data-link="${esc(r.link.slug)}" role="link" tabindex="0" style="animation-delay:${Math.min(i, 10) * 25}ms">
@@ -333,7 +366,7 @@
       return `<path class="c ${it ? '' : 'dim'}" d="${d}" style="opacity:${it ? op : 1}" data-country="${code}" data-val="${it ? it.value : 0}" data-share="${it ? it.share : 0}"></path>`;
     }).join('');
     return `<div class="map-area"><div class="map" id="map"><svg viewBox="0 0 500 198"><path d="${mp.land}"/>${cs}</svg><div class="tip" id="map-tip"></div></div>
-      <div class="map-legend"><span>0</span><span class="scale"></span><span class="num">${fmt.n(max)} clicks</span><span class="hint">${f ? 'Click a country to change the filter' : 'Click a country to filter'}</span></div></div>`;
+      <div class="map-legend"><span>0</span><span class="scale"></span><span class="num">${fmt.n(max)} clicks</span>${f && f.values.length === 1 && D.COUNTRIES[f.values[0]] ? `<button class="link-btn hint" data-tab="city">See cities in ${esc(D.COUNTRIES[f.values[0]].name)} →</button>` : `<span class="hint">${f ? 'Click a country to change the filter' : 'Click a country to filter'}</span>`}</div></div>`;
   }
 
   /* ---------- Views ---------- */
@@ -358,7 +391,7 @@
   function overviewHTML() {
     const [utm, loc, dev, ref] = ['utm', 'loc', 'dev', 'ref'].map(cardFor);
     return `<div class="view">${toolbarHTML('Analytics')}</div>
-      ${chipsHTML()}${kpiChartHTML()}${tableHTML()}
+      ${kpiChartHTML()}${tableHTML()}
       <div class="grid-2">${utm}${loc}</div><div class="grid-2">${dev}${ref}</div>
       <p class="footnote">Clicks are successful redirects; suspected bots are excluded. Unique clicks reset each calendar month. Times in UTC.</p>`;
   }
@@ -366,7 +399,8 @@
     const tabs = [{ key: 'map', label: 'Map' }, { key: 'country', label: 'Countries' }, { key: 'region', label: 'Regions' }, { key: 'city', label: 'Cities' }];
     const t = state.tabs.loc;
     if (t === 'map') return card('loc', tabs, mapHTML(b('country')), { noExpand: true });
-    return listCard('loc', tabs, [D.DIM[t].label, 'Clicks'], b(t), t);
+    const note = t === 'country' ? '' : `<p class="loc-note">${I.globe}Estimated from the visitor's IP address. ${t === 'city' ? 'Cities are approximate; "Other" is clicks we couldn\'t place.' : 'Regions are states, provinces or counties.'}</p>`;
+    return listCard('loc', tabs, [D.DIM[t].label, 'Clicks'], b(t), t, { note });
   }
   function linkHTML() {
     const link = D.LINKS.find(l => l.slug === state.slug);
@@ -382,7 +416,7 @@
         <div class="meta">Created ${fmt.d(new Date(link.created), { month: 'short', day: 'numeric', year: 'numeric' })} by <span class="by">${avatar(link.by, 'xs')}${esc(link.by)}</span> · ${link.qr > 0 ? 'QR code attached' : 'No QR code'} · Tags: ${link.tags.map(esc).join(', ')}</div></div>
         <div class="actions"><button class="btn" id="qr-btn">${I.qr}QR code</button><button class="btn" id="edit-btn">${I.edit}Edit link</button></div></div></section>`;
     const [loc, dev, ref] = ['loc', 'dev', 'ref'].map(cardFor);
-    return `<div class="view">${head}</div>${toolbarHTML('Performance')}${chipsHTML()}${kpiChartHTML()}
+    return `<div class="view">${head}</div>${toolbarHTML('Performance')}${kpiChartHTML()}
       <div class="grid-2">${loc}${dev}</div>${ref}
       <p class="footnote">Clicks are successful redirects; suspected bots are excluded. Unique clicks reset each calendar month. Times in UTC.</p>`;
   }
@@ -425,7 +459,7 @@
     const l = r.link, hasQR = l.qr > 0, on = state.sel.has(l.slug);
     const typeTip = hasQR ? `Has a QR code · ${Math.round((r.clicks ? r.qr / r.clicks : 0) * 100)}% of clicks from scans` : 'Link only · no QR code';
     const created = new Date(l.created);
-    return `<div class="lrow ${on ? 'sel' : ''}" data-link="${esc(l.slug)}" role="row" tabindex="0" style="animation-delay:${Math.min(i, 12) * 20}ms">
+    return `<div class="lrow ${on ? 'sel' : ''} ${state.fresh && state.fresh.has(l.slug) ? 'fresh' : ''}" data-link="${esc(l.slug)}" role="row" tabindex="0" style="animation-delay:${Math.min(i, 12) * 20}ms">
       <button class="cb ${on ? 'on' : ''}" data-sel="${esc(l.slug)}" role="checkbox" aria-checked="${on}" aria-label="Select ${esc(l.slug)}">${I.check}</button>
       <div class="lk"><span class="type ${hasQR ? 'qr' : ''}" data-tip="${typeTip}">${hasQR ? I.qr : I.links}</span>
         <div class="txt"><span class="lk-name">${esc(l.slug)}${l.tags.length ? l.tags.map(t => `<span class="tag">${esc(t)}</span>`).join('') : ''}</span><span class="lk-dest" title="${esc(l.dest)}${esc(utmQuery(l))}">${esc(l.dest)}<span class="qs">${esc(utmQuery(l))}</span></span></div></div>
@@ -478,14 +512,12 @@
     const g = GROUPS.find(x => x[0] === state.groupBy), s = LSORTS.find(x => x[0] === state.lsort.key);
     const nf = state.filters.length;
     return `<div class="view"><div class="page-head"><div class="title"><h1>Links</h1><span class="status" tabindex="0" data-tip="${all} links in this workspace · updated 4 min ago">${all} links</span></div>
-        <div class="actions"><button class="btn" id="import-btn">${I.download}Import CSV</button><button class="btn primary" id="create-btn"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Create link</button></div></div></div>
-      <div class="toolbar links-tb"><div class="search lq">${I.search}<input id="lq" placeholder="Search links, destinations, campaigns…" value="${esc(state.lq)}" aria-label="Search links"><button class="icon-btn" id="lq-clear" aria-label="Clear search" ${state.lq ? '' : 'hidden'}>${I.close}</button></div>
-        <div class="controls">
-          <button class="tb-btn" id="filter-btn" aria-haspopup="menu" aria-expanded="false">${I.filter}Filter${nf ? `<span class="badge">${nf}</span>` : ''}</button>
+        <div class="actions"><button class="btn primary" id="create-btn"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Create link</button></div></div></div>
+      ${listBarHTML('Search links, destinations, campaigns…', `
           <button class="tb-btn" id="group-btn" aria-haspopup="menu" aria-expanded="false"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h6"/></svg>${state.groupBy === 'none' ? 'Group' : g[1]}<span class="chev">${I.chev}</span></button>
           <button class="tb-btn" id="lsort-btn" aria-haspopup="menu" aria-expanded="false">${I.sort}${s[1]}<span class="chev">${I.chev}</span></button>
-          <button class="tb-btn icon" id="links-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button></div></div>
-      ${chipsHTML()}${linksTableHTML()}${bulkBarHTML()}`;
+          <button class="tb-btn icon" id="links-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button>`, { filter: true, ctx: `${linkRows().length} of ${Q.linksAll.rows.length} links` })}
+      ${linksTableHTML()}${bulkBarHTML()}`;
   }
 
   function groupMenu(anchor) {
@@ -501,6 +533,7 @@
   }
   function linksMoreMenu(anchor) {
     openPop(anchor, `<div class="menu" style="width:230px">
+      <button class="mi" data-act="links-import">${PI.upload}<span class="grow">Import CSV</span></button>
       <button class="mi" data-act="links-csv">${I.download}<span class="grow">Export all as CSV</span></button>
       <button class="mi" data-act="columns">${I.sliders}<span class="grow">Columns…</span></button>
       <div class="sep"></div>
@@ -629,12 +662,10 @@
     const s = QSORTS.find(x => x[0] === state.lsort.key) || QSORTS[0], nf = state.filters.length;
     return `<div class="view"><div class="page-head"><div class="title"><h1>QR codes</h1><span class="status" tabindex="0" data-tip="${all.length} QR codes · ${fmt.full(scans)} scans all time · updated 4 min ago">${all.length} codes · ${fmt.n(scans)} scans</span></div>
         <div class="actions"><button class="btn" id="qr-designs-btn">${I.swatch}QR designs</button><button class="btn primary" id="create-qr-btn"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Create QR code</button></div></div></div>
-      <div class="toolbar links-tb"><div class="search lq">${I.search}<input id="lq" placeholder="Search QR codes, links, campaigns…" value="${esc(state.lq)}" aria-label="Search QR codes"><button class="icon-btn" id="lq-clear" aria-label="Clear search" ${state.lq ? '' : 'hidden'}>${I.close}</button></div>
-        <div class="controls">
-          <button class="tb-btn" id="filter-btn" aria-haspopup="menu" aria-expanded="false">${I.filter}Filter${nf ? `<span class="badge">${nf}</span>` : ''}</button>
+      ${listBarHTML('Search QR codes, links, campaigns…', `
           <button class="tb-btn" id="lsort-btn" aria-haspopup="menu" aria-expanded="false">${I.sort}${s[1]}<span class="chev">${I.chev}</span></button>
-          <button class="tb-btn icon" id="list-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button></div></div>
-      ${chipsHTML()}${qrTableHTML()}${bulkBarHTML()}`;
+          <button class="tb-btn icon" id="list-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button>`, { filter: true, ctx: `${qrRows().length} of ${all.length} QR codes` })}
+      ${qrTableHTML()}${bulkBarHTML()}`;
   }
   function qrDesignsModal(slugs) {
     const picking = !!(slugs && slugs.length);
@@ -712,10 +743,9 @@
     const s = TSORTS.find(x => x[0] === state.lsort.key) || TSORTS[0];
     return `<div class="view"><div class="page-head"><div class="title"><h1>Templates</h1><span class="status" tabindex="0" data-tip="${TEMPLATE_LIST.length} UTM templates · template selection is required in the link builder">${TEMPLATE_LIST.length} templates · required in builder</span></div>
         <div class="actions"><button class="btn" id="import-tpl-btn">${I.download}Import CSV</button><button class="btn primary" id="create-tpl-btn"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Create template</button></div></div></div>
-      <div class="toolbar links-tb"><div class="search lq">${I.search}<input id="lq" placeholder="Search templates, parameters, people…" value="${esc(state.lq)}" aria-label="Search templates"><button class="icon-btn" id="lq-clear" aria-label="Clear search" ${state.lq ? '' : 'hidden'}>${I.close}</button></div>
-        <div class="controls">
+      ${listBarHTML('Search templates, parameters, people…', `
           <button class="tb-btn" id="lsort-btn" aria-haspopup="menu" aria-expanded="false">${I.sort}${s[1]}<span class="chev">${I.chev}</span></button>
-          <button class="tb-btn icon" id="list-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button></div></div>
+          <button class="tb-btn icon" id="list-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button>`)}
       ${templatesTableHTML()}`;
   }
   function templateModal(key) {
@@ -798,10 +828,9 @@
     const s = SSORTS.find(x => x[0] === state.lsort.key) || SSORTS[0];
     return `<div class="view"><div class="page-head"><div class="title"><h1>Link shorteners</h1><span class="status" tabindex="0" data-tip="${SHORTENERS.length} shorteners · ${SHORTENERS.filter(x => x.status === 'pending').length} waiting for DNS">${SHORTENERS.length} domains · 1 needs DNS</span></div>
         <div class="actions"><button class="btn" id="cleaner-btn">${I.sliders}UTM Page Cleaner</button><button class="btn primary" id="add-dom-btn"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Add shortener</button></div></div></div>
-      <div class="toolbar links-tb"><div class="search lq">${I.search}<input id="lq" placeholder="Search domains…" value="${esc(state.lq)}" aria-label="Search shorteners"><button class="icon-btn" id="lq-clear" aria-label="Clear search" ${state.lq ? '' : 'hidden'}>${I.close}</button></div>
-        <div class="controls">
+      ${listBarHTML('Search domains…', `
           <button class="tb-btn" id="lsort-btn" aria-haspopup="menu" aria-expanded="false">${I.sort}${s[1]}<span class="chev">${I.chev}</span></button>
-          <button class="tb-btn icon" id="list-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button></div></div>
+          <button class="tb-btn icon" id="list-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button>`)}
       ${shortenersTableHTML()}
       <p class="footnote">Short links keep redirecting even if you turn a shortener off; it only disappears from the link builder. Custom domains need a CNAME record pointing at <span class="code">redirect.utm.io</span>.</p>`;
   }
@@ -1029,12 +1058,11 @@
     if (state.pview !== 'list') return boardPageHTML();
     state.ptab = 'values';
     const p = curParam(); const s = PSORTS.find(x => x[0] === state.lsort.key) || PSORTS[0];
-    const tools = state.ptab === 'values' ? `<div class="toolbar links-tb pm-tb"><div class="search lq">${I.search}<input id="lq" placeholder="Search values, pretty names, people…" value="${esc(state.lq)}" aria-label="Search values"><button class="icon-btn" id="lq-clear" aria-label="Clear search" ${state.lq ? '' : 'hidden'}>${I.close}</button></div>
-        <div class="controls"><button class="tb-btn" id="lsort-btn" aria-haspopup="menu" aria-expanded="false">${I.sort}${s[1]}<span class="chev">${I.chev}</span></button>
-          <button class="tb-btn icon" id="list-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button></div></div>
-      <form class="pm-addrow" id="pv-add-form" autocomplete="off"><span class="ic">${PI.plus}</span><input id="pv-add" placeholder="New ${esc(p.label.toLowerCase())} value, ${esc(p.hint)}" aria-label="Add value" ${p.format === 'number' ? 'inputmode="numeric"' : ''}><span class="hint" id="pv-hint">${p.rules.includes('lowercase') ? 'lowercase · ' : ''}${p.format === 'number' ? 'numbers only · ' : ''}spaces become “-” · Enter to add, paste a list to add several</span><button class="btn sm pm-addbtn" type="submit">${PI.plus}Add value</button></form>` : '';
-    return `<div class="view"><div class="page-head"><div class="title"><h1>Parameters</h1></div>
-        <div class="actions">${pviewSeg()}<button class="btn" id="pm-import">${PI.upload}Import CSV</button><button class="btn" id="pm-export">${I.download}Export CSV</button></div></div>
+    const bar = listBarHTML(`Search ${p.label.toLowerCase()} values, pretty names, people…`, `<button class="tb-btn" id="lsort-btn" aria-haspopup="menu" aria-expanded="false">${I.sort}${s[1]}<span class="chev">${I.chev}</span></button>${pviewSeg()}<button class="tb-btn icon" id="pm-page-more" aria-haspopup="menu" aria-expanded="false" aria-label="Import, export and more" title="Import, export and more">${I.more}</button>`);
+    const tools = state.ptab === 'values' ? `
+      <form class="pm-addrow" id="pv-add-form" autocomplete="off"><label class="ic" for="pv-add" title="Add a value">${PI.plus}</label><div class="pm-addtxt"><input id="pv-add" placeholder="Add a ${esc(p.label.toLowerCase())} value…" aria-label="Add value" ${p.format === 'number' ? 'inputmode="numeric"' : ''}><span class="hint" id="pv-hint">${esc(p.hint)} · ${p.rules.includes('lowercase') ? 'lowercase · ' : ''}${p.format === 'number' ? 'numbers only · ' : ''}spaces become “-” · paste a list to add several</span></div><button class="btn sm pm-addbtn" type="submit">${PI.plus}Add value</button></form>` : '';
+    return `<div class="view"><div class="page-head"><div class="title"><h1>Parameters</h1><span class="sm-muted">${PARAMS.length} parameters</span></div></div>
+      ${bar}
       <div class="pm-layout">${railHTML()}<div class="pm-main">${paramHeadHTML(p)}${state.ptab === 'values' ? tools + paramValuesCard(p) : groupingsHTML(p)}</div></div>${bulkBarHTML()}</div>`;
   }
 
@@ -1085,7 +1113,7 @@
   }
   function pbBarHTML() {
     const s = state.psel; const p = s && paramOf(s.key); const r = p && paramValueRows(p, { all: true }).find(x => x.v === s.v);
-    if (!r) { state.psel = null; return `<div class="pb-bar" id="pb-bar">${I.info}<span>Hover a value to see what it's grouped with. <b>Click it</b> to select it, then tick values in the next column to group them.</span></div>`; }
+    if (!r) { state.psel = null; return `<div class="pb-bar" id="pb-bar" hidden></div>`; }
     const { L, R } = pbNeighbours(p); const bits = [];
     if (p.deps) { const par = paramOf(p.deps.parent); const ps = allowedBy(p, r.v); bits.push(ps.length ? `Offered when ${esc(par.label.toLowerCase())} is ${ps.map(x => `<b>${esc(x)}</b>`).join(', ')}` : `Offered for every ${esc(par.label.toLowerCase())}`); }
     const kid = childOf(p); if (kid) { const a = kid.deps.allow[r.v]; bits.push(a ? `Narrows ${esc(kid.label.toLowerCase())} to ${a.map(x => `<b>${esc(x)}</b>`).join(', ')}` : `Shows every ${esc(kid.label.toLowerCase())}`); }
@@ -1095,14 +1123,22 @@
       <span class="what">${bits.join('<span class="dotsep">·</span>') || (how ? `Tick a ${how} value to group it with <b>${esc(r.v)}</b>` : 'No neighbouring column to group with')}</span><span class="grow"></span>
       ${r.status === 'unplanned' ? '<button class="btn sm primary" data-bact="add">Add to list</button>' : `${r.links && !p.custom ? '<button class="btn sm" data-bact="links">Show links</button>' : ''}<button class="btn sm" data-bact="edit">${I.edit}Edit</button><button class="icon-btn" data-bact="delete" title="Delete value">${PI.trash}</button>`}<button class="icon-btn" data-bact="close" title="Done (Esc)">${I.close}</button></div>`;
   }
-  const pbAreaHTML = () => `<div class="pb-area" id="list-table">${pbBarHTML()}<div class="pb" id="pb"><svg class="pb-svg" id="pb-svg" aria-hidden="true"></svg>${PARAMS.map(pbColHTML).join('')}<button type="button" class="pb-ghost" id="pm-add-param">${PI.plus}Add parameter</button></div></div>`;
+  // "How grouping works": the legend and steps that used to sit above the board, on demand.
+  function pbHowPop(anchor) {
+    openPop(anchor, `<div class="pb-how">
+      <h4>How grouping works</h4>
+      <p>Grouping decides which values the link builder offers. Pick <b class="code">paid_social</b> as the medium, and the source list only shows the sources grouped with it.</p>
+      <ol><li><b>Hover</b> a value to trace what it's grouped with across columns.</li><li><b>Click</b> it to select it. Its details appear at the bottom.</li><li><b>Tick</b> values in the next column to group or ungroup them. <kbd>Esc</kbd> finishes.</li></ol>
+      <div class="pb-how-key"><span><i class="ln"></i>Grouped</span><span><i class="ln on"></i>Selected value's chain</span></div>
+      <p class="sm-muted">Columns run left to right in the order fields appear in the link builder.</p></div>`, { align: 'right', role: 'dialog' });
+  }
+  const pbAreaHTML = () => `<div class="pb-area" id="list-table"><div class="pb" id="pb"><svg class="pb-svg" id="pb-svg" aria-hidden="true"></svg>${PARAMS.map(pbColHTML).join('')}<button type="button" class="pb-ghost" id="pm-add-param">${PI.plus}Add parameter</button></div></div>`;
   function boardPageHTML() {
     const grouped = PARAMS.filter(p => p.deps).length;
     return `<div class="view"><div class="page-head"><div class="title"><h1>Parameters</h1><span class="sm-muted">${PARAMS.length} parameters · ${grouped ? `${grouped} grouped` : 'no groupings yet'}</span></div>
-        <div class="actions">${pviewSeg()}<button class="btn" id="pm-import">${PI.upload}Import CSV</button><button class="btn" id="pm-export">${I.download}Export CSV</button></div></div>
-      <div class="toolbar links-tb pm-tb"><div class="search lq">${I.search}<input id="lq" placeholder="Search every parameter's values…" value="${esc(state.lq)}" aria-label="Search values"><button class="icon-btn" id="lq-clear" aria-label="Clear search" ${state.lq ? '' : 'hidden'}>${I.close}</button></div>
-        <div class="pb-legend"><span><i class="ln"></i>grouped</span><span><i class="ln on"></i>selected chain</span><span class="sm-muted">Left to right is the order fields appear in the builder</span></div></div>
-      ${pbAreaHTML()}</div>`;
+</div>
+      ${listBarHTML("Search every parameter's values…", `<button class="tb-btn" id="pm-how" aria-haspopup="dialog" aria-expanded="false">${I.info}<span>How grouping works</span></button>${pviewSeg()}<button class="tb-btn icon" id="pm-page-more" aria-haspopup="menu" aria-expanded="false" aria-label="Import, export and more" title="Import, export and more">${I.more}</button>`)}
+      ${pbAreaHTML()}</div>${pbBarHTML()}`; // bar sits outside .view so it can float over the page
   }
   // Lines: measured after layout, redrawn on resize, search and grouping changes.
   function pbDraw() {
@@ -1129,7 +1165,7 @@
   // Redraw just the board, keeping its sideways scroll.
   function pbRefresh(focusAdd) {
     const old = $('.pb-area'); if (!old) return; const x = $('#pb') ? $('#pb').scrollLeft : 0;
-    old.outerHTML = pbAreaHTML(); const wrap = $('#pb'); wrap.scrollLeft = x; pbDraw();
+    old.outerHTML = pbAreaHTML(); const bar = $('#pb-bar'); if (bar) bar.outerHTML = pbBarHTML(); const wrap = $('#pb'); wrap.scrollLeft = x; pbDraw();
     const sub = $('.page-head .title .sm-muted'); if (sub) { const g = PARAMS.filter(p => p.deps).length; sub.textContent = `${PARAMS.length} parameters · ${g ? g + ' grouped' : 'no groupings yet'}`; }
     if (focusAdd) { const i = $(`[data-badd-in="${CSS.escape(focusAdd)}"]`); if (i) i.focus(); }
   }
@@ -1470,11 +1506,19 @@
     const locked = t && (t.fixed || t.varies); const req = p.rules.includes('required'); const v = B.vals[p.key] || '';
     const sel = !locked && p.values.find(x => x.v === v.trim());
     const ph = p.values.length ? `${p.rules.includes('dropdown') ? 'Pick' : 'Pick or type'} ${p.hint ? '· ' + p.hint : ''}` : (p.hint || 'Type a value');
-    return `<div class="lb-f ${show && iss.lvl === 'err' ? 'bad' : ''} ${locked ? 'locked' : ''} ${t && t.asked ? 'asked' : ''}" data-f="${esc(p.key)}">
-      <label class="lb-l" for="lb-${esc(p.key)}">${lbIcon(p)}<span class="nm">${esc(p.label)}</span>${req ? '<b class="req" title="Required">*</b>' : ''}${p.attr ? '' : `<span class="k">${esc(p.utm)}</span>`}${t && t.asked ? '<span class="ask">template asks for this</span>' : ''}${p.desc ? `<span class="tipi" tabindex="0" data-tip="${esc(p.desc)}">${I.info}</span>` : ''}</label>
+    return `<div class="lb-f lb-tone ${pTone(p)} ${show && iss.lvl === 'err' ? 'bad' : ''} ${locked ? 'locked' : ''} ${t && t.asked ? 'asked' : ''}" data-f="${esc(p.key)}">
+      <label class="lb-l" for="lb-${esc(p.key)}">${lbIcon(p)}<span class="nm">${esc(p.label)}</span>${req ? '<b class="req" title="Required">*</b>' : ''}${p.attr ? '' : `<span class="k">${esc(p.utm)}</span>`}${t && t.asked ? '<span class="ask">template asks for this</span>' : ''}${p.deps && paramOf(p.deps.parent) ? `<span class="lb-dep" title="The ${esc(p.label.toLowerCase())} list only shows values grouped with the ${esc(paramOf(p.deps.parent).label.toLowerCase())} you pick">${PI.branch}narrowed by ${esc(paramOf(p.deps.parent).label.toLowerCase())}</span>` : ''}${p.desc ? `<span class="tipi" tabindex="0" data-tip="${esc(p.desc)}">${I.info}</span>` : ''}</label>
       ${locked ? `<div class="lb-lock" title="${t.fixed ? 'Set by the template' : 'Each template sets its own value'}">${PI.lock}<span class="code">${esc(t.fixed || t.varies.join(' · '))}</span><span class="sm-muted">${t.fixed ? 'from template' : 'one per template'}</span></div>`
         : `<div class="lb-in ${p.values.length ? 'combo' : ''}"><input id="lb-${esc(p.key)}" data-lb="${esc(p.key)}" value="${esc(v)}" placeholder="${esc(ph)}" autocomplete="off" spellcheck="false" role="${p.values.length ? 'combobox' : 'textbox'}" aria-expanded="false" ${p.format === 'number' ? 'inputmode="numeric"' : ''}><span class="pretty">${sel && sel.pretty ? esc(sel.pretty) : ''}</span>${p.values.length ? `<span class="chev">${I.chev}</span>` : ''}</div>`}
       <div class="lb-msg ${show ? iss.lvl : ''}" data-msg="${esc(p.key)}">${lbMsgHTML(p, iss, show)}</div></div>`;
+  }
+  // Each parameter's color (same as its icon): tints its field tile and its tag in the link preview.
+  const pTone = p => p.custom ? 'p-cus' : 'p-' + p.key;
+  // Hover or focus a field → its tag lights up in the preview, and the other way round.
+  function lbHL(key) {
+    B.hl = key || null; if (!lbRoot) return;
+    $$('.lb-f.hl, .tk.hl', lbRoot).forEach(el => el.classList.remove('hl'));
+    if (key) $$(`.lb-f[data-f="${CSS.escape(key)}"], .tk[data-tk="${CSS.escape(key)}"]`, lbRoot).forEach(el => el.classList.add('hl'));
   }
   const lbIcon = p => `<span class="pi ${p.custom ? 'p-cus' : 'p-' + p.key}" title="${p.custom ? 'Custom parameter' : 'Standard UTM parameter'}">${P_ICON[p.custom ? 'custom' : p.key] || P_ICON.custom}</span>`;
   // Shown up front: what Rules require and what the picked template sets or asks for. The rest is optional and folds away.
@@ -1497,10 +1541,8 @@
     const tsub = B.tpls.length > 1 ? `${B.tpls.length} picked · one link per template` : B.tpls.length ? 'fills the fixed tags for you' : 'optional · pick several to make one link each';
     const s2 = lbSec(2, LBI.tpl, 'Start from a template', tsub, `<div class="lb-tpls">${tcards}</div>`, B.tpls.length ? '<button class="link-btn" id="lb-tpl-clear" type="button">Clear</button>' : '');
     const up = lbParams().filter(lbUp), opt = lbParams().filter(p => !lbUp(p));
-    // Medium and source sit side by side so the grouping reads left to right.
-    const pairs = [];
-    for (let i = 0; i < up.length; i++) { const p = up[i]; const kid = up.find(c => c.deps && c.deps.parent === p.key); if (kid && up[i + 1] === kid) { pairs.push([p, kid]); i++; } else pairs.push([p]); }
-    const grid = pairs.map(g => g.length === 2 ? `<div class="lb-pair">${lbFieldHTML(g[0])}<span class="lb-link" title="${esc(g[1].label)} options depend on ${esc(g[0].label.toLowerCase())}">${PI.arrowR}</span>${lbFieldHTML(g[1])}</div>` : lbFieldHTML(g[0])).join('');
+    // One field per row; a grouped field (source) says in its label which field narrows it.
+    const grid = up.map(lbFieldHTML).join('');
     const sh = usableShorteners(); const slugIss = lbSlugIssue(); const multiLinks = lbCombos().length > 1;
     const shortRow = `<div class="lb-f ${slugIss ? 'bad' : ''}" data-f="slug"><label class="lb-l" for="lb-slug"><span class="nm">Short link</span>${B.edit ? '<span class="sm-muted">can\'t change after it\'s created</span>' : ''}</label>
       <div class="lb-short"><select id="lb-sh" ${B.edit ? 'disabled' : ''} aria-label="Short domain">${sh.map(s => `<option value="${esc(s.domain)}" ${B.shortener === s.domain ? 'selected' : ''}>${esc(s.domain)}</option>`).join('')}<option value="none" ${B.shortener === 'none' ? 'selected' : ''}>Don't shorten</option></select>${B.shortener === 'none' ? '' : `<span class="sl">/</span><input id="lb-slug" value="${esc(multiLinks ? '' : lbSlug())}" placeholder="${multiLinks ? 'set for each link automatically' : 'ending, e.g. fall-sale'}" ${B.edit || multiLinks ? 'disabled' : ''} spellcheck="false" autocomplete="off">`}</div>
@@ -1532,7 +1574,7 @@
   function lbTokensHTML(dest, tplKey) {
     const base = dest ? withScheme(dest.trim().replace(/[?&]$/, '')) : 'https://your-page.com'; let sep = base.includes('?') ? '&' : '?';
     const q = lbQuery(tplKey).map(({ p, v }) => { if (!v && !p.rules.includes('required')) return ''; const s = sep; if (v || p.rules.includes('required')) sep = '&';
-      return `<span class="tk ${v ? '' : 'miss'}" data-tk="${esc(p.key)}" title="${v ? esc(p.label) : esc(p.label) + ' is required'}">${s}<span class="k">${esc(p.utm)}</span>=<span class="v">${v ? esc(v) : '?'}</span></span>`; }).join('');
+      return `<span class="tk ${pTone(p)} ${v ? '' : 'miss'} ${B.hl === p.key ? 'hl' : ''}" data-tk="${esc(p.key)}" title="${v ? esc(p.label) : esc(p.label) + ' is required'}">${s}<span class="k">${esc(p.utm)}</span>=<span class="v">${v ? esc(v) : '?'}</span></span>`; }).join('');
     return `<span class="tk base ${dest ? '' : 'miss'}" data-tk="url">${esc(base)}</span>${q}`;
   }
   function lbSideHTML() {
@@ -1628,7 +1670,71 @@
     const iss = lbIssues(); if (iss.length) { B.submitted = true; lbPaint(); lbJump(iss[0].key); return; }
     const sh = B.shortener !== 'none'; const combos = lbCombos();
     const links = combos.map((c, i) => { const long = B.edit ? lbFullUrl(D.LINKS.find(l => l.slug === B.edit).dest, null) : lbFullUrl(c.url, c.tpl); const slug = B.edit ? B.edit : sh ? `${B.shortener}/${combos.length > 1 ? (lbSlug() || 'link').slice(0, 24) + '-' + (i + 1) : (lbSlug() || Math.random().toString(36).slice(2, 7))}` : ''; return { short: slug, long }; });
-    B.done = { links }; lbPaint(); if (links.length === 1) copyText(links[0].short || links[0].long, B.edit ? 'Saved' : 'Link copied');
+    if (B.mode === 'ext') { B.done = { links }; lbPaint(); if (links.length === 1) copyText(links[0].short || links[0].long, B.edit ? 'Saved' : 'Link copied'); return; }
+    lbFinish(links, combos);
+  }
+  // Web builder: save into the Links list, go back to it (edits go back to where they came from), and show what was made in an overlay.
+  function lbFinish(links, combos) {
+    const T = D.TODAY, today = `${T.getFullYear()}-${String(T.getMonth() + 1).padStart(2, '0')}-${String(T.getDate()).padStart(2, '0')}`;
+    const made = links.map((l, i) => {
+      const c = combos[i] || combos[0], q = Object.fromEntries(lbQuery(c.tpl).map(x => [x.p.key, x.v || '']));
+      const tokens = lbTokensHTML(B.edit ? D.LINKS.find(x => x.slug === B.edit).dest : c.url, c.tpl);
+      let slug = l.short || withScheme(l.long).replace(/^https?:\/\//, '').split('?')[0];
+      if (B.edit) { const ex = D.LINKS.find(x => x.slug === B.edit); UTM_KEYS.forEach(k => { if (k in q) ex[k] = q[k]; }); slug = ex.slug; }
+      else {
+        D.LINKS.unshift({ slug, dest: (c.url || '').trim().replace(/^https?:\/\//, ''), title: [q.campaign, q.source].filter(Boolean).join(' · ') || 'New link', campaign: q.campaign || '', source: q.source || '', medium: q.medium || '', content: q.content || '', term: q.term || '',
+          created: today, by: 'Tyler Berry', tags: [], qr: B.qr ? .01 : 0, uniq: .7, geo: { US: 1 }, dev: { mobile: .6, desktop: .35, tablet: .05 }, ref: { 'No referrer': 1 }, series: new Array(D.DAYS).fill(0), id: D.LINKS.length + 100, fresh: true });
+      }
+      if (B.qr) QR_DESIGN_OF[slug] = B.design;
+      return { slug, short: l.short, long: l.long, tokens };
+    });
+    const info = { links: made, edit: !!B.edit, qr: B.qr && B.shortener !== 'none', design: B.design,
+      again: { tpls: B.tpls, vals: { ...B.vals }, shortener: B.shortener, qr: B.qr, design: B.design } };
+    const back = B.back || {}; lbRoot = null; B.done = { links };
+    state.fresh = new Set(made.map(m => m.slug));
+    if (info.edit && back.view && back.view !== 'build' && back.view !== 'links') { Object.assign(state, { view: back.view, slug: back.slug, from: back.from }); render({ top: true }); }
+    else goLinks();
+    if (made.length === 1) copyText(made[0].short || made[0].long, info.edit ? 'Saved' : 'Link created and copied');
+    createdModal(info);
+    setTimeout(() => { state.fresh = null; $$('.lrow.fresh').forEach(r => r.classList.remove('fresh')); }, 6000);
+  }
+  // "Link created": the link, its tags, and the QR code with download options, over the Links list.
+  function createdModal(info) {
+    const one = info.links.length === 1, L = info.links[0], design = QR_DESIGNS.find(d => d.id === info.design) || QR_DESIGNS[0];
+    const title = info.edit ? 'Link updated' : one ? 'Link created' : `${info.links.length} links created`;
+    const sub = info.edit ? 'New clicks carry the new tags' : one ? 'Copied to your clipboard · it\'s at the top of Links' : 'They\'re at the top of Links';
+    const qr = info.qr && one ? `<div class="lc-qr">${qrSVG(L.slug, design, 176)}
+        <div class="lc-qr-name">${esc(design.name)} design<button class="link-btn" id="lc-design" type="button">Change</button></div>
+        <div class="seg lc-fmt" role="radiogroup" aria-label="Image format"><button type="button" class="on" data-fmt="PNG">PNG</button><button type="button" data-fmt="JPEG">JPEG</button><button type="button" data-fmt="SVG">SVG</button></div>
+        <label class="lc-tr"><input type="checkbox" id="lc-transparent"> Transparent background</label>
+        <button class="btn primary" id="lc-dl" type="button">${I.download}<span>Download PNG</span></button></div>`
+      : one ? `<div class="lc-qr none">${I.qr}<b>No QR code</b><span class="sm-muted">Add one any time from the link's ⋮ menu.</span></div>` : '';
+    const main = one ? `<div class="lc-main">
+        ${L.short ? `<div class="lc-f"><span class="lbl">Short link</span><div class="lc-short"><b class="code">${esc(L.short)}</b><button class="btn sm" data-lc-copy="${esc(L.short)}" type="button">${I.copy}Copy</button></div></div>` : ''}
+        <div class="lc-f"><span class="lbl">${L.short ? 'Opens' : 'Full link'}</span><code class="lb-url">${L.tokens}</code><button class="link-btn lc-copy-long" data-lc-copy="${esc(L.long)}" type="button">${I.copy}Copy full URL</button></div>
+        <div class="lc-acts"><button class="btn" id="lc-analytics" type="button">${I.analytics}View analytics</button><button class="btn" id="lc-edit" type="button">${I.edit}Edit</button>${info.edit ? '' : `<button class="btn" id="lc-again" type="button">${PI.plus}Create another like this</button>`}</div></div>`
+      : `<div class="lc-main wide"><div class="lc-list">${info.links.slice(0, 8).map(l => `<div class="lc-row"><b class="code">${esc(l.short || l.long)}</b><code class="lb-url">${l.tokens}</code><button class="icon-btn" data-lc-copy="${esc(l.short || l.long)}" type="button" title="Copy">${I.copy}</button></div>`).join('')}${info.links.length > 8 ? `<div class="sm-muted">+${info.links.length - 8} more in Links</div>` : ''}</div>
+        <div class="lc-acts"><button class="btn primary" id="lc-copy-all" type="button">${I.copy}Copy all</button><button class="btn" id="lc-csv" type="button">${I.download}Export CSV</button>${info.qr ? `<button class="btn" id="lc-zip" type="button">${I.qr}Download QR codes</button>` : ''}<button class="btn" id="lc-again" type="button">${PI.plus}Create more</button></div></div>`;
+    openModal(`<div class="modal-h lc-h"><span class="lc-ok">${I.check}</span><h3>${title}<span class="sub">${sub}</span></h3><button class="close" aria-label="Close">${I.close}</button></div>
+      <div class="modal-b lc">${main}${qr}</div>`, {
+      width: one ? 760 : 680,
+      onMount(s) {
+        let fmt = 'PNG';
+        s.addEventListener('click', e => {
+          const t = e.target, h = q => t.closest(q); let el;
+          if ((el = h('[data-lc-copy]'))) { copyText(el.dataset.lcCopy, 'Copied'); return; }
+          if ((el = h('[data-fmt]'))) { fmt = el.dataset.fmt; $$('[data-fmt]', s).forEach(b => b.classList.toggle('on', b === el)); $('#lc-dl span', s).textContent = `Download ${fmt}`; const tr = $('#lc-transparent', s); tr.disabled = fmt === 'JPEG'; if (fmt === 'JPEG') tr.checked = false; return; }
+          if (h('#lc-dl')) { toast(`QR code ${fmt}${$('#lc-transparent', s).checked ? ' (transparent)' : ''} downloaded`); return; }
+          if (h('#lc-design')) { toast('QR designs live under QR codes → QR designs'); return; }
+          if (h('#lc-analytics')) { closeModal(); state.from = 'links'; goLink(L.slug); return; }
+          if (h('#lc-edit')) { closeModal(); openBuilder({ edit: L.slug }); return; }
+          if (h('#lc-copy-all')) { copyText(info.links.map(l => l.short || l.long).join('\n'), `Copied ${info.links.length} links`); return; }
+          if (h('#lc-csv')) { toast(`Exported ${info.links.length} links as CSV`); return; }
+          if (h('#lc-zip')) { toast(`Downloaded ${info.links.length} QR codes (ZIP)`); return; }
+          if (h('#lc-again')) { closeModal(); const k = info.again; openBuilder(); Object.assign(B, { tpls: k.tpls, shortener: k.shortener, qr: k.qr, design: k.design }); ['campaign', 'medium'].forEach(x => { if (x in k.vals) B.vals[x] = k.vals[x]; }); lbPaint(); const u = $('#lb-url'); if (u) u.focus(); return; }
+        });
+      },
+    });
   }
   function lbApplyTemplateDefaults() {
     if (B.tpls.length !== 1) return; const t = tplOf(B.tpls[0]); if (usableShorteners().find(s => s.domain === t.shortener)) B.shortener = t.shortener; if (t.qr) { B.qr = true; B.design = t.qr; }
@@ -1656,6 +1762,11 @@
     lbPaint();
     const first = o.focus ? $(`#lb-${CSS.escape(o.focus)}`, box) : B.edit || B.mode === 'ext' ? null : $('#lb-url', box);
     setTimeout(() => { if (o.focus) lbJump(o.focus); else if (first) first.focus(); }, 80);
+    const focusedKey = () => { const f = document.activeElement && document.activeElement.closest && document.activeElement.closest('.lb-f.lb-tone'); return f && box.contains(f) ? f.dataset.f : null; };
+    s.addEventListener('focusin', e => { const f = e.target.closest('.lb-f.lb-tone'); lbHL(f ? f.dataset.f : null); });
+    s.addEventListener('focusout', () => setTimeout(() => lbHL(focusedKey()), 0));
+    s.addEventListener('mouseover', e => { const el = e.target.closest('.lb-f.lb-tone, .tk[data-tk]'); const k = el ? (el.dataset.f || el.dataset.tk) : focusedKey(); if (k !== B.hl) lbHL(k); });
+    s.addEventListener('mouseleave', () => lbHL(focusedKey()));
     // All builder events are delegated from the modal so repaints don't drop listeners.
     s.addEventListener('input', e => { const t = e.target;
       if (t.dataset.lb) { B.vals[t.dataset.lb] = t.value; if (B.combo) B.combo.i = -1; lbComboOpen(t.dataset.lb); lbRefresh(); return; }
@@ -1768,65 +1879,150 @@
   function closePop() { if (!pop) return; pop.anchor.setAttribute('aria-expanded', 'false'); pop.el.remove(); if (pop.onClose) pop.onClose(); pop = null; }
   document.addEventListener('mousedown', e => { if (pop && !pop.el.contains(e.target) && !pop.anchor.contains(e.target)) closePop(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (pop) closePop(); else closeModal(); } });
+  // The bar's search box: typing drops the value list down under the whole field; empty closes it.
+  $('#view').addEventListener('input', e => {
+    if (e.target.id !== 'fq') return;
+    const fbar = $('#fbar');
+    if (!e.target.value.trim()) { if (pop && pop.anchor === fbar) closePop(); return; }
+    if (pop && pop.anchor === fbar && pop.el._redraw) pop.el._redraw(); else filterMenu(fbar, '', e.target);
+  });
+  $('#view').addEventListener('keydown', e => { if (e.target.id === 'fq' && pop && pop.el._keys) pop.el._keys(e); });
+  // Type-to-filter: on pages with the filter field, typing anywhere goes into it; "/" just focuses it.
+  document.addEventListener('keydown', e => {
+    if (e.metaKey || e.ctrlKey || e.altKey || pop || $('.scrim') || (e.target.closest && e.target.closest('input, textarea, select, [contenteditable]'))) return;
+    const box = $('#fq') || $('#fbar #lq'); if (!box) return;
+    if (e.key === '/') { e.preventDefault(); box.focus(); }
+    else if (/^[\p{L}\p{N}_.@-]$/u.test(e.key)) { e.preventDefault(); box.focus(); box.value += e.key; box.dispatchEvent(new Event('input', { bubbles: true })); }
+  });
 
   /* ---------- Filter menu ---------- */
-  function filterMenu(anchor) {
+  // One search for fields AND their values: typing "sale" finds Campaign = fall_sale_2026 directly,
+  // offers "Campaign contains “sale”", and still lists matching fields. ↑↓ to move, Enter to pick.
+  function filterMenu(anchor, initial = '', ext = null) {
     const groups = [...new Set(D.DIMS.map(d => d.group))];
     const icon = { link: I.links, trigger: I.trigger, campaign: I.tag, source: I.tag, medium: I.tag, content: I.tag, term: I.tag, referrer: I.referrer, country: I.globe, region: I.globe, city: I.globe, device: I.device, browser: I.device, os: I.device };
+    const ctx = { range: state.view === 'links' ? ALL_RANGE : state.range, trigger: state.trigger, filters: state.view === 'link' ? [...state.filters, { dim: 'link', op: 'is', values: [state.slug] }] : state.filters };
+    let index = null; // every value of every field, built on first keystroke
+    const allValues = () => index || (index = D.DIMS.filter(d => d.key !== 'trigger').flatMap(d => D.valuesFor(d.key, ctx).filter(v => v.label !== '(not set)').map(v => {
+      // Countries match by name too ("united"); regions and cities only by their own name, like the contains filter.
+      return { dim: d.key, label: v.label, value: v.value, text: (v.label + (d.key === 'country' && D.COUNTRIES[v.label] ? ' ' + D.COUNTRIES[v.label].name : '')).toLowerCase() };
+    })));
+    const mark = (txt, ql) => esc(txt).replace(new RegExp(`(${esc(ql).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'i'), '<mark>$1</mark>');
+    const isOn = (dim, v) => state.filters.some(f => f.dim === dim && f.op === 'is' && f.values.includes(v));
+    const fieldRow = d => { const active = state.filters.some(f => f.dim === d.key); return `<button class="mi ${active ? 'on' : ''}" data-dim="${d.key}">${icon[d.key]}<span class="grow">${esc(d.label)}</span>${d.utm ? `<span class="utm">${d.utm}</span>` : ''}${active ? `<span class="check">${I.check.replace('<svg', '<svg style="width:14px;height:14px"')}</span>` : ''}<span class="chev">${I.chevR}</span></button>`; };
     const render = q => {
-      const ql = q.toLowerCase();
-      return groups.map(g => {
-        const dims = D.DIMS.filter(d => d.group === g && (!ql || d.label.toLowerCase().includes(ql) || (d.utm || '').includes(ql)));
-        if (!dims.length) return '';
-        return `<div class="group">${esc(g)}</div>` + dims.map(d => { const active = state.filters.some(f => f.dim === d.key); return `<button class="mi ${active ? 'on' : ''}" data-dim="${d.key}">${icon[d.key]}<span class="grow">${esc(d.label)}</span>${d.utm ? `<span class="utm">${d.utm}</span>` : ''}${active ? `<span class="check">${I.check.replace('<svg', '<svg style="width:14px;height:14px"')}</span>` : ''}<span class="chev">${I.chevR}</span></button>`; }).join('');
-      }).join('') || '<div class="group" style="padding:14px 10px">No matching dimensions</div>';
+      const ql = q.trim().toLowerCase();
+      if (!ql) return groups.map(g => `<div class="group">${esc(g)}</div>` + D.DIMS.filter(d => d.group === g).map(fieldRow).join('')).join('');
+      const fields = D.DIMS.filter(d => d.label.toLowerCase().includes(ql) || (d.utm || '').includes(ql));
+      const vals = allValues().filter(v => v.text.includes(ql)).sort((a, b) => (b.label.toLowerCase().startsWith(ql) - a.label.toLowerCase().startsWith(ql)) || b.value - a.value);
+      const byDim = {}; vals.forEach(v => { (byDim[v.dim] = byDim[v.dim] || []).push(v); });
+      let html = '';
+      const noun = { links: 'links', qr: 'QR codes' }[state.view];
+      if (noun) {
+        const prev = state.lq; state.lq = q.trim(); const hits = (state.view === 'qr' ? qrRows() : linkRows()).length; state.lq = prev;
+        if (hits) html += `<div class="group">Search</div><button class="mi" data-text>${I.search}<span class="grow">${noun[0].toUpperCase() + noun.slice(1)} matching “${esc(q.trim())}”</span><span class="fm-n num">${hits}</span></button>`;
+      }
+      if (fields.length) html += `<div class="group">Fields</div>` + fields.map(fieldRow).join('');
+      if (vals.length) html += `<div class="group">Values</div>` + vals.slice(0, 8).map(v => {
+        const geo = geoLabel(v.dim, v.label), on = isOn(v.dim, v.label);
+        return `<button class="mi fm-val ${on ? 'on' : ''}" data-pick="${v.dim}" data-v="${esc(v.label)}">${icon[v.dim]}<span class="grow fm-l">${geo || mark(v.label, ql)}</span><span class="fm-dim">${esc(D.DIM[v.dim].label)}</span><span class="fm-n num">${on ? 'Added' : fmt.n(v.value)}</span></button>`;
+      }).join('') + (vals.length > 8 ? `<div class="fm-more">${vals.length - 8} more. Narrow the search or use “contains” below.</div>` : '');
+      const cdims = Object.keys(byDim).filter(k => !(byDim[k].length === 1 && byDim[k][0].label.toLowerCase() === ql)); // skip when it'd equal the exact value
+      if (cdims.length) html += `<div class="group">Match text</div>` + cdims.map(k => `<button class="mi" data-contains="${k}">${I.search}<span class="grow">${esc(D.DIM[k].label)} <span class="fm-op">contains</span> “${esc(q.trim())}”</span><span class="fm-n num">${byDim[k].length} value${byDim[k].length === 1 ? '' : 's'}</span></button>`).join('');
+      return html || `<div class="fm-empty"><b>Nothing matches “${esc(q.trim())}”</b>Try part of a campaign, source, city or link.</div>`;
     };
-    openPop(anchor, `<div class="search">${I.search}<input id="dim-q" placeholder="Filter by…" aria-label="Search dimensions"></div><div class="menu" id="dim-list" style="max-height:380px;overflow-y:auto;width:280px">${render('')}</div>`, {
+    const listHTML = `<div class="menu fm" id="dim-list" style="max-height:420px;overflow-y:auto;width:360px">${render(ext ? ext.value : initial)}</div><div class="fm-foot"><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>↵</kbd> add</span><span class="grow"></span><span>${ext ? '<kbd>esc</kbd> close' : 'Try “sale” or “London”'}</span></div>`;
+    openPop(anchor, ext ? listHTML : `<div class="search">${I.search}<input id="dim-q" placeholder="Search fields and values…" aria-label="Search fields and values" value="${esc(initial)}"></div>${listHTML}`, {
       onMount(el) {
-        const list = $('#dim-list', el), q = $('#dim-q', el);
-        q.addEventListener('input', () => { list.innerHTML = render(q.value); });
-        q.addEventListener('keydown', e => { if (e.key === 'Enter') { const b = $('.mi', list); if (b) b.click(); } });
-        list.addEventListener('click', e => { const b = e.target.closest('[data-dim]'); if (b) valuePicker(anchor, b.dataset.dim, state.filters.findIndex(f => f.dim === b.dataset.dim), true); });
+        const list = $('#dim-list', el), q = ext || $('#dim-q', el);
+        let hl = 0;
+        const items = () => $$('.mi', list);
+        const paint = () => { items().forEach((b, k) => b.classList.toggle('hl', k === hl)); const b = items()[hl]; if (b) b.scrollIntoView({ block: 'nearest' }); };
+        const redraw = () => { list.innerHTML = render(q.value); hl = 0; if (q.value.trim()) paint(); };
+        const keys = e => {
+          const n = items().length;
+          if (e.key === 'ArrowDown' && n) { e.preventDefault(); hl = (hl + 1) % n; paint(); }
+          else if (e.key === 'ArrowUp' && n) { e.preventDefault(); hl = (hl - 1 + n) % n; paint(); }
+          else if (e.key === 'Enter') { e.preventDefault(); const b = items()[hl]; if (b) b.click(); }
+        };
+        if (ext) { el._redraw = redraw; el._keys = keys; paint(); } // the bar's box drives it (see #fq below)
+        else {
+        q.focus(); q.setSelectionRange(q.value.length, q.value.length); // focus now, so fast typing isn't lost
+        if (initial) paint();
+        q.addEventListener('input', redraw);
+        q.addEventListener('keydown', keys);
+        }
+        list.addEventListener('click', e => {
+          const b = e.target.closest('.mi'); if (!b) return;
+          if (b.hasAttribute('data-text')) { state.lq = q.value.trim(); closePop(); render0({ busy: true }); return; }
+          if (b.dataset.dim) { valuePicker(anchor, b.dataset.dim, state.filters.findIndex(f => f.dim === b.dataset.dim), true); return; }
+          if (b.dataset.contains) { const dim = b.dataset.contains, t = q.value.trim(); state.filters.push({ dim, op: 'contains', values: [t] }); closePop(); render0({ busy: true }); toast(`Added filter: ${D.DIM[dim].label} contains “${t}”`); return; }
+          const dim = b.dataset.pick, v = b.dataset.v;
+          if (isOn(dim, v)) { toast(`${D.DIM[dim].label} is already filtered to ${v}`); return; }
+          // Same field already filtered with "is"? Add this value to it (A or B) instead of a second chip.
+          const f = state.filters.find(x => x.dim === dim && x.op === 'is');
+          if (f) f.values.push(v); else state.filters.push({ dim, op: 'is', values: [v] });
+          closePop(); render0({ busy: true }); toast(`Added filter: ${D.DIM[dim].label} is ${v}`);
+        });
       },
     });
   }
+  const render0 = o => render(o);
 
   function valuePicker(anchor, dim, editIndex = -1, fromMenu = false) {
     const d = D.DIM[dim];
     const existing = editIndex > -1 ? state.filters[editIndex] : null;
     let op = existing ? existing.op : 'is';
-    const sel = new Set(existing ? existing.values : []);
+    const sel = new Set(existing && op !== 'contains' ? existing.values : []);
     const ctx = { range: state.view === 'links' ? ALL_RANGE : state.range, trigger: state.trigger, filters: state.view === 'link' ? [...state.filters, { dim: 'link', op: 'is', values: [state.slug] }] : state.filters };
     const values = dim === 'trigger' ? [{ label: 'Link click', value: Q.unfiltered.totals.linkClicks, share: 0 }, { label: 'QR scan', value: Q.unfiltered.totals.qr, share: 0 }] : D.valuesFor(dim, ctx);
+    const cname = v => { const cc = dim === 'country' ? v.label : D.PLACE[dim] && D.PLACE[dim][v.label] && D.PLACE[dim][v.label].cc; return cc && D.COUNTRIES[cc] ? D.COUNTRIES[cc].name.toLowerCase() : ''; };
+    // "contains" matches the text itself (countries by name); the search box finds values for is / is not.
+    const matching = ql => values.filter(v => !ql || v.label.toLowerCase().includes(ql) || (op === 'contains' ? dim === 'country' : true) && cname(v).includes(ql));
     const list = q => {
-      const ql = q.toLowerCase();
-      const vs = values.filter(v => !ql || v.label.toLowerCase().includes(ql) || (dim === 'country' && D.COUNTRIES[v.label] && D.COUNTRIES[v.label].name.toLowerCase().includes(ql)));
-      if (!vs.length) return `<div class="group" style="padding:14px 10px">No values match “${esc(q)}”</div>`;
+      const ql = q.trim().toLowerCase();
+      if (op === 'contains' && !ql) return `<div class="group vp-hint">Type part of a value. “sale” matches fall_sale_2026 and spring_sale.</div>`;
+      const vs = matching(ql);
+      if (!vs.length) return `<div class="group" style="padding:14px 10px">No values match “${esc(q)}”${op === 'contains' ? '. The filter still applies to future clicks.' : ''}</div>`;
       return vs.map(v => {
-        let label = dim === 'country' ? countrySpan(v.label) : esc(v.label);
-        if (ql && dim !== 'country') label = label.replace(new RegExp(`(${ql.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'i'), '<mark>$1</mark>');
-        return `<label class="val ${sel.has(v.label) ? 'on' : ''}" data-v="${esc(v.label)}"><span class="box">${I.check}</span><span class="lbl">${label}</span><span class="cnt num">${fmt.n(v.value)}</span></label>`;
+        let label = geoLabel(dim, v.label) || esc(v.label);
+        if (ql && !geoLabel(dim, v.label)) label = label.replace(new RegExp(`(${ql.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'i'), '<mark>$1</mark>');
+        return op === 'contains'
+          ? `<div class="val match"><span class="lbl">${label}</span><span class="cnt num">${fmt.n(v.value)}</span></div>`
+          : `<label class="val ${sel.has(v.label) ? 'on' : ''}" data-v="${esc(v.label)}"><span class="box">${I.check}</span><span class="lbl">${label}</span><span class="cnt num">${fmt.n(v.value)}</span></label>`;
       }).join('');
     };
-    const html = `<div class="pop-head">${fromMenu ? `<button class="back" id="vp-back" aria-label="Back">${I.arrowL}</button>` : ''}<span>${esc(d.label)}</span><span class="op-toggle" style="margin-left:auto"><button data-op="is" class="${op === 'is' ? 'on' : ''}">is</button><button data-op="is not" class="${op === 'is not' ? 'on' : ''}">is not</button></span></div>
-      <div class="search">${I.search}<input id="vp-q" placeholder="Search ${esc(d.label.toLowerCase())}…" aria-label="Search values"></div>
-      <div class="vals" id="vp-list" style="width:320px">${list('')}</div>
-      <div class="pop-foot"><span class="grow" id="vp-count">${sel.size ? `${sel.size} selected` : 'Applies to this dashboard and the Links table'}</span><button class="btn ghost" id="vp-cancel">Cancel</button><button class="btn primary" id="vp-apply" ${sel.size ? '' : 'disabled'}>${existing ? 'Update' : 'Apply'} filter</button></div>`;
+    const ops = ['is', 'is not', 'contains'].map(o => `<button data-op="${o}" class="${op === o ? 'on' : ''}">${o}</button>`).join('');
+    const html = `<div class="pop-head">${fromMenu ? `<button class="back" id="vp-back" aria-label="Back">${I.arrowL}</button>` : ''}<span>${esc(d.label)}</span><span class="op-toggle" style="margin-left:auto">${ops}</span></div>
+      <div class="search">${I.search}<input id="vp-q" aria-label="Search values" value="${existing && op === 'contains' ? esc(existing.values[0]) : ''}"></div>
+      <div class="vals" id="vp-list" style="width:340px"></div>
+      <div class="pop-foot"><span class="grow" id="vp-count"></span><button class="btn ghost" id="vp-cancel">Cancel</button><button class="btn primary" id="vp-apply">${existing ? 'Update' : 'Apply'} filter</button></div>`;
     openPop(anchor, html, {
       role: 'dialog',
       onMount(el) {
         const listEl = $('#vp-list', el), q = $('#vp-q', el), apply = $('#vp-apply', el), count = $('#vp-count', el);
-        const sync = () => { apply.disabled = !sel.size; count.textContent = sel.size ? `${sel.size} selected` : 'Applies to this dashboard and the Links table'; };
-        q.addEventListener('input', () => { listEl.innerHTML = list(q.value); });
-        q.addEventListener('keydown', e => { if (e.key === 'Enter') { const first = $('.val', listEl); if (first && !sel.size) { first.click(); } else if (sel.size) apply.click(); } });
-        listEl.addEventListener('click', e => { const l = e.target.closest('.val'); if (!l) return; const v = l.dataset.v; if (sel.has(v)) sel.delete(v); else sel.add(v); l.classList.toggle('on', sel.has(v)); sync(); });
-        $$('[data-op]', el).forEach(b => b.addEventListener('click', () => { op = b.dataset.op; $$('[data-op]', el).forEach(x => x.classList.toggle('on', x === b)); }));
+        const text = () => q.value.trim();
+        const sync = () => {
+          if (op === 'contains') {
+            const ms = text() ? matching(text().toLowerCase()) : [];
+            apply.disabled = !text();
+            count.textContent = text() ? `Matches ${ms.length} value${ms.length === 1 ? '' : 's'} · ${fmt.n(ms.reduce((a, v) => a + v.value, 0))} clicks` : 'Matches any part, any case';
+          } else { apply.disabled = !sel.size; count.textContent = sel.size ? `${sel.size} selected` : 'Applies to this dashboard and the Links table'; }
+        };
+        const redraw = () => { q.placeholder = op === 'contains' ? `${d.label} contains…` : `Search ${d.label.toLowerCase()}…`; listEl.innerHTML = list(q.value); sync(); };
+        redraw();
+        q.addEventListener('input', redraw);
+        q.addEventListener('keydown', e => { if (e.key !== 'Enter') return; if (op === 'contains') { if (text()) apply.click(); return; } const first = $('.val', listEl); if (first && !sel.size) { first.click(); } else if (sel.size) apply.click(); });
+        listEl.addEventListener('click', e => { const l = e.target.closest('label.val'); if (!l) return; const v = l.dataset.v; if (sel.has(v)) sel.delete(v); else sel.add(v); l.classList.toggle('on', sel.has(v)); sync(); });
+        $$('[data-op]', el).forEach(b => b.addEventListener('click', () => { op = b.dataset.op; $$('[data-op]', el).forEach(x => x.classList.toggle('on', x === b)); redraw(); q.focus(); }));
         $('#vp-cancel', el).addEventListener('click', closePop);
         const back = $('#vp-back', el); if (back) back.addEventListener('click', () => filterMenu(anchor));
         apply.addEventListener('click', () => {
-          const f = { dim, op, values: [...sel] };
+          const vals = op === 'contains' ? [text()] : [...sel];
+          if (!vals.length || !vals[0]) return;
+          const f = { dim, op, values: vals };
           if (editIndex > -1) state.filters[editIndex] = f; else state.filters.push(f);
-          closePop(); render({ busy: true }); toast(`${existing ? 'Updated' : 'Added'} filter: ${d.label} ${op} ${[...sel].slice(0, 2).join(', ')}${sel.size > 2 ? ` +${sel.size - 2}` : ''}`);
+          closePop(); render({ busy: true }); toast(`${existing ? 'Updated' : 'Added'} filter: ${d.label} ${op} ${op === 'contains' ? `“${vals[0]}”` : vals.slice(0, 2).join(', ') + (vals.length > 2 ? ` +${vals.length - 2}` : '')}`);
         });
       },
     });
@@ -1893,6 +2089,7 @@
   function action(act) {
     switch (act) {
       case 'csv': exportCSV(); break;
+      case 'links-import': toast('Import links via CSV is outside this prototype'); break;
       case 'copy-link': copyText(location.href, 'Link copied'); break;
       case 'reset': Object.assign(state, { view: 'overview', slug: null, preset: 'month', range: PRESETS[4].get(), compare: true, trigger: 'all', filters: [], metric: 'clicks', interval: 'day', sort: { key: 'clicks', dir: -1 }, showAll: false, tabs: { utm: 'campaign', loc: 'map', dev: 'device', ref: 'referrer' } }); render({ busy: true, top: true }); toast('Prototype reset'); break;
       case 'about': tipsModal(); break;
@@ -1923,7 +2120,7 @@
   function closeModal() { const s = $('.scrim', layer); if (s) s.remove(); }
   function expandModal(id) {
     const dim = state.tabs[id]; const d = D.DIM[dim]; const items = Q.cur.breakdown(dim);
-    const list = q => rowsHTML(items.filter(i => !q || i.label.toLowerCase().includes(q.toLowerCase()) || (dim === 'country' && D.COUNTRIES[i.label] && D.COUNTRIES[i.label].name.toLowerCase().includes(q.toLowerCase()))), { dim, bar: CARD_BARS[id], limit: 500 });
+    const list = q => rowsHTML(items.filter(i => !q || i.label.toLowerCase().includes(q.toLowerCase()) || (i.code && D.COUNTRIES[i.code] && D.COUNTRIES[i.code].name.toLowerCase().includes(q.toLowerCase()))), { dim, bar: CARD_BARS[id], limit: 500 });
     openModal(`<div class="modal-h"><h3>${esc(d.label)}<span class="sub">${items.length} values · ${esc(rangeLabel())}</span></h3><div class="search" style="margin:0;width:220px">${I.search}<input id="exp-q" placeholder="Search…"></div><button class="close" aria-label="Close">${I.close}</button></div>
       <div class="modal-b"><div class="cols"><span>${esc(d.label)}</span><span class="r">Clicks</span><span class="r">%</span></div><div class="rows" id="exp-rows">${list('')}</div></div>`, {
       onMount(s) { const q = $('#exp-q', s), rows = $('#exp-rows', s); const grow = () => requestAnimationFrame(() => $$('[data-w]', rows).forEach(el => el.style.width = el.dataset.w + '%')); grow(); q.addEventListener('input', () => { rows.innerHTML = list(q.value); grow(); }); setTimeout(() => q.focus(), 50);
@@ -1976,7 +2173,7 @@
       <li><b>Tags</b> on a row flag what needs a look: <i>Not saved</i> (used in links but not in the list), <i>Duplicate?</i> (e.g. <i>Facebook</i> vs <i>facebook</i>), <i>Check</i> (capitals or spaces), <i>Unused</i> (no links for 90 days) and <i>New</i>.</li>
       <li><b>Groupings</b> narrow a list: when medium is <i>paid_social</i>, source offers only paid platforms. On the Board, hover a value to see its lines; click it, then tick values in the next column to group them. Esc to finish.</li>
       <li>Type in the add row to add a value (paste a list to add several). Delete removes a value from the builder; links that already use it keep working. Merge keeps one value and moves groupings across.</li></ul>
-      <h4>Keyboard shortcuts</h4><p>With the date menu open: <kbd>D</kbd> Today · <kbd>E</kbd> Yesterday · <kbd>W</kbd> Last 7 days · <kbd>T</kbd> Last 30 days · <kbd>M</kbd> This month · <kbd>L</kbd> Last month · <kbd>Q</kbd> Last 90 days. <kbd>Esc</kbd> closes any menu.</p></div>`, { width: 560 });
+      <h4>Keyboard shortcuts</h4><p>With the date menu open: <kbd>D</kbd> Today · <kbd>E</kbd> Yesterday · <kbd>W</kbd> Last 7 days · <kbd>T</kbd> Last 30 days · <kbd>M</kbd> This month · <kbd>L</kbd> Last month · <kbd>Q</kbd> Last 90 days. Start typing anywhere (or press <kbd>/</kbd>) to filter. <kbd>Esc</kbd> closes any menu.</p></div>`, { width: 560 });
   }
 
   /* ---------- Toast ---------- */
@@ -2010,6 +2207,8 @@
     if ((el = hit('[data-remove-filter]'))) { const f = state.filters.splice(+el.dataset.removeFilter, 1)[0]; render({ busy: true }); toast(`Removed filter: ${D.DIM[f.dim].label}`); return; }
     if ((el = hit('[data-edit-filter]'))) { const i = +el.dataset.editFilter; valuePicker(el.closest('.chip'), state.filters[i].dim, i); return; }
     if (hit('#clear-filters')) { state.filters = []; render({ busy: true }); toast('Filters cleared'); return; }
+    if (hit('#fbar') && !hit('button, .chip, input')) { ($('#fq') || $('#lq')).focus(); return; }
+    if (hit('.lbar') && !hit('button, .chip, input')) { $('#lq').focus(); return; }
     if ((el = hit('[data-metric]'))) { state.metric = el.dataset.metric; $$('[data-metric]').forEach(k => { k.classList.toggle('on', k === el); k.setAttribute('aria-selected', k === el); }); drawChart(); return; }
     if ((el = hit('[data-sort]'))) { const k = el.dataset.sort; if (state.sort.key === k) state.sort.dir *= -1; else state.sort = { key: k, dir: k === 'link' ? 1 : -1 }; swapSection($('#top-links'), tableHTML()); return; }
     if (hit('#show-all')) { state.showAll = !state.showAll; swapSection($('#top-links'), tableHTML()); return; }
@@ -2053,6 +2252,8 @@
       if (state.pview !== 'list' && pbClick(e)) return;
       if ((el = hit('[data-pm]'))) { goParam(el.dataset.pm, el.dataset.ptab || null); return; }
       if (hit('#pm-add-param')) { paramModal(null); return; }
+      if (hit('#pm-how')) { pbHowPop(hit('#pm-how')); return; }
+      if (hit('#pm-page-more')) { paramsMoreMenu(hit('#pm-page-more')); return; }
       if (hit('#pm-export')) { toast('Exported all parameters as CSV'); return; }
       if (hit('#pm-import')) { importParamsModal(); return; }
       if (hit('#pm-edit')) { paramModal(p); return; }
@@ -2093,7 +2294,7 @@
   $('#view').addEventListener('input', (() => { let t; return e => { if (e.target.id !== 'lq') return; state.lq = e.target.value; const c = $('#lq-clear'); if (c) c.hidden = !state.lq; clearTimeout(t); t = setTimeout(() => { if (state.view === 'parameters' && state.pview !== 'list') { pbRefresh(); return; } swapSection(listTableEl(), LIST_TABLE[state.view]()); if (state.view === 'parameters') { const rail = $('.pm-rail'); if (rail) rail.outerHTML = railHTML(); } }, 120); }; })());
   // Parameters: inline add-value row (validates as you type, Enter adds, a pasted list adds several)
   $('#view').addEventListener('input', e => { if (e.target.id !== 'pv-add') return; const p = curParam(); const hint = $('#pv-hint'), btn = $('#pv-add-form .btn'); const raw = e.target.value;
-    if (!raw.trim()) { hint.textContent = `${p.rules.includes('lowercase') ? 'lowercase · ' : ''}${p.format === 'number' ? 'numbers only · ' : ''}spaces become “-” · Enter to add, paste a list to add several`; hint.classList.remove('bad'); btn.classList.remove('ready'); return; }
+    if (!raw.trim()) { hint.textContent = `${p.hint} · ${p.rules.includes('lowercase') ? 'lowercase · ' : ''}${p.format === 'number' ? 'numbers only · ' : ''}spaces become “-” · paste a list to add several`; hint.classList.remove('bad'); btn.classList.remove('ready'); return; }
     if (/[\n,]/.test(raw)) { const n = raw.split(/[\n,]/).map(x => x.trim()).filter(x => validateValue(p, x).ok).length; hint.textContent = `${n} new value${n === 1 ? '' : 's'} will be added`; hint.classList.remove('bad'); btn.classList.toggle('ready', n > 0); return; }
     const r = validateValue(p, raw); hint.textContent = r.msg || 'Press Enter to add'; hint.classList.toggle('bad', !r.ok); btn.classList.toggle('ready', r.ok); });
   $('#view').addEventListener('submit', e => { if (e.target.id !== 'pv-add-form') return; e.preventDefault(); const p = curParam(); const inp = $('#pv-add'); const raw = inp.value; if (!raw.trim()) { inp.focus(); return; }
@@ -2118,7 +2319,8 @@
     const p = e.target.closest && e.target.closest('[data-country]'); const map = $('#map'); if (!map) return; const tip = $('#map-tip');
     if (!p) { tip.classList.remove('show'); return; }
     const c = D.COUNTRIES[p.dataset.country]; const r = map.getBoundingClientRect();
-    tip.innerHTML = `<div><b>${c.flag} ${esc(c.name)}</b></div><div class="row-t"><span class="m">Clicks</span><b class="num">${fmt.full(+p.dataset.val)}</b></div><div class="row-t"><span class="m">Share</span><span class="num">${fmt.pct(+p.dataset.share)}</span></div>`;
+    const cities = +p.dataset.val ? (Q.cities || (Q.cities = Q.cur.breakdown('city'))).filter(x => x.code === p.dataset.country && !x.label.startsWith('Other')).slice(0, 3) : [];
+    tip.innerHTML = `<div><b>${c.flag} ${esc(c.name)}</b></div><div class="row-t"><span class="m">Clicks</span><b class="num">${fmt.full(+p.dataset.val)}</b></div><div class="row-t"><span class="m">Share</span><span class="num">${fmt.pct(+p.dataset.share)}</span></div>${cities.length ? `<div class="tip-sub">Top cities</div>${cities.map(x => `<div class="row-t"><span>${esc(x.label)}</span><span class="num">${fmt.full(Math.round(x.value))}</span></div>`).join('')}` : ''}`;
     tip.style.left = (e.clientX - r.left) + 'px'; tip.style.top = (e.clientY - r.top - 4) + 'px'; tip.classList.add('show');
   });
 
