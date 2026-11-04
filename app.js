@@ -174,9 +174,9 @@
   function filterBarHTML() {
     const n = state.filters.length;
     const total = Q.unfiltered.totals.clicks, cur = Q.cur.totals.clicks;
-    const end = n ? `<span class="fbar-ctx num" title="Clicks that match these filters">${fmt.n(cur)} of ${fmt.n(total)} clicks</span><button class="clear" id="clear-filters">Clear</button>` : '<span class="kbd" title="Press F to filter">F</span>';
+    const ctx = n ? `<span class="fbar-ctx num" title="Clicks that match these filters">${fmt.n(cur)} of ${fmt.n(total)} clicks</span><button class="clear" id="clear-filters">Clear</button>` : '';
     return `<div class="fbar-row">
-      <div class="fbar ${n ? 'has' : ''}" id="fbar">${I.filter}${state.filters.map(chipHTML).join('')}<button class="fbar-add" id="filter-btn" aria-haspopup="menu" aria-expanded="false">${n ? '+ Add filter' : 'Filter by any value: fall_sale, linkedin, London…'}</button>${end}</div>
+      ${filterFieldHTML('Search values: fall_sale, linkedin, London…', n, state.filters.map(chipHTML).join(''), ctx)}
       <button class="tb-btn date" id="date-btn" aria-haspopup="dialog" aria-expanded="false">${I.calendar}<span>${esc(rangeLabel())}</span><span class="chev">${I.chev}</span></button>
       <div class="seg trig" role="radiogroup" aria-label="Clicks to show">
         <button data-trigger="all" class="${state.trigger === 'all' ? 'on' : ''}" title="Links and QR codes">All</button>
@@ -185,9 +185,21 @@
       </div>
       <button class="tb-btn icon" id="more-btn" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button></div>`;
   }
+  // The filter field: a clear "Filter" button (browse fields) + chips + a real search box.
+  // Typing in the box (or anywhere on the page) drops down matching values; focusing it alone opens nothing.
+  function filterFieldHTML(placeholder, n, chips, ctx) {
+    const nf = state.filters.length;
+    return `<div class="fbar ${n ? 'has' : ''}" id="fbar"><button class="fbar-fbtn" id="filter-btn" aria-haspopup="menu" aria-expanded="false" title="Browse fields to filter by">${I.filter}<span>Filter</span>${nf ? `<span class="badge">${nf}</span>` : ''}<span class="chev">${I.chev}</span></button>${chips}<input id="fq" class="fbar-input" placeholder="${esc(n ? 'Type to add another…' : placeholder)}" autocomplete="off" spellcheck="false" aria-label="Search values to filter by">${ctx || '<span class="kbd" title="Or just start typing">/</span>'}</div>`;
+  }
   // List pages (Links, QR codes, Templates, Shorteners, Parameters) use the Analytics bar too: one 44px field
   // holding Filter + chips + search text, then the page's own buttons in the same style.
   function listBarHTML(placeholder, controls, opts = {}) {
+    if (opts.filter) {
+      const n = state.filters.length + (state.lq ? 1 : 0);
+      const textChip = state.lq ? `<span class="chip"><span class="k">Search</span><span class="v">“${esc(state.lq)}”</span><button class="x" id="lq-clear" aria-label="Clear search">${I.close}</button></span>` : '';
+      const end = n ? `<span class="fbar-ctx num">${opts.ctx || ''}</span><button class="clear" id="clear-search">Clear</button>` : '';
+      return `<div class="fbar-row lbar-row">${filterFieldHTML(placeholder, n, state.filters.map(chipHTML).join('') + textChip, end)}${controls}</div>`;
+    }
     const n = opts.filter ? state.filters.length : 0;
     const lead = opts.filter ? `<button class="fbar-fbtn" id="filter-btn" aria-haspopup="menu" aria-expanded="false">${I.filter}<span>Filter</span></button><span class="fbar-sep"></span>${state.filters.map(chipHTML).join('')}` : `<span class="fbar-ic">${I.search}</span>`;
     const end = n ? `<span class="fbar-ctx num">${opts.ctx || ''}</span><button class="clear" id="clear-filters">Clear</button>` : '';
@@ -499,11 +511,11 @@
     const g = GROUPS.find(x => x[0] === state.groupBy), s = LSORTS.find(x => x[0] === state.lsort.key);
     const nf = state.filters.length;
     return `<div class="view"><div class="page-head"><div class="title"><h1>Links</h1><span class="status" tabindex="0" data-tip="${all} links in this workspace · updated 4 min ago">${all} links</span></div>
-        <div class="actions"><button class="btn" id="import-btn">${I.download}Import CSV</button><button class="btn primary" id="create-btn"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Create link</button></div></div></div>
-      ${listBarHTML('Search links, destinations, campaigns…', `
+        <div class="actions"><button class="btn primary" id="create-btn"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Create link</button></div></div></div>
+      ${listBarHTML('Search links, or filter: fall_sale, linkedin, London…', `
           <button class="tb-btn" id="group-btn" aria-haspopup="menu" aria-expanded="false"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h6"/></svg>${state.groupBy === 'none' ? 'Group' : g[1]}<span class="chev">${I.chev}</span></button>
           <button class="tb-btn" id="lsort-btn" aria-haspopup="menu" aria-expanded="false">${I.sort}${s[1]}<span class="chev">${I.chev}</span></button>
-          <button class="tb-btn icon" id="links-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button>`, { filter: true, ctx: `${Q.links.rows.length} of ${Q.linksAll.rows.length} links` })}
+          <button class="tb-btn icon" id="links-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button>`, { filter: true, ctx: `${linkRows().length} of ${Q.linksAll.rows.length} links` })}
       ${linksTableHTML()}${bulkBarHTML()}`;
   }
 
@@ -520,6 +532,7 @@
   }
   function linksMoreMenu(anchor) {
     openPop(anchor, `<div class="menu" style="width:230px">
+      <button class="mi" data-act="links-import">${PI.upload}<span class="grow">Import CSV</span></button>
       <button class="mi" data-act="links-csv">${I.download}<span class="grow">Export all as CSV</span></button>
       <button class="mi" data-act="columns">${I.sliders}<span class="grow">Columns…</span></button>
       <div class="sep"></div>
@@ -648,7 +661,7 @@
     const s = QSORTS.find(x => x[0] === state.lsort.key) || QSORTS[0], nf = state.filters.length;
     return `<div class="view"><div class="page-head"><div class="title"><h1>QR codes</h1><span class="status" tabindex="0" data-tip="${all.length} QR codes · ${fmt.full(scans)} scans all time · updated 4 min ago">${all.length} codes · ${fmt.n(scans)} scans</span></div>
         <div class="actions"><button class="btn" id="qr-designs-btn">${I.swatch}QR designs</button><button class="btn primary" id="create-qr-btn"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Create QR code</button></div></div></div>
-      ${listBarHTML('Search QR codes, links, campaigns…', `
+      ${listBarHTML('Search QR codes, or filter: fall_sale, print, London…', `
           <button class="tb-btn" id="lsort-btn" aria-haspopup="menu" aria-expanded="false">${I.sort}${s[1]}<span class="chev">${I.chev}</span></button>
           <button class="tb-btn icon" id="list-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button>`, { filter: true, ctx: `${qrRows().length} of ${all.length} QR codes` })}
       ${qrTableHTML()}${bulkBarHTML()}`;
@@ -1780,15 +1793,26 @@
   function closePop() { if (!pop) return; pop.anchor.setAttribute('aria-expanded', 'false'); pop.el.remove(); if (pop.onClose) pop.onClose(); pop = null; }
   document.addEventListener('mousedown', e => { if (pop && !pop.el.contains(e.target) && !pop.anchor.contains(e.target)) closePop(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (pop) closePop(); else closeModal(); } });
+  // The bar's search box: typing drops the value list down under the whole field; empty closes it.
+  $('#view').addEventListener('input', e => {
+    if (e.target.id !== 'fq') return;
+    const fbar = $('#fbar');
+    if (!e.target.value.trim()) { if (pop && pop.anchor === fbar) closePop(); return; }
+    if (pop && pop.anchor === fbar && pop.el._redraw) pop.el._redraw(); else filterMenu(fbar, '', e.target);
+  });
+  $('#view').addEventListener('keydown', e => { if (e.target.id === 'fq' && pop && pop.el._keys) pop.el._keys(e); });
+  // Type-to-filter: on pages with the filter field, typing anywhere goes into it; "/" just focuses it.
   document.addEventListener('keydown', e => {
-    if (e.key.toLowerCase() !== 'f' || e.metaKey || e.ctrlKey || e.altKey || pop || $('.scrim') || e.target.closest('input, textarea, select, [contenteditable]')) return;
-    const b = $('.fbar #filter-btn'); if (b) { e.preventDefault(); filterMenu(b); }
+    if (e.metaKey || e.ctrlKey || e.altKey || pop || $('.scrim') || e.target.closest('input, textarea, select, [contenteditable]')) return;
+    const box = $('#fq'); if (!box) return;
+    if (e.key === '/') { e.preventDefault(); box.focus(); }
+    else if (/^[\p{L}\p{N}_.@-]$/u.test(e.key)) { e.preventDefault(); box.focus(); box.value += e.key; box.dispatchEvent(new Event('input', { bubbles: true })); }
   });
 
   /* ---------- Filter menu ---------- */
   // One search for fields AND their values: typing "sale" finds Campaign = fall_sale_2026 directly,
   // offers "Campaign contains “sale”", and still lists matching fields. ↑↓ to move, Enter to pick.
-  function filterMenu(anchor, initial = '') {
+  function filterMenu(anchor, initial = '', ext = null) {
     const groups = [...new Set(D.DIMS.map(d => d.group))];
     const icon = { link: I.links, trigger: I.trigger, campaign: I.tag, source: I.tag, medium: I.tag, content: I.tag, term: I.tag, referrer: I.referrer, country: I.globe, region: I.globe, city: I.globe, device: I.device, browser: I.device, os: I.device };
     const ctx = { range: state.view === 'links' ? ALL_RANGE : state.range, trigger: state.trigger, filters: state.view === 'link' ? [...state.filters, { dim: 'link', op: 'is', values: [state.slug] }] : state.filters };
@@ -1807,6 +1831,11 @@
       const vals = allValues().filter(v => v.text.includes(ql)).sort((a, b) => (b.label.toLowerCase().startsWith(ql) - a.label.toLowerCase().startsWith(ql)) || b.value - a.value);
       const byDim = {}; vals.forEach(v => { (byDim[v.dim] = byDim[v.dim] || []).push(v); });
       let html = '';
+      const noun = { links: 'links', qr: 'QR codes' }[state.view];
+      if (noun) {
+        const prev = state.lq; state.lq = q.trim(); const hits = (state.view === 'qr' ? qrRows() : linkRows()).length; state.lq = prev;
+        if (hits) html += `<div class="group">Search</div><button class="mi" data-text>${I.search}<span class="grow">${noun[0].toUpperCase() + noun.slice(1)} matching “${esc(q.trim())}”</span><span class="fm-n num">${hits}</span></button>`;
+      }
       if (fields.length) html += `<div class="group">Fields</div>` + fields.map(fieldRow).join('');
       if (vals.length) html += `<div class="group">Values</div>` + vals.slice(0, 8).map(v => {
         const geo = geoLabel(v.dim, v.label), on = isOn(v.dim, v.label);
@@ -1816,23 +1845,30 @@
       if (cdims.length) html += `<div class="group">Match text</div>` + cdims.map(k => `<button class="mi" data-contains="${k}">${I.search}<span class="grow">${esc(D.DIM[k].label)} <span class="fm-op">contains</span> “${esc(q.trim())}”</span><span class="fm-n num">${byDim[k].length} value${byDim[k].length === 1 ? '' : 's'}</span></button>`).join('');
       return html || `<div class="fm-empty"><b>Nothing matches “${esc(q.trim())}”</b>Try part of a campaign, source, city or link.</div>`;
     };
-    openPop(anchor, `<div class="search">${I.search}<input id="dim-q" placeholder="Search fields and values…" aria-label="Search fields and values" value="${esc(initial)}"></div><div class="menu fm" id="dim-list" style="max-height:420px;overflow-y:auto;width:360px">${render(initial)}</div><div class="fm-foot"><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>↵</kbd> add</span><span class="grow"></span><span>Try “sale” or “London”</span></div>`, {
+    const listHTML = `<div class="menu fm" id="dim-list" style="max-height:420px;overflow-y:auto;width:360px">${render(ext ? ext.value : initial)}</div><div class="fm-foot"><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>↵</kbd> add</span><span class="grow"></span><span>${ext ? '<kbd>esc</kbd> close' : 'Try “sale” or “London”'}</span></div>`;
+    openPop(anchor, ext ? listHTML : `<div class="search">${I.search}<input id="dim-q" placeholder="Search fields and values…" aria-label="Search fields and values" value="${esc(initial)}"></div>${listHTML}`, {
       onMount(el) {
-        const list = $('#dim-list', el), q = $('#dim-q', el);
+        const list = $('#dim-list', el), q = ext || $('#dim-q', el);
         let hl = 0;
         const items = () => $$('.mi', list);
         const paint = () => { items().forEach((b, k) => b.classList.toggle('hl', k === hl)); const b = items()[hl]; if (b) b.scrollIntoView({ block: 'nearest' }); };
         const redraw = () => { list.innerHTML = render(q.value); hl = 0; if (q.value.trim()) paint(); };
-        if (initial) paint();
-        q.addEventListener('input', redraw);
-        q.addEventListener('keydown', e => {
+        const keys = e => {
           const n = items().length;
           if (e.key === 'ArrowDown' && n) { e.preventDefault(); hl = (hl + 1) % n; paint(); }
           else if (e.key === 'ArrowUp' && n) { e.preventDefault(); hl = (hl - 1 + n) % n; paint(); }
           else if (e.key === 'Enter') { e.preventDefault(); const b = items()[hl]; if (b) b.click(); }
-        });
+        };
+        if (ext) { el._redraw = redraw; el._keys = keys; paint(); } // the bar's box drives it (see #fq below)
+        else {
+        q.focus(); q.setSelectionRange(q.value.length, q.value.length); // focus now, so fast typing isn't lost
+        if (initial) paint();
+        q.addEventListener('input', redraw);
+        q.addEventListener('keydown', keys);
+        }
         list.addEventListener('click', e => {
           const b = e.target.closest('.mi'); if (!b) return;
+          if (b.hasAttribute('data-text')) { state.lq = q.value.trim(); closePop(); render0({ busy: true }); return; }
           if (b.dataset.dim) { valuePicker(anchor, b.dataset.dim, state.filters.findIndex(f => f.dim === b.dataset.dim), true); return; }
           if (b.dataset.contains) { const dim = b.dataset.contains, t = q.value.trim(); state.filters.push({ dim, op: 'contains', values: [t] }); closePop(); render0({ busy: true }); toast(`Added filter: ${D.DIM[dim].label} contains “${t}”`); return; }
           const dim = b.dataset.pick, v = b.dataset.v;
@@ -1967,6 +2003,7 @@
   function action(act) {
     switch (act) {
       case 'csv': exportCSV(); break;
+      case 'links-import': toast('Import links via CSV is outside this prototype'); break;
       case 'copy-link': copyText(location.href, 'Link copied'); break;
       case 'reset': Object.assign(state, { view: 'overview', slug: null, preset: 'month', range: PRESETS[4].get(), compare: true, trigger: 'all', filters: [], metric: 'clicks', interval: 'day', sort: { key: 'clicks', dir: -1 }, showAll: false, tabs: { utm: 'campaign', loc: 'map', dev: 'device', ref: 'referrer' } }); render({ busy: true, top: true }); toast('Prototype reset'); break;
       case 'about': tipsModal(); break;
@@ -2050,7 +2087,7 @@
       <li><b>Tags</b> on a row flag what needs a look: <i>Not saved</i> (used in links but not in the list), <i>Duplicate?</i> (e.g. <i>Facebook</i> vs <i>facebook</i>), <i>Check</i> (capitals or spaces), <i>Unused</i> (no links for 90 days) and <i>New</i>.</li>
       <li><b>Groupings</b> narrow a list: when medium is <i>paid_social</i>, source offers only paid platforms. On the Board, hover a value to see its lines; click it, then tick values in the next column to group them. Esc to finish.</li>
       <li>Type in the add row to add a value (paste a list to add several). Delete removes a value from the builder; links that already use it keep working. Merge keeps one value and moves groupings across.</li></ul>
-      <h4>Keyboard shortcuts</h4><p>With the date menu open: <kbd>D</kbd> Today · <kbd>E</kbd> Yesterday · <kbd>W</kbd> Last 7 days · <kbd>T</kbd> Last 30 days · <kbd>M</kbd> This month · <kbd>L</kbd> Last month · <kbd>Q</kbd> Last 90 days. <kbd>F</kbd> opens Filter. <kbd>Esc</kbd> closes any menu.</p></div>`, { width: 560 });
+      <h4>Keyboard shortcuts</h4><p>With the date menu open: <kbd>D</kbd> Today · <kbd>E</kbd> Yesterday · <kbd>W</kbd> Last 7 days · <kbd>T</kbd> Last 30 days · <kbd>M</kbd> This month · <kbd>L</kbd> Last month · <kbd>Q</kbd> Last 90 days. Start typing anywhere (or press <kbd>/</kbd>) to filter. <kbd>Esc</kbd> closes any menu.</p></div>`, { width: 560 });
   }
 
   /* ---------- Toast ---------- */
@@ -2084,7 +2121,7 @@
     if ((el = hit('[data-remove-filter]'))) { const f = state.filters.splice(+el.dataset.removeFilter, 1)[0]; render({ busy: true }); toast(`Removed filter: ${D.DIM[f.dim].label}`); return; }
     if ((el = hit('[data-edit-filter]'))) { const i = +el.dataset.editFilter; valuePicker(el.closest('.chip'), state.filters[i].dim, i); return; }
     if (hit('#clear-filters')) { state.filters = []; render({ busy: true }); toast('Filters cleared'); return; }
-    if (hit('#fbar') && !hit('.chip')) { filterMenu($('#filter-btn')); return; }
+    if (hit('#fbar') && !hit('button, .chip, input')) { $('#fq').focus(); return; }
     if (hit('.lbar') && !hit('button, .chip, input')) { $('#lq').focus(); return; }
     if ((el = hit('[data-metric]'))) { state.metric = el.dataset.metric; $$('[data-metric]').forEach(k => { k.classList.toggle('on', k === el); k.setAttribute('aria-selected', k === el); }); drawChart(); return; }
     if ((el = hit('[data-sort]'))) { const k = el.dataset.sort; if (state.sort.key === k) state.sort.dir *= -1; else state.sort = { key: k, dir: k === 'link' ? 1 : -1 }; swapSection($('#top-links'), tableHTML()); return; }

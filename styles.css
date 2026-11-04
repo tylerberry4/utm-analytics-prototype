@@ -161,13 +161,19 @@ svg { display: block; }
 .fbar-row .seg { height: 44px; border-radius: 10px; }
 /* List pages: the same bar, holding Filter + chips + the search text */
 .fbar:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), .15); }
-.fbar-fbtn { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 8px; margin-left: -6px; border-radius: 6px; font-size: 13px; font-weight: 500; color: var(--accent); flex: none; }
-.fbar-fbtn:hover, .fbar-fbtn[aria-expanded="true"] { background: var(--accent-subtle); }
-.fbar-fbtn svg, .fbar-ic svg { width: 18px; height: 18px; stroke: var(--accent); fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+/* "Filter" reads as a button inside the field: outlined, chevron, count badge */
+.fbar-fbtn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 8px 0 10px; margin-left: -8px; margin-right: 4px; border: 1px solid var(--border); border-radius: 7px; background: var(--card); box-shadow: var(--shadow-xs); font-size: 13px; font-weight: 600; color: var(--text-strong); flex: none; cursor: pointer; transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease); }
+.fbar-fbtn:hover { border-color: var(--accent); background: var(--accent-subtle); color: var(--accent-strong); }
+.fbar-fbtn[aria-expanded="true"] { border-color: var(--accent); background: var(--accent-subtle); color: var(--accent-strong); }
+.fbar-fbtn .chev { width: 14px; height: 14px; stroke: var(--text-faint); transition: transform var(--dur) var(--ease); }
+.fbar-fbtn[aria-expanded="true"] .chev { transform: rotate(180deg); }
+.fbar-fbtn .badge { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--accent); color: #fff; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; }
+.fbar[aria-expanded="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), .15); }
+.fbar-fbtn > svg:first-child, .fbar-ic svg { width: 18px; height: 18px; stroke: var(--accent); fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .fbar-ic { display: inline-flex; flex: none; margin-right: 2px; } .fbar-ic svg { stroke: var(--text-faint); }
 .fbar-sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; flex: none; }
 .fbar-input { flex: 1; min-width: 140px; height: 34px; border: 0; outline: 0; background: none; font-size: 14px; color: var(--text); padding: 0 4px; }
-.fbar-input::placeholder { color: var(--text-faint); }
+.fbar-input::placeholder { color: var(--text-faint); } .fbar-input:not(:placeholder-shown) ~ .kbd { display: none; }
 .lbar #lq-clear { width: 24px; height: 24px; flex: none; } .lbar #lq-clear[hidden] { display: none; }
 .view + .lbar-row { margin-top: -15px; } .page-head + .lbar-row { margin-top: 9px; } /* 12px under the page title, as on Analytics */
 .lbar-row .pb-legend { flex: none; }
