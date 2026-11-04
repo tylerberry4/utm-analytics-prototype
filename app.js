@@ -1057,10 +1057,11 @@
     if (state.pview !== 'list') return boardPageHTML();
     state.ptab = 'values';
     const p = curParam(); const s = PSORTS.find(x => x[0] === state.lsort.key) || PSORTS[0];
-    const tools = state.ptab === 'values' ? `${listBarHTML('Search values, pretty names, people…', `<button class="tb-btn" id="lsort-btn" aria-haspopup="menu" aria-expanded="false">${I.sort}${s[1]}<span class="chev">${I.chev}</span></button>`)}
+    const bar = listBarHTML(`Search ${p.label.toLowerCase()} values, pretty names, people…`, `<button class="tb-btn" id="lsort-btn" aria-haspopup="menu" aria-expanded="false">${I.sort}${s[1]}<span class="chev">${I.chev}</span></button>${pviewSeg()}<button class="tb-btn icon" id="pm-page-more" aria-haspopup="menu" aria-expanded="false" aria-label="Import, export and more" title="Import, export and more">${I.more}</button>`);
+    const tools = state.ptab === 'values' ? `
       <form class="pm-addrow" id="pv-add-form" autocomplete="off"><label class="ic" for="pv-add" title="Add a value">${PI.plus}</label><div class="pm-addtxt"><input id="pv-add" placeholder="Add a ${esc(p.label.toLowerCase())} value…" aria-label="Add value" ${p.format === 'number' ? 'inputmode="numeric"' : ''}><span class="hint" id="pv-hint">${esc(p.hint)} · ${p.rules.includes('lowercase') ? 'lowercase · ' : ''}${p.format === 'number' ? 'numbers only · ' : ''}spaces become “-” · paste a list to add several</span></div><button class="btn sm pm-addbtn" type="submit">${PI.plus}Add value</button></form>` : '';
-    return `<div class="view"><div class="page-head"><div class="title"><h1>Parameters</h1></div>
-        <div class="actions">${pviewSeg()}<button class="btn icon-only" id="pm-page-more" aria-haspopup="menu" aria-expanded="false" aria-label="Import, export and more" title="Import, export and more">${I.more}</button></div></div>
+    return `<div class="view"><div class="page-head"><div class="title"><h1>Parameters</h1><span class="sm-muted">${PARAMS.length} parameters</span></div></div>
+      ${bar}
       <div class="pm-layout">${railHTML()}<div class="pm-main">${paramHeadHTML(p)}${state.ptab === 'values' ? tools + paramValuesCard(p) : groupingsHTML(p)}</div></div>${bulkBarHTML()}</div>`;
   }
 
@@ -1111,7 +1112,7 @@
   }
   function pbBarHTML() {
     const s = state.psel; const p = s && paramOf(s.key); const r = p && paramValueRows(p, { all: true }).find(x => x.v === s.v);
-    if (!r) { state.psel = null; return `<div class="pb-bar" id="pb-bar">${I.info}<span>Hover a value to see what it's grouped with. <b>Click it</b> to select it, then tick values in the next column to group them.</span></div>`; }
+    if (!r) { state.psel = null; return `<div class="pb-bar" id="pb-bar" hidden></div>`; }
     const { L, R } = pbNeighbours(p); const bits = [];
     if (p.deps) { const par = paramOf(p.deps.parent); const ps = allowedBy(p, r.v); bits.push(ps.length ? `Offered when ${esc(par.label.toLowerCase())} is ${ps.map(x => `<b>${esc(x)}</b>`).join(', ')}` : `Offered for every ${esc(par.label.toLowerCase())}`); }
     const kid = childOf(p); if (kid) { const a = kid.deps.allow[r.v]; bits.push(a ? `Narrows ${esc(kid.label.toLowerCase())} to ${a.map(x => `<b>${esc(x)}</b>`).join(', ')}` : `Shows every ${esc(kid.label.toLowerCase())}`); }
@@ -1121,13 +1122,22 @@
       <span class="what">${bits.join('<span class="dotsep">·</span>') || (how ? `Tick a ${how} value to group it with <b>${esc(r.v)}</b>` : 'No neighbouring column to group with')}</span><span class="grow"></span>
       ${r.status === 'unplanned' ? '<button class="btn sm primary" data-bact="add">Add to list</button>' : `${r.links && !p.custom ? '<button class="btn sm" data-bact="links">Show links</button>' : ''}<button class="btn sm" data-bact="edit">${I.edit}Edit</button><button class="icon-btn" data-bact="delete" title="Delete value">${PI.trash}</button>`}<button class="icon-btn" data-bact="close" title="Done (Esc)">${I.close}</button></div>`;
   }
-  const pbAreaHTML = () => `<div class="pb-area" id="list-table">${pbBarHTML()}<div class="pb" id="pb"><svg class="pb-svg" id="pb-svg" aria-hidden="true"></svg>${PARAMS.map(pbColHTML).join('')}<button type="button" class="pb-ghost" id="pm-add-param">${PI.plus}Add parameter</button></div></div>`;
+  // "How grouping works": the legend and steps that used to sit above the board, on demand.
+  function pbHowPop(anchor) {
+    openPop(anchor, `<div class="pb-how">
+      <h4>How grouping works</h4>
+      <p>Grouping decides which values the link builder offers. Pick <b class="code">paid_social</b> as the medium, and the source list only shows the sources grouped with it.</p>
+      <ol><li><b>Hover</b> a value to trace what it's grouped with across columns.</li><li><b>Click</b> it to select it. Its details appear at the bottom.</li><li><b>Tick</b> values in the next column to group or ungroup them. <kbd>Esc</kbd> finishes.</li></ol>
+      <div class="pb-how-key"><span><i class="ln"></i>Grouped</span><span><i class="ln on"></i>Selected value's chain</span></div>
+      <p class="sm-muted">Columns run left to right in the order fields appear in the link builder.</p></div>`, { align: 'right', role: 'dialog' });
+  }
+  const pbAreaHTML = () => `<div class="pb-area" id="list-table"><div class="pb" id="pb"><svg class="pb-svg" id="pb-svg" aria-hidden="true"></svg>${PARAMS.map(pbColHTML).join('')}<button type="button" class="pb-ghost" id="pm-add-param">${PI.plus}Add parameter</button></div></div>`;
   function boardPageHTML() {
     const grouped = PARAMS.filter(p => p.deps).length;
     return `<div class="view"><div class="page-head"><div class="title"><h1>Parameters</h1><span class="sm-muted">${PARAMS.length} parameters · ${grouped ? `${grouped} grouped` : 'no groupings yet'}</span></div>
-        <div class="actions">${pviewSeg()}<button class="btn icon-only" id="pm-page-more" aria-haspopup="menu" aria-expanded="false" aria-label="Import, export and more" title="Import, export and more">${I.more}</button></div></div>
-      ${listBarHTML("Search every parameter's values…", '', { after: `<div class="pb-legend"><span><i class="ln"></i>grouped</span><span><i class="ln on"></i>selected chain</span><span class="sm-muted">Left to right is the order fields appear in the builder</span></div>` })}
-      ${pbAreaHTML()}</div>`;
+</div>
+      ${listBarHTML("Search every parameter's values…", `<button class="tb-btn" id="pm-how" aria-haspopup="dialog" aria-expanded="false">${I.info}<span>How grouping works</span></button>${pviewSeg()}<button class="tb-btn icon" id="pm-page-more" aria-haspopup="menu" aria-expanded="false" aria-label="Import, export and more" title="Import, export and more">${I.more}</button>`)}
+      ${pbAreaHTML()}</div>${pbBarHTML()}`; // bar sits outside .view so it can float over the page
   }
   // Lines: measured after layout, redrawn on resize, search and grouping changes.
   function pbDraw() {
@@ -1154,7 +1164,7 @@
   // Redraw just the board, keeping its sideways scroll.
   function pbRefresh(focusAdd) {
     const old = $('.pb-area'); if (!old) return; const x = $('#pb') ? $('#pb').scrollLeft : 0;
-    old.outerHTML = pbAreaHTML(); const wrap = $('#pb'); wrap.scrollLeft = x; pbDraw();
+    old.outerHTML = pbAreaHTML(); const bar = $('#pb-bar'); if (bar) bar.outerHTML = pbBarHTML(); const wrap = $('#pb'); wrap.scrollLeft = x; pbDraw();
     const sub = $('.page-head .title .sm-muted'); if (sub) { const g = PARAMS.filter(p => p.deps).length; sub.textContent = `${PARAMS.length} parameters · ${g ? g + ' grouped' : 'no groupings yet'}`; }
     if (focusAdd) { const i = $(`[data-badd-in="${CSS.escape(focusAdd)}"]`); if (i) i.focus(); }
   }
@@ -2165,6 +2175,7 @@
       if (state.pview !== 'list' && pbClick(e)) return;
       if ((el = hit('[data-pm]'))) { goParam(el.dataset.pm, el.dataset.ptab || null); return; }
       if (hit('#pm-add-param')) { paramModal(null); return; }
+      if (hit('#pm-how')) { pbHowPop(hit('#pm-how')); return; }
       if (hit('#pm-page-more')) { paramsMoreMenu(hit('#pm-page-more')); return; }
       if (hit('#pm-export')) { toast('Exported all parameters as CSV'); return; }
       if (hit('#pm-import')) { importParamsModal(); return; }
