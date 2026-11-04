@@ -885,6 +885,7 @@ button.status-pill { cursor: pointer; transition: box-shadow var(--dur) var(--ea
 .lb-l { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); min-width: 0; }
 .lb-l .nm { font-weight: 600; color: var(--text-strong); } .lb-l .req { color: var(--down); font-weight: 600; margin-left: -3px; }
 .lb-l .k { font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); }
+.lb-dep { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-muted); background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 0 7px 0 5px; height: 18px; } .lb-dep svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .lb-l .ask { font-size: 11px; color: var(--accent-strong); background: var(--accent-faint); border-radius: 4px; padding: 1px 6px; }
 .lb-l .tipi { display: inline-flex; color: var(--text-faint); cursor: help; } .lb-l .tipi svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 1.8; }
 .lb-in { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 10px 0 12px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--card); transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
