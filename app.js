@@ -185,6 +185,14 @@
       </div>
       <button class="tb-btn icon" id="more-btn" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button></div>`;
   }
+  // List pages (Links, QR codes, Templates, Shorteners, Parameters) use the Analytics bar too: one 44px field
+  // holding Filter + chips + search text, then the page's own buttons in the same style.
+  function listBarHTML(placeholder, controls, opts = {}) {
+    const n = opts.filter ? state.filters.length : 0;
+    const lead = opts.filter ? `<button class="fbar-fbtn" id="filter-btn" aria-haspopup="menu" aria-expanded="false">${I.filter}<span>Filter</span></button><span class="fbar-sep"></span>${state.filters.map(chipHTML).join('')}` : `<span class="fbar-ic">${I.search}</span>`;
+    const end = n ? `<span class="fbar-ctx num">${opts.ctx || ''}</span><button class="clear" id="clear-filters">Clear</button>` : '';
+    return `<div class="fbar-row lbar-row"><div class="fbar lbar ${n ? 'has' : ''}">${lead}<input id="lq" class="fbar-input" placeholder="${esc(n ? 'Search…' : placeholder)}" value="${esc(state.lq)}" aria-label="${esc(placeholder)}"><button class="icon-btn" id="lq-clear" aria-label="Clear search" ${state.lq ? '' : 'hidden'}>${I.close}</button>${end}</div>${controls}${opts.after || ''}</div>`;
+  }
   function rangeLabel() { const p = PRESETS.find(p => p.id === state.preset); return p ? p.label : fmt.range(state.range); }
 
   function chipHTML(f, i) {
@@ -492,13 +500,11 @@
     const nf = state.filters.length;
     return `<div class="view"><div class="page-head"><div class="title"><h1>Links</h1><span class="status" tabindex="0" data-tip="${all} links in this workspace · updated 4 min ago">${all} links</span></div>
         <div class="actions"><button class="btn" id="import-btn">${I.download}Import CSV</button><button class="btn primary" id="create-btn"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Create link</button></div></div></div>
-      <div class="toolbar links-tb"><div class="search lq">${I.search}<input id="lq" placeholder="Search links, destinations, campaigns…" value="${esc(state.lq)}" aria-label="Search links"><button class="icon-btn" id="lq-clear" aria-label="Clear search" ${state.lq ? '' : 'hidden'}>${I.close}</button></div>
-        <div class="controls">
-          <button class="tb-btn" id="filter-btn" aria-haspopup="menu" aria-expanded="false">${I.filter}Filter${nf ? `<span class="badge">${nf}</span>` : ''}</button>
+      ${listBarHTML('Search links, destinations, campaigns…', `
           <button class="tb-btn" id="group-btn" aria-haspopup="menu" aria-expanded="false"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h6"/></svg>${state.groupBy === 'none' ? 'Group' : g[1]}<span class="chev">${I.chev}</span></button>
           <button class="tb-btn" id="lsort-btn" aria-haspopup="menu" aria-expanded="false">${I.sort}${s[1]}<span class="chev">${I.chev}</span></button>
-          <button class="tb-btn icon" id="links-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button></div></div>
-      ${chipsHTML()}${linksTableHTML()}${bulkBarHTML()}`;
+          <button class="tb-btn icon" id="links-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button>`, { filter: true, ctx: `${Q.links.rows.length} of ${Q.linksAll.rows.length} links` })}
+      ${linksTableHTML()}${bulkBarHTML()}`;
   }
 
   function groupMenu(anchor) {
@@ -642,12 +648,10 @@
     const s = QSORTS.find(x => x[0] === state.lsort.key) || QSORTS[0], nf = state.filters.length;
     return `<div class="view"><div class="page-head"><div class="title"><h1>QR codes</h1><span class="status" tabindex="0" data-tip="${all.length} QR codes · ${fmt.full(scans)} scans all time · updated 4 min ago">${all.length} codes · ${fmt.n(scans)} scans</span></div>
         <div class="actions"><button class="btn" id="qr-designs-btn">${I.swatch}QR designs</button><button class="btn primary" id="create-qr-btn"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Create QR code</button></div></div></div>
-      <div class="toolbar links-tb"><div class="search lq">${I.search}<input id="lq" placeholder="Search QR codes, links, campaigns…" value="${esc(state.lq)}" aria-label="Search QR codes"><button class="icon-btn" id="lq-clear" aria-label="Clear search" ${state.lq ? '' : 'hidden'}>${I.close}</button></div>
-        <div class="controls">
-          <button class="tb-btn" id="filter-btn" aria-haspopup="menu" aria-expanded="false">${I.filter}Filter${nf ? `<span class="badge">${nf}</span>` : ''}</button>
+      ${listBarHTML('Search QR codes, links, campaigns…', `
           <button class="tb-btn" id="lsort-btn" aria-haspopup="menu" aria-expanded="false">${I.sort}${s[1]}<span class="chev">${I.chev}</span></button>
-          <button class="tb-btn icon" id="list-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button></div></div>
-      ${chipsHTML()}${qrTableHTML()}${bulkBarHTML()}`;
+          <button class="tb-btn icon" id="list-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button>`, { filter: true, ctx: `${qrRows().length} of ${all.length} QR codes` })}
+      ${qrTableHTML()}${bulkBarHTML()}`;
   }
   function qrDesignsModal(slugs) {
     const picking = !!(slugs && slugs.length);
@@ -725,10 +729,9 @@
     const s = TSORTS.find(x => x[0] === state.lsort.key) || TSORTS[0];
     return `<div class="view"><div class="page-head"><div class="title"><h1>Templates</h1><span class="status" tabindex="0" data-tip="${TEMPLATE_LIST.length} UTM templates · template selection is required in the link builder">${TEMPLATE_LIST.length} templates · required in builder</span></div>
         <div class="actions"><button class="btn" id="import-tpl-btn">${I.download}Import CSV</button><button class="btn primary" id="create-tpl-btn"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Create template</button></div></div></div>
-      <div class="toolbar links-tb"><div class="search lq">${I.search}<input id="lq" placeholder="Search templates, parameters, people…" value="${esc(state.lq)}" aria-label="Search templates"><button class="icon-btn" id="lq-clear" aria-label="Clear search" ${state.lq ? '' : 'hidden'}>${I.close}</button></div>
-        <div class="controls">
+      ${listBarHTML('Search templates, parameters, people…', `
           <button class="tb-btn" id="lsort-btn" aria-haspopup="menu" aria-expanded="false">${I.sort}${s[1]}<span class="chev">${I.chev}</span></button>
-          <button class="tb-btn icon" id="list-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button></div></div>
+          <button class="tb-btn icon" id="list-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button>`)}
       ${templatesTableHTML()}`;
   }
   function templateModal(key) {
@@ -811,10 +814,9 @@
     const s = SSORTS.find(x => x[0] === state.lsort.key) || SSORTS[0];
     return `<div class="view"><div class="page-head"><div class="title"><h1>Link shorteners</h1><span class="status" tabindex="0" data-tip="${SHORTENERS.length} shorteners · ${SHORTENERS.filter(x => x.status === 'pending').length} waiting for DNS">${SHORTENERS.length} domains · 1 needs DNS</span></div>
         <div class="actions"><button class="btn" id="cleaner-btn">${I.sliders}UTM Page Cleaner</button><button class="btn primary" id="add-dom-btn"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Add shortener</button></div></div></div>
-      <div class="toolbar links-tb"><div class="search lq">${I.search}<input id="lq" placeholder="Search domains…" value="${esc(state.lq)}" aria-label="Search shorteners"><button class="icon-btn" id="lq-clear" aria-label="Clear search" ${state.lq ? '' : 'hidden'}>${I.close}</button></div>
-        <div class="controls">
+      ${listBarHTML('Search domains…', `
           <button class="tb-btn" id="lsort-btn" aria-haspopup="menu" aria-expanded="false">${I.sort}${s[1]}<span class="chev">${I.chev}</span></button>
-          <button class="tb-btn icon" id="list-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button></div></div>
+          <button class="tb-btn icon" id="list-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button>`)}
       ${shortenersTableHTML()}
       <p class="footnote">Short links keep redirecting even if you turn a shortener off; it only disappears from the link builder. Custom domains need a CNAME record pointing at <span class="code">redirect.utm.io</span>.</p>`;
   }
@@ -1042,9 +1044,8 @@
     if (state.pview !== 'list') return boardPageHTML();
     state.ptab = 'values';
     const p = curParam(); const s = PSORTS.find(x => x[0] === state.lsort.key) || PSORTS[0];
-    const tools = state.ptab === 'values' ? `<div class="toolbar links-tb pm-tb"><div class="search lq">${I.search}<input id="lq" placeholder="Search values, pretty names, people…" value="${esc(state.lq)}" aria-label="Search values"><button class="icon-btn" id="lq-clear" aria-label="Clear search" ${state.lq ? '' : 'hidden'}>${I.close}</button></div>
-        <div class="controls"><button class="tb-btn" id="lsort-btn" aria-haspopup="menu" aria-expanded="false">${I.sort}${s[1]}<span class="chev">${I.chev}</span></button>
-          <button class="tb-btn icon" id="list-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button></div></div>
+    const tools = state.ptab === 'values' ? `${listBarHTML('Search values, pretty names, people…', `<button class="tb-btn" id="lsort-btn" aria-haspopup="menu" aria-expanded="false">${I.sort}${s[1]}<span class="chev">${I.chev}</span></button>
+          <button class="tb-btn icon" id="list-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button>`)}
       <form class="pm-addrow" id="pv-add-form" autocomplete="off"><span class="ic">${PI.plus}</span><input id="pv-add" placeholder="New ${esc(p.label.toLowerCase())} value, ${esc(p.hint)}" aria-label="Add value" ${p.format === 'number' ? 'inputmode="numeric"' : ''}><span class="hint" id="pv-hint">${p.rules.includes('lowercase') ? 'lowercase · ' : ''}${p.format === 'number' ? 'numbers only · ' : ''}spaces become “-” · Enter to add, paste a list to add several</span><button class="btn sm pm-addbtn" type="submit">${PI.plus}Add value</button></form>` : '';
     return `<div class="view"><div class="page-head"><div class="title"><h1>Parameters</h1></div>
         <div class="actions">${pviewSeg()}<button class="btn" id="pm-import">${PI.upload}Import CSV</button><button class="btn" id="pm-export">${I.download}Export CSV</button></div></div>
@@ -1113,8 +1114,7 @@
     const grouped = PARAMS.filter(p => p.deps).length;
     return `<div class="view"><div class="page-head"><div class="title"><h1>Parameters</h1><span class="sm-muted">${PARAMS.length} parameters · ${grouped ? `${grouped} grouped` : 'no groupings yet'}</span></div>
         <div class="actions">${pviewSeg()}<button class="btn" id="pm-import">${PI.upload}Import CSV</button><button class="btn" id="pm-export">${I.download}Export CSV</button></div></div>
-      <div class="toolbar links-tb pm-tb"><div class="search lq">${I.search}<input id="lq" placeholder="Search every parameter's values…" value="${esc(state.lq)}" aria-label="Search values"><button class="icon-btn" id="lq-clear" aria-label="Clear search" ${state.lq ? '' : 'hidden'}>${I.close}</button></div>
-        <div class="pb-legend"><span><i class="ln"></i>grouped</span><span><i class="ln on"></i>selected chain</span><span class="sm-muted">Left to right is the order fields appear in the builder</span></div></div>
+      ${listBarHTML("Search every parameter's values…", '', { after: `<div class="pb-legend"><span><i class="ln"></i>grouped</span><span><i class="ln on"></i>selected chain</span><span class="sm-muted">Left to right is the order fields appear in the builder</span></div>` })}
       ${pbAreaHTML()}</div>`;
   }
   // Lines: measured after layout, redrawn on resize, search and grouping changes.
@@ -1782,7 +1782,7 @@
   document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (pop) closePop(); else closeModal(); } });
   document.addEventListener('keydown', e => {
     if (e.key.toLowerCase() !== 'f' || e.metaKey || e.ctrlKey || e.altKey || pop || $('.scrim') || e.target.closest('input, textarea, select, [contenteditable]')) return;
-    const b = $('#fbar #filter-btn'); if (b) { e.preventDefault(); filterMenu(b); }
+    const b = $('.fbar #filter-btn'); if (b) { e.preventDefault(); filterMenu(b); }
   });
 
   /* ---------- Filter menu ---------- */
@@ -2085,6 +2085,7 @@
     if ((el = hit('[data-edit-filter]'))) { const i = +el.dataset.editFilter; valuePicker(el.closest('.chip'), state.filters[i].dim, i); return; }
     if (hit('#clear-filters')) { state.filters = []; render({ busy: true }); toast('Filters cleared'); return; }
     if (hit('#fbar') && !hit('.chip')) { filterMenu($('#filter-btn')); return; }
+    if (hit('.lbar') && !hit('button, .chip, input')) { $('#lq').focus(); return; }
     if ((el = hit('[data-metric]'))) { state.metric = el.dataset.metric; $$('[data-metric]').forEach(k => { k.classList.toggle('on', k === el); k.setAttribute('aria-selected', k === el); }); drawChart(); return; }
     if ((el = hit('[data-sort]'))) { const k = el.dataset.sort; if (state.sort.key === k) state.sort.dir *= -1; else state.sort = { key: k, dir: k === 'link' ? 1 : -1 }; swapSection($('#top-links'), tableHTML()); return; }
     if (hit('#show-all')) { state.showAll = !state.showAll; swapSection($('#top-links'), tableHTML()); return; }

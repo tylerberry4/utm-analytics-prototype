@@ -159,6 +159,18 @@ svg { display: block; }
 .fbar .clear { color: var(--accent); font-size: 13px; font-weight: 500; padding: 4px 6px; border-radius: 6px; }
 .fbar .clear:hover { background: var(--accent-subtle); }
 .fbar-row .seg { height: 44px; border-radius: 10px; }
+/* List pages: the same bar, holding Filter + chips + the search text */
+.fbar:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), .15); }
+.fbar-fbtn { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 8px; margin-left: -6px; border-radius: 6px; font-size: 13px; font-weight: 500; color: var(--accent); flex: none; }
+.fbar-fbtn:hover, .fbar-fbtn[aria-expanded="true"] { background: var(--accent-subtle); }
+.fbar-fbtn svg, .fbar-ic svg { width: 18px; height: 18px; stroke: var(--accent); fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.fbar-ic { display: inline-flex; flex: none; margin-right: 2px; } .fbar-ic svg { stroke: var(--text-faint); }
+.fbar-sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; flex: none; }
+.fbar-input { flex: 1; min-width: 140px; height: 34px; border: 0; outline: 0; background: none; font-size: 14px; color: var(--text); padding: 0 4px; }
+.fbar-input::placeholder { color: var(--text-faint); }
+.lbar #lq-clear { width: 24px; height: 24px; flex: none; } .lbar #lq-clear[hidden] { display: none; }
+.view + .lbar-row { margin-top: -15px; } .page-head + .lbar-row { margin-top: 9px; } /* 12px under the page title, as on Analytics */
+.lbar-row .pb-legend { flex: none; }
 
 /* Places: flag + name + where (region/country), and the IP note under the Locations card */
 .row .lbl .where { color: var(--text-faint); font-size: 12px; }
@@ -517,7 +529,7 @@ svg { display: block; }
   .tb-btn { flex: 1; justify-content: center; } .tb-btn.icon { flex: none; }
   .chips .context { margin-left: 0; width: 100%; }
   .fm-foot { display: none; } .fm { width: auto !important; }
-  .fbar-row { flex-wrap: wrap; } .fbar { flex-basis: 100%; } .fbar-row .tb-btn.date { flex: 1; } .fbar-row .seg.trig { width: auto; height: 44px; grid-template-columns: repeat(3, 44px); } .fbar .kbd { display: none; } .fbar-add { min-width: 0; } .fbar-ctx { margin-left: 0; padding-left: 4px; }
+  .fbar-row { flex-wrap: wrap; } .lbar-row .tb-btn:not(.icon) { flex: 1; justify-content: center; } .lbar-row .pb-legend { display: none; } .view + .lbar-row { margin-top: -7px; } .fbar { flex-basis: 100%; } .fbar-row .tb-btn.date { flex: 1; } .fbar-row .seg.trig { width: auto; height: 44px; grid-template-columns: repeat(3, 44px); } .fbar .kbd { display: none; } .fbar-add { min-width: 0; } .fbar-ctx { margin-left: 0; padding-left: 4px; }
 
   .kpis, .kpis.n3 { grid-template-columns: 1fr 1fr; gap: 6px; } .kpi .v { font-size: 20px; }
   .chart { height: 220px; } .chart-wrap { padding: 12px 12px 12px; } .chart-head { flex-wrap: wrap; } .legend { font-size: 11px; gap: 10px; } #csv-btn { display: none; }
