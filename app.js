@@ -167,31 +167,29 @@
   /* ---------- Toolbar ---------- */
   function toolbarHTML(title) {
     const status = 'Updated 4 min ago · suspected bots excluded';
-    return `<div class="toolbar">
-      <div class="title"><h1>${esc(title)}</h1><span class="status" tabindex="0" data-tip="${esc(status)}" aria-label="${esc(status)}">4 min ago</span></div>
-      <div class="controls">
-        <button class="tb-btn" id="date-btn" aria-haspopup="dialog" aria-expanded="false">${I.calendar}<span>${esc(rangeLabel())}</span><span class="chev">${I.chev}</span></button>
-        <button class="tb-btn icon" id="more-btn" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button>
-      </div></div>${filterBarHTML()}`;
+    return `<div class="tb-wrap"><div class="toolbar">
+      <div class="title"><h1>${esc(title)}</h1><span class="status" tabindex="0" data-tip="${esc(status)}" aria-label="${esc(status)}">4 min ago</span></div></div>${filterBarHTML()}</div>`;
   }
-  // Analytics filter: a full-width bar that holds the chips, first in line before All / Links / QR (2026-10-29 review).
+  // Analytics filter: a wide bar that holds the chips, first in the row: filter, date, All / Links / QR, ⋮ (2026-10-29 review).
   function filterBarHTML() {
     const n = state.filters.length;
     const total = Q.unfiltered.totals.clicks, cur = Q.cur.totals.clicks;
     const end = n ? `<span class="fbar-ctx num" title="Clicks that match these filters">${fmt.n(cur)} of ${fmt.n(total)} clicks</span><button class="clear" id="clear-filters">Clear</button>` : '<span class="kbd" title="Press F to filter">F</span>';
     return `<div class="fbar-row">
-      <div class="fbar ${n ? 'has' : ''}" id="fbar">${I.filter}${state.filters.map(chipHTML).join('')}<button class="fbar-add" id="filter-btn" aria-haspopup="menu" aria-expanded="false">${n ? '+ Add filter' : 'Filter by campaign, source, country, city…'}</button>${end}</div>
-      <div class="seg" role="radiogroup" aria-label="Trigger">
-        <button data-trigger="all" class="${state.trigger === 'all' ? 'on' : ''}">All</button>
-        <button data-trigger="link" class="${state.trigger === 'link' ? 'on' : ''}">${I.links}Links</button>
-        <button data-trigger="qr" class="${state.trigger === 'qr' ? 'on' : ''}">${I.qr}QR</button>
-      </div></div>`;
+      <div class="fbar ${n ? 'has' : ''}" id="fbar">${I.filter}${state.filters.map(chipHTML).join('')}<button class="fbar-add" id="filter-btn" aria-haspopup="menu" aria-expanded="false">${n ? '+ Add filter' : 'Filter by campaign, source, city…'}</button>${end}</div>
+      <button class="tb-btn date" id="date-btn" aria-haspopup="dialog" aria-expanded="false">${I.calendar}<span>${esc(rangeLabel())}</span><span class="chev">${I.chev}</span></button>
+      <div class="seg trig" role="radiogroup" aria-label="Clicks to show">
+        <button data-trigger="all" class="${state.trigger === 'all' ? 'on' : ''}" title="Links and QR codes">All</button>
+        <button data-trigger="link" class="${state.trigger === 'link' ? 'on' : ''}" title="Link clicks only" aria-label="Links">${I.links}</button>
+        <button data-trigger="qr" class="${state.trigger === 'qr' ? 'on' : ''}" title="QR scans only" aria-label="QR">${I.qr}</button>
+      </div>
+      <button class="tb-btn icon" id="more-btn" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button></div>`;
   }
   function rangeLabel() { const p = PRESETS.find(p => p.id === state.preset); return p ? p.label : fmt.range(state.range); }
 
   function chipHTML(f, i) {
     const d = D.DIM[f.dim];
-    const vals = f.values.length > 2 ? `${esc(f.values[0])} <span class="op">+${f.values.length - 1} more</span>` : f.values.map(esc).join('<span class="op"> or </span>');
+    const vals = f.op === 'contains' ? `“${esc(f.values[0])}”` : f.values.length > 2 ? `${esc(f.values[0])} <span class="op">+${f.values.length - 1} more</span>` : f.values.map(esc).join('<span class="op"> or </span>');
     return `<span class="chip"><span class="k">${esc(d.label)}</span><span class="op">${f.op}</span><span class="v"><button data-edit-filter="${i}" title="Edit">${vals}</button></span><button class="x" data-remove-filter="${i}" aria-label="Remove filter">${I.close}</button></span>`;
   }
   function chipsHTML() {
@@ -1813,39 +1811,56 @@
     const d = D.DIM[dim];
     const existing = editIndex > -1 ? state.filters[editIndex] : null;
     let op = existing ? existing.op : 'is';
-    const sel = new Set(existing ? existing.values : []);
+    const sel = new Set(existing && op !== 'contains' ? existing.values : []);
     const ctx = { range: state.view === 'links' ? ALL_RANGE : state.range, trigger: state.trigger, filters: state.view === 'link' ? [...state.filters, { dim: 'link', op: 'is', values: [state.slug] }] : state.filters };
     const values = dim === 'trigger' ? [{ label: 'Link click', value: Q.unfiltered.totals.linkClicks, share: 0 }, { label: 'QR scan', value: Q.unfiltered.totals.qr, share: 0 }] : D.valuesFor(dim, ctx);
+    const cname = v => { const cc = dim === 'country' ? v.label : D.PLACE[dim] && D.PLACE[dim][v.label] && D.PLACE[dim][v.label].cc; return cc && D.COUNTRIES[cc] ? D.COUNTRIES[cc].name.toLowerCase() : ''; };
+    // "contains" matches the text itself (countries by name); the search box finds values for is / is not.
+    const matching = ql => values.filter(v => !ql || v.label.toLowerCase().includes(ql) || (op === 'contains' ? dim === 'country' : true) && cname(v).includes(ql));
     const list = q => {
-      const ql = q.toLowerCase();
-      const cname = v => { const cc = dim === 'country' ? v.label : D.PLACE[dim] && D.PLACE[dim][v.label] && D.PLACE[dim][v.label].cc; return cc && D.COUNTRIES[cc] ? D.COUNTRIES[cc].name.toLowerCase() : ''; };
-      const vs = values.filter(v => !ql || v.label.toLowerCase().includes(ql) || cname(v).includes(ql));
-      if (!vs.length) return `<div class="group" style="padding:14px 10px">No values match “${esc(q)}”</div>`;
+      const ql = q.trim().toLowerCase();
+      if (op === 'contains' && !ql) return `<div class="group vp-hint">Type part of a value. “sale” matches fall_sale_2026 and spring_sale.</div>`;
+      const vs = matching(ql);
+      if (!vs.length) return `<div class="group" style="padding:14px 10px">No values match “${esc(q)}”${op === 'contains' ? '. The filter still applies to future clicks.' : ''}</div>`;
       return vs.map(v => {
         let label = geoLabel(dim, v.label) || esc(v.label);
         if (ql && !geoLabel(dim, v.label)) label = label.replace(new RegExp(`(${ql.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'i'), '<mark>$1</mark>');
-        return `<label class="val ${sel.has(v.label) ? 'on' : ''}" data-v="${esc(v.label)}"><span class="box">${I.check}</span><span class="lbl">${label}</span><span class="cnt num">${fmt.n(v.value)}</span></label>`;
+        return op === 'contains'
+          ? `<div class="val match"><span class="lbl">${label}</span><span class="cnt num">${fmt.n(v.value)}</span></div>`
+          : `<label class="val ${sel.has(v.label) ? 'on' : ''}" data-v="${esc(v.label)}"><span class="box">${I.check}</span><span class="lbl">${label}</span><span class="cnt num">${fmt.n(v.value)}</span></label>`;
       }).join('');
     };
-    const html = `<div class="pop-head">${fromMenu ? `<button class="back" id="vp-back" aria-label="Back">${I.arrowL}</button>` : ''}<span>${esc(d.label)}</span><span class="op-toggle" style="margin-left:auto"><button data-op="is" class="${op === 'is' ? 'on' : ''}">is</button><button data-op="is not" class="${op === 'is not' ? 'on' : ''}">is not</button></span></div>
-      <div class="search">${I.search}<input id="vp-q" placeholder="Search ${esc(d.label.toLowerCase())}…" aria-label="Search values"></div>
-      <div class="vals" id="vp-list" style="width:320px">${list('')}</div>
-      <div class="pop-foot"><span class="grow" id="vp-count">${sel.size ? `${sel.size} selected` : 'Applies to this dashboard and the Links table'}</span><button class="btn ghost" id="vp-cancel">Cancel</button><button class="btn primary" id="vp-apply" ${sel.size ? '' : 'disabled'}>${existing ? 'Update' : 'Apply'} filter</button></div>`;
+    const ops = ['is', 'is not', 'contains'].map(o => `<button data-op="${o}" class="${op === o ? 'on' : ''}">${o}</button>`).join('');
+    const html = `<div class="pop-head">${fromMenu ? `<button class="back" id="vp-back" aria-label="Back">${I.arrowL}</button>` : ''}<span>${esc(d.label)}</span><span class="op-toggle" style="margin-left:auto">${ops}</span></div>
+      <div class="search">${I.search}<input id="vp-q" aria-label="Search values" value="${existing && op === 'contains' ? esc(existing.values[0]) : ''}"></div>
+      <div class="vals" id="vp-list" style="width:340px"></div>
+      <div class="pop-foot"><span class="grow" id="vp-count"></span><button class="btn ghost" id="vp-cancel">Cancel</button><button class="btn primary" id="vp-apply">${existing ? 'Update' : 'Apply'} filter</button></div>`;
     openPop(anchor, html, {
       role: 'dialog',
       onMount(el) {
         const listEl = $('#vp-list', el), q = $('#vp-q', el), apply = $('#vp-apply', el), count = $('#vp-count', el);
-        const sync = () => { apply.disabled = !sel.size; count.textContent = sel.size ? `${sel.size} selected` : 'Applies to this dashboard and the Links table'; };
-        q.addEventListener('input', () => { listEl.innerHTML = list(q.value); });
-        q.addEventListener('keydown', e => { if (e.key === 'Enter') { const first = $('.val', listEl); if (first && !sel.size) { first.click(); } else if (sel.size) apply.click(); } });
-        listEl.addEventListener('click', e => { const l = e.target.closest('.val'); if (!l) return; const v = l.dataset.v; if (sel.has(v)) sel.delete(v); else sel.add(v); l.classList.toggle('on', sel.has(v)); sync(); });
-        $$('[data-op]', el).forEach(b => b.addEventListener('click', () => { op = b.dataset.op; $$('[data-op]', el).forEach(x => x.classList.toggle('on', x === b)); }));
+        const text = () => q.value.trim();
+        const sync = () => {
+          if (op === 'contains') {
+            const ms = text() ? matching(text().toLowerCase()) : [];
+            apply.disabled = !text();
+            count.textContent = text() ? `Matches ${ms.length} value${ms.length === 1 ? '' : 's'} · ${fmt.n(ms.reduce((a, v) => a + v.value, 0))} clicks` : 'Matches any part, any case';
+          } else { apply.disabled = !sel.size; count.textContent = sel.size ? `${sel.size} selected` : 'Applies to this dashboard and the Links table'; }
+        };
+        const redraw = () => { q.placeholder = op === 'contains' ? `${d.label} contains…` : `Search ${d.label.toLowerCase()}…`; listEl.innerHTML = list(q.value); sync(); };
+        redraw();
+        q.addEventListener('input', redraw);
+        q.addEventListener('keydown', e => { if (e.key !== 'Enter') return; if (op === 'contains') { if (text()) apply.click(); return; } const first = $('.val', listEl); if (first && !sel.size) { first.click(); } else if (sel.size) apply.click(); });
+        listEl.addEventListener('click', e => { const l = e.target.closest('label.val'); if (!l) return; const v = l.dataset.v; if (sel.has(v)) sel.delete(v); else sel.add(v); l.classList.toggle('on', sel.has(v)); sync(); });
+        $$('[data-op]', el).forEach(b => b.addEventListener('click', () => { op = b.dataset.op; $$('[data-op]', el).forEach(x => x.classList.toggle('on', x === b)); redraw(); q.focus(); }));
         $('#vp-cancel', el).addEventListener('click', closePop);
         const back = $('#vp-back', el); if (back) back.addEventListener('click', () => filterMenu(anchor));
         apply.addEventListener('click', () => {
-          const f = { dim, op, values: [...sel] };
+          const vals = op === 'contains' ? [text()] : [...sel];
+          if (!vals.length || !vals[0]) return;
+          const f = { dim, op, values: vals };
           if (editIndex > -1) state.filters[editIndex] = f; else state.filters.push(f);
-          closePop(); render({ busy: true }); toast(`${existing ? 'Updated' : 'Added'} filter: ${d.label} ${op} ${[...sel].slice(0, 2).join(', ')}${sel.size > 2 ? ` +${sel.size - 2}` : ''}`);
+          closePop(); render({ busy: true }); toast(`${existing ? 'Updated' : 'Added'} filter: ${d.label} ${op} ${op === 'contains' ? `“${vals[0]}”` : vals.slice(0, 2).join(', ') + (vals.length > 2 ? ` +${vals.length - 2}` : '')}`);
         });
       },
     });

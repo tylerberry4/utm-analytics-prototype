@@ -175,8 +175,17 @@
   // Country, region and city filters are nested, so they're applied together per place, not multiplied.
   const GEO = ['country', 'region', 'city'];
   const placeLabel = (pl, key) => key === 'country' ? pl.cc : pl[key];
+  // Does value v pass filter f? ops: 'is', 'is not', 'contains' (part of the value, any case; countries match by name too).
+  function passes(f, v) {
+    let hit;
+    if (f.op === 'contains') {
+      const t = String(v).toLowerCase(), name = f.dim === 'country' && COUNTRIES[v] ? COUNTRIES[v].name.toLowerCase() : '';
+      hit = f.values.some(x => { x = x.toLowerCase(); return t.includes(x) || (name && name.includes(x)); });
+    } else hit = f.values.includes(v);
+    return f.op === 'is not' ? !hit : hit;
+  }
   function geoPlaces(link, geoFilters) {
-    return PLACES.filter(pl => link.geo[pl.cc] && geoFilters.every(f => (f.op === 'is') === f.values.includes(placeLabel(pl, f.dim))))
+    return PLACES.filter(pl => link.geo[pl.cc] && geoFilters.every(f => passes(f, placeLabel(pl, f.dim))))
       .map(pl => ({ pl, w: link.geo[pl.cc] * pl.share }));
   }
   // A link's country mix after any country/region/city filters (shares add up to 1).
@@ -211,19 +220,18 @@
     const geoFilters = filters.filter(f => GEO.includes(f.dim));
     const trig = filters.find(f => f.dim === 'trigger');
     let parts = trigger === 'all' ? ['link', 'qr'] : [trigger];
-    if (trig) parts = parts.filter(p => (trig.op === 'is') === trig.values.includes(p === 'qr' ? 'QR scan' : 'Link click'));
+    if (trig) parts = parts.filter(p => passes(trig, p === 'qr' ? 'QR scan' : 'Link click'));
 
     const rows = [];
     for (const link of LINKS) {
-      if (!linkFilters.every(f => (f.op === 'is') === f.values.includes(linkValue(link, f.dim)))) continue;
+      if (!linkFilters.every(f => passes(f, linkValue(link, f.dim)))) continue;
       const row = { link, clicks: 0, unique: 0, linkClicks: 0, qr: 0, series: [], mult: {} };
       for (const part of parts) {
         // multiplier from attribute filters for this part
         let m = geoFilters.length ? geoPlaces(link, geoFilters).reduce((a, x) => a + x.w, 0) : 1;
         for (const f of attrFilters) {
           const w = weights(link, f.dim, part);
-          const sel = f.values.reduce((a, v) => a + (w[v] || 0), 0);
-          m *= f.op === 'is' ? sel : 1 - sel;
+          m *= Object.entries(w).reduce((a, [v, x]) => a + (passes(f, v) ? x : 0), 0);
         }
         row.mult[part] = m;
       }
@@ -273,7 +281,7 @@
           if (!partClicks) continue;
           let allowed = w, norm = 1;
           if (f) {
-            allowed = Object.fromEntries(Object.entries(w).filter(([v]) => (f.op === 'is') === f.values.includes(v)));
+            allowed = Object.fromEntries(Object.entries(w).filter(([v]) => passes(f, v)));
             norm = Object.values(allowed).reduce((a, b) => a + b, 0) || 1;
           }
           for (const [v, wt] of Object.entries(allowed)) agg[v] = (agg[v] || 0) + partClicks * wt / norm;
