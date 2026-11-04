@@ -246,7 +246,7 @@
       row.qr = sum(row.series, 'qr');
       row.clicks = row.linkClicks + row.qr;
       row.unique = row.clicks * link.uniq;
-      if (row.clicks > 0.5) rows.push(row);
+      if (row.clicks > 0.5 || link.fresh) rows.push(row); // fresh = just made in the builder, no clicks yet
     }
     rows.sort((a, b) => b.clicks - a.clicks);
 

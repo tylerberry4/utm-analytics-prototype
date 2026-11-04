@@ -187,18 +187,19 @@
   }
   // The filter field: a clear "Filter" button (browse fields) + chips + a real search box.
   // Typing in the box (or anywhere on the page) drops down matching values; focusing it alone opens nothing.
-  function filterFieldHTML(placeholder, n, chips, ctx) {
+  function filterFieldHTML(placeholder, n, chips, ctx, quick = false) {
     const nf = state.filters.length;
-    return `<div class="fbar ${n ? 'has' : ''}" id="fbar"><button class="fbar-fbtn" id="filter-btn" aria-haspopup="menu" aria-expanded="false" title="Browse fields to filter by">${I.filter}<span>Filter</span>${nf ? `<span class="badge">${nf}</span>` : ''}<span class="chev">${I.chev}</span></button>${chips}<input id="fq" class="fbar-input" placeholder="${esc(n ? 'Type to add another…' : placeholder)}" autocomplete="off" spellcheck="false" aria-label="Search values to filter by">${ctx || '<span class="kbd" title="Or just start typing">/</span>'}</div>`;
+    // quick = list pages: typing filters the list immediately (text search), no dropdown.
+    const box = quick ? `<input id="lq" class="fbar-input" placeholder="${esc(placeholder)}" value="${esc(state.lq)}" autocomplete="off" spellcheck="false" aria-label="${esc(placeholder)}"><button class="icon-btn" id="lq-clear" aria-label="Clear search" ${state.lq ? '' : 'hidden'}>${I.close}</button>` : '';
+    return `<div class="fbar ${n ? 'has' : ''}" id="fbar"><button class="fbar-fbtn" id="filter-btn" aria-haspopup="menu" aria-expanded="false" title="Browse fields to filter by">${I.filter}<span>Filter</span>${nf ? `<span class="badge">${nf}</span>` : ''}<span class="chev">${I.chev}</span></button>${chips}${quick ? box : `<input id="fq" class="fbar-input" placeholder="${esc(n ? 'Type to add another…' : placeholder)}" autocomplete="off" spellcheck="false" aria-label="Search values to filter by">`}${ctx || '<span class="kbd" title="Or just start typing">/</span>'}</div>`;
   }
   // List pages (Links, QR codes, Templates, Shorteners, Parameters) use the Analytics bar too: one 44px field
   // holding Filter + chips + search text, then the page's own buttons in the same style.
   function listBarHTML(placeholder, controls, opts = {}) {
     if (opts.filter) {
-      const n = state.filters.length + (state.lq ? 1 : 0);
-      const textChip = state.lq ? `<span class="chip"><span class="k">Search</span><span class="v">“${esc(state.lq)}”</span><button class="x" id="lq-clear" aria-label="Clear search">${I.close}</button></span>` : '';
+      const n = state.filters.length;
       const end = n ? `<span class="fbar-ctx num">${opts.ctx || ''}</span><button class="clear" id="clear-search">Clear</button>` : '';
-      return `<div class="fbar-row lbar-row">${filterFieldHTML(placeholder, n, state.filters.map(chipHTML).join('') + textChip, end)}${controls}</div>`;
+      return `<div class="fbar-row lbar-row">${filterFieldHTML(placeholder, n, state.filters.map(chipHTML).join(''), end, true)}${controls}</div>`;
     }
     const n = opts.filter ? state.filters.length : 0;
     const lead = opts.filter ? `<button class="fbar-fbtn" id="filter-btn" aria-haspopup="menu" aria-expanded="false">${I.filter}<span>Filter</span></button><span class="fbar-sep"></span>${state.filters.map(chipHTML).join('')}` : `<span class="fbar-ic">${I.search}</span>`;
@@ -458,7 +459,7 @@
     const l = r.link, hasQR = l.qr > 0, on = state.sel.has(l.slug);
     const typeTip = hasQR ? `Has a QR code · ${Math.round((r.clicks ? r.qr / r.clicks : 0) * 100)}% of clicks from scans` : 'Link only · no QR code';
     const created = new Date(l.created);
-    return `<div class="lrow ${on ? 'sel' : ''}" data-link="${esc(l.slug)}" role="row" tabindex="0" style="animation-delay:${Math.min(i, 12) * 20}ms">
+    return `<div class="lrow ${on ? 'sel' : ''} ${state.fresh && state.fresh.has(l.slug) ? 'fresh' : ''}" data-link="${esc(l.slug)}" role="row" tabindex="0" style="animation-delay:${Math.min(i, 12) * 20}ms">
       <button class="cb ${on ? 'on' : ''}" data-sel="${esc(l.slug)}" role="checkbox" aria-checked="${on}" aria-label="Select ${esc(l.slug)}">${I.check}</button>
       <div class="lk"><span class="type ${hasQR ? 'qr' : ''}" data-tip="${typeTip}">${hasQR ? I.qr : I.links}</span>
         <div class="txt"><span class="lk-name">${esc(l.slug)}${l.tags.length ? l.tags.map(t => `<span class="tag">${esc(t)}</span>`).join('') : ''}</span><span class="lk-dest" title="${esc(l.dest)}${esc(utmQuery(l))}">${esc(l.dest)}<span class="qs">${esc(utmQuery(l))}</span></span></div></div>
@@ -512,7 +513,7 @@
     const nf = state.filters.length;
     return `<div class="view"><div class="page-head"><div class="title"><h1>Links</h1><span class="status" tabindex="0" data-tip="${all} links in this workspace · updated 4 min ago">${all} links</span></div>
         <div class="actions"><button class="btn primary" id="create-btn"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Create link</button></div></div></div>
-      ${listBarHTML('Search links, or filter: fall_sale, linkedin, London…', `
+      ${listBarHTML('Search links, destinations, campaigns…', `
           <button class="tb-btn" id="group-btn" aria-haspopup="menu" aria-expanded="false"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h6"/></svg>${state.groupBy === 'none' ? 'Group' : g[1]}<span class="chev">${I.chev}</span></button>
           <button class="tb-btn" id="lsort-btn" aria-haspopup="menu" aria-expanded="false">${I.sort}${s[1]}<span class="chev">${I.chev}</span></button>
           <button class="tb-btn icon" id="links-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button>`, { filter: true, ctx: `${linkRows().length} of ${Q.linksAll.rows.length} links` })}
@@ -661,7 +662,7 @@
     const s = QSORTS.find(x => x[0] === state.lsort.key) || QSORTS[0], nf = state.filters.length;
     return `<div class="view"><div class="page-head"><div class="title"><h1>QR codes</h1><span class="status" tabindex="0" data-tip="${all.length} QR codes · ${fmt.full(scans)} scans all time · updated 4 min ago">${all.length} codes · ${fmt.n(scans)} scans</span></div>
         <div class="actions"><button class="btn" id="qr-designs-btn">${I.swatch}QR designs</button><button class="btn primary" id="create-qr-btn"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Create QR code</button></div></div></div>
-      ${listBarHTML('Search QR codes, or filter: fall_sale, print, London…', `
+      ${listBarHTML('Search QR codes, links, campaigns…', `
           <button class="tb-btn" id="lsort-btn" aria-haspopup="menu" aria-expanded="false">${I.sort}${s[1]}<span class="chev">${I.chev}</span></button>
           <button class="tb-btn icon" id="list-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button>`, { filter: true, ctx: `${qrRows().length} of ${all.length} QR codes` })}
       ${qrTableHTML()}${bulkBarHTML()}`;
@@ -1669,7 +1670,71 @@
     const iss = lbIssues(); if (iss.length) { B.submitted = true; lbPaint(); lbJump(iss[0].key); return; }
     const sh = B.shortener !== 'none'; const combos = lbCombos();
     const links = combos.map((c, i) => { const long = B.edit ? lbFullUrl(D.LINKS.find(l => l.slug === B.edit).dest, null) : lbFullUrl(c.url, c.tpl); const slug = B.edit ? B.edit : sh ? `${B.shortener}/${combos.length > 1 ? (lbSlug() || 'link').slice(0, 24) + '-' + (i + 1) : (lbSlug() || Math.random().toString(36).slice(2, 7))}` : ''; return { short: slug, long }; });
-    B.done = { links }; lbPaint(); if (links.length === 1) copyText(links[0].short || links[0].long, B.edit ? 'Saved' : 'Link copied');
+    if (B.mode === 'ext') { B.done = { links }; lbPaint(); if (links.length === 1) copyText(links[0].short || links[0].long, B.edit ? 'Saved' : 'Link copied'); return; }
+    lbFinish(links, combos);
+  }
+  // Web builder: save into the Links list, go back to it (edits go back to where they came from), and show what was made in an overlay.
+  function lbFinish(links, combos) {
+    const T = D.TODAY, today = `${T.getFullYear()}-${String(T.getMonth() + 1).padStart(2, '0')}-${String(T.getDate()).padStart(2, '0')}`;
+    const made = links.map((l, i) => {
+      const c = combos[i] || combos[0], q = Object.fromEntries(lbQuery(c.tpl).map(x => [x.p.key, x.v || '']));
+      const tokens = lbTokensHTML(B.edit ? D.LINKS.find(x => x.slug === B.edit).dest : c.url, c.tpl);
+      let slug = l.short || withScheme(l.long).replace(/^https?:\/\//, '').split('?')[0];
+      if (B.edit) { const ex = D.LINKS.find(x => x.slug === B.edit); UTM_KEYS.forEach(k => { if (k in q) ex[k] = q[k]; }); slug = ex.slug; }
+      else {
+        D.LINKS.unshift({ slug, dest: (c.url || '').trim().replace(/^https?:\/\//, ''), title: [q.campaign, q.source].filter(Boolean).join(' · ') || 'New link', campaign: q.campaign || '', source: q.source || '', medium: q.medium || '', content: q.content || '', term: q.term || '',
+          created: today, by: 'Tyler Berry', tags: [], qr: B.qr ? .01 : 0, uniq: .7, geo: { US: 1 }, dev: { mobile: .6, desktop: .35, tablet: .05 }, ref: { 'No referrer': 1 }, series: new Array(D.DAYS).fill(0), id: D.LINKS.length + 100, fresh: true });
+      }
+      if (B.qr) QR_DESIGN_OF[slug] = B.design;
+      return { slug, short: l.short, long: l.long, tokens };
+    });
+    const info = { links: made, edit: !!B.edit, qr: B.qr && B.shortener !== 'none', design: B.design,
+      again: { tpls: B.tpls, vals: { ...B.vals }, shortener: B.shortener, qr: B.qr, design: B.design } };
+    const back = B.back || {}; lbRoot = null; B.done = { links };
+    state.fresh = new Set(made.map(m => m.slug));
+    if (info.edit && back.view && back.view !== 'build' && back.view !== 'links') { Object.assign(state, { view: back.view, slug: back.slug, from: back.from }); render({ top: true }); }
+    else goLinks();
+    if (made.length === 1) copyText(made[0].short || made[0].long, info.edit ? 'Saved' : 'Link created and copied');
+    createdModal(info);
+    setTimeout(() => { state.fresh = null; $$('.lrow.fresh').forEach(r => r.classList.remove('fresh')); }, 6000);
+  }
+  // "Link created": the link, its tags, and the QR code with download options, over the Links list.
+  function createdModal(info) {
+    const one = info.links.length === 1, L = info.links[0], design = QR_DESIGNS.find(d => d.id === info.design) || QR_DESIGNS[0];
+    const title = info.edit ? 'Link updated' : one ? 'Link created' : `${info.links.length} links created`;
+    const sub = info.edit ? 'New clicks carry the new tags' : one ? 'Copied to your clipboard · it\'s at the top of Links' : 'They\'re at the top of Links';
+    const qr = info.qr && one ? `<div class="lc-qr">${qrSVG(L.slug, design, 176)}
+        <div class="lc-qr-name">${esc(design.name)} design<button class="link-btn" id="lc-design" type="button">Change</button></div>
+        <div class="seg lc-fmt" role="radiogroup" aria-label="Image format"><button type="button" class="on" data-fmt="PNG">PNG</button><button type="button" data-fmt="JPEG">JPEG</button><button type="button" data-fmt="SVG">SVG</button></div>
+        <label class="lc-tr"><input type="checkbox" id="lc-transparent"> Transparent background</label>
+        <button class="btn primary" id="lc-dl" type="button">${I.download}<span>Download PNG</span></button></div>`
+      : one ? `<div class="lc-qr none">${I.qr}<b>No QR code</b><span class="sm-muted">Add one any time from the link's ⋮ menu.</span></div>` : '';
+    const main = one ? `<div class="lc-main">
+        ${L.short ? `<div class="lc-f"><span class="lbl">Short link</span><div class="lc-short"><b class="code">${esc(L.short)}</b><button class="btn sm" data-lc-copy="${esc(L.short)}" type="button">${I.copy}Copy</button></div></div>` : ''}
+        <div class="lc-f"><span class="lbl">${L.short ? 'Opens' : 'Full link'}</span><code class="lb-url">${L.tokens}</code><button class="link-btn lc-copy-long" data-lc-copy="${esc(L.long)}" type="button">${I.copy}Copy full URL</button></div>
+        <div class="lc-acts"><button class="btn" id="lc-analytics" type="button">${I.analytics}View analytics</button><button class="btn" id="lc-edit" type="button">${I.edit}Edit</button>${info.edit ? '' : `<button class="btn" id="lc-again" type="button">${PI.plus}Create another like this</button>`}</div></div>`
+      : `<div class="lc-main wide"><div class="lc-list">${info.links.slice(0, 8).map(l => `<div class="lc-row"><b class="code">${esc(l.short || l.long)}</b><code class="lb-url">${l.tokens}</code><button class="icon-btn" data-lc-copy="${esc(l.short || l.long)}" type="button" title="Copy">${I.copy}</button></div>`).join('')}${info.links.length > 8 ? `<div class="sm-muted">+${info.links.length - 8} more in Links</div>` : ''}</div>
+        <div class="lc-acts"><button class="btn primary" id="lc-copy-all" type="button">${I.copy}Copy all</button><button class="btn" id="lc-csv" type="button">${I.download}Export CSV</button>${info.qr ? `<button class="btn" id="lc-zip" type="button">${I.qr}Download QR codes</button>` : ''}<button class="btn" id="lc-again" type="button">${PI.plus}Create more</button></div></div>`;
+    openModal(`<div class="modal-h lc-h"><span class="lc-ok">${I.check}</span><h3>${title}<span class="sub">${sub}</span></h3><button class="close" aria-label="Close">${I.close}</button></div>
+      <div class="modal-b lc">${main}${qr}</div>`, {
+      width: one ? 760 : 680,
+      onMount(s) {
+        let fmt = 'PNG';
+        s.addEventListener('click', e => {
+          const t = e.target, h = q => t.closest(q); let el;
+          if ((el = h('[data-lc-copy]'))) { copyText(el.dataset.lcCopy, 'Copied'); return; }
+          if ((el = h('[data-fmt]'))) { fmt = el.dataset.fmt; $$('[data-fmt]', s).forEach(b => b.classList.toggle('on', b === el)); $('#lc-dl span', s).textContent = `Download ${fmt}`; const tr = $('#lc-transparent', s); tr.disabled = fmt === 'JPEG'; if (fmt === 'JPEG') tr.checked = false; return; }
+          if (h('#lc-dl')) { toast(`QR code ${fmt}${$('#lc-transparent', s).checked ? ' (transparent)' : ''} downloaded`); return; }
+          if (h('#lc-design')) { toast('QR designs live under QR codes → QR designs'); return; }
+          if (h('#lc-analytics')) { closeModal(); state.from = 'links'; goLink(L.slug); return; }
+          if (h('#lc-edit')) { closeModal(); openBuilder({ edit: L.slug }); return; }
+          if (h('#lc-copy-all')) { copyText(info.links.map(l => l.short || l.long).join('\n'), `Copied ${info.links.length} links`); return; }
+          if (h('#lc-csv')) { toast(`Exported ${info.links.length} links as CSV`); return; }
+          if (h('#lc-zip')) { toast(`Downloaded ${info.links.length} QR codes (ZIP)`); return; }
+          if (h('#lc-again')) { closeModal(); const k = info.again; openBuilder(); Object.assign(B, { tpls: k.tpls, shortener: k.shortener, qr: k.qr, design: k.design }); ['campaign', 'medium'].forEach(x => { if (x in k.vals) B.vals[x] = k.vals[x]; }); lbPaint(); const u = $('#lb-url'); if (u) u.focus(); return; }
+        });
+      },
+    });
   }
   function lbApplyTemplateDefaults() {
     if (B.tpls.length !== 1) return; const t = tplOf(B.tpls[0]); if (usableShorteners().find(s => s.domain === t.shortener)) B.shortener = t.shortener; if (t.qr) { B.qr = true; B.design = t.qr; }
@@ -1823,8 +1888,8 @@
   $('#view').addEventListener('keydown', e => { if (e.target.id === 'fq' && pop && pop.el._keys) pop.el._keys(e); });
   // Type-to-filter: on pages with the filter field, typing anywhere goes into it; "/" just focuses it.
   document.addEventListener('keydown', e => {
-    if (e.metaKey || e.ctrlKey || e.altKey || pop || $('.scrim') || e.target.closest('input, textarea, select, [contenteditable]')) return;
-    const box = $('#fq'); if (!box) return;
+    if (e.metaKey || e.ctrlKey || e.altKey || pop || $('.scrim') || (e.target.closest && e.target.closest('input, textarea, select, [contenteditable]'))) return;
+    const box = $('#fq') || $('#fbar #lq'); if (!box) return;
     if (e.key === '/') { e.preventDefault(); box.focus(); }
     else if (/^[\p{L}\p{N}_.@-]$/u.test(e.key)) { e.preventDefault(); box.focus(); box.value += e.key; box.dispatchEvent(new Event('input', { bubbles: true })); }
   });
@@ -2141,7 +2206,7 @@
     if ((el = hit('[data-remove-filter]'))) { const f = state.filters.splice(+el.dataset.removeFilter, 1)[0]; render({ busy: true }); toast(`Removed filter: ${D.DIM[f.dim].label}`); return; }
     if ((el = hit('[data-edit-filter]'))) { const i = +el.dataset.editFilter; valuePicker(el.closest('.chip'), state.filters[i].dim, i); return; }
     if (hit('#clear-filters')) { state.filters = []; render({ busy: true }); toast('Filters cleared'); return; }
-    if (hit('#fbar') && !hit('button, .chip, input')) { $('#fq').focus(); return; }
+    if (hit('#fbar') && !hit('button, .chip, input')) { ($('#fq') || $('#lq')).focus(); return; }
     if (hit('.lbar') && !hit('button, .chip, input')) { $('#lq').focus(); return; }
     if ((el = hit('[data-metric]'))) { state.metric = el.dataset.metric; $$('[data-metric]').forEach(k => { k.classList.toggle('on', k === el); k.setAttribute('aria-selected', k === el); }); drawChart(); return; }
     if ((el = hit('[data-sort]'))) { const k = el.dataset.sort; if (state.sort.key === k) state.sort.dir *= -1; else state.sort = { key: k, dir: k === 'link' ? 1 : -1 }; swapSection($('#top-links'), tableHTML()); return; }

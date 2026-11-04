@@ -1132,3 +1132,29 @@ button.status-pill { cursor: pointer; transition: box-shadow var(--dur) var(--ea
 .pb-ghost { flex: none; width: 168px; height: 120px; display: flex; align-items: center; justify-content: center; gap: 6px; border: 1.5px dashed var(--border-strong); border-radius: 10px; font-size: 13px; color: var(--text-muted); transition: border-color var(--dur-fast), color var(--dur-fast), background var(--dur-fast); }
 .pb-ghost:hover { border-color: var(--accent); color: var(--accent-strong); background: var(--accent-faint); }
 @media (max-width: 760px) { .pb-legend { display: none; } .pb { gap: 32px; } .pm-view { width: 100%; } .pm-view button { flex: 1; justify-content: center; } }
+
+/* "Link created" overlay (after saving in the link builder) */
+.lc-h { align-items: center; gap: 12px; }
+.lc-ok { width: 32px; height: 32px; border-radius: 50%; background: var(--up-bg); color: var(--up); display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.lc-ok svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.modal-b.lc { display: grid; grid-template-columns: minmax(0, 1fr) 232px; gap: 24px; padding: 20px 24px 24px; }
+.lc-main { display: flex; flex-direction: column; gap: 16px; min-width: 0; } .lc-main.wide { grid-column: 1 / -1; }
+.lc-f { display: flex; flex-direction: column; gap: 6px; } .lc-f .lbl { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-faint); }
+.lc-short { display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 14px; border: 1px solid rgba(var(--accent-rgb), .35); border-radius: 10px; background: var(--accent-faint); }
+.lc-short .code { flex: 1; min-width: 0; font: 600 17px var(--font-mono); color: var(--accent-strong); overflow-wrap: anywhere; }
+.lc-short .btn svg, .lc-acts .btn svg, .lc-copy-long svg, .lc-qr .btn svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.lc-copy-long { align-self: flex-start; display: inline-flex; align-items: center; gap: 5px; font-size: 12px; }
+.lc-acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; padding-top: 16px; border-top: 1px solid var(--border); }
+.lc-qr { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--sunken); }
+.lc-qr .qr-svg { border-radius: 8px; box-shadow: var(--shadow-xs); background: #fff; padding: 8px; box-sizing: content-box; }
+.lc-qr-name { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); }
+.lc-fmt { height: 32px; width: 100%; display: grid; grid-template-columns: repeat(3, 1fr); } .lc-fmt button { justify-content: center; padding: 0; font-size: 12px; }
+.lc-tr { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text); align-self: flex-start; } .lc-tr input:disabled + * , .lc-tr:has(input:disabled) { opacity: .5; }
+.lc-qr .btn.primary { width: 100%; }
+.lc-qr.none { justify-content: center; text-align: center; gap: 6px; color: var(--text-muted); font-size: 13px; } .lc-qr.none > svg { width: 28px; height: 28px; stroke: var(--text-faint); fill: none; stroke-width: 1.6; } .lc-qr.none b { color: var(--text-strong); }
+.lc-list { display: flex; flex-direction: column; gap: 8px; max-height: 340px; overflow-y: auto; }
+.lc-row { display: grid; grid-template-columns: auto minmax(0, 1fr) 32px; align-items: center; gap: 12px; padding: 8px 8px 8px 12px; border: 1px solid var(--border); border-radius: 8px; }
+.lc-row .code { font: 600 13px var(--font-mono); color: var(--accent-strong); white-space: nowrap; } .lc-row .lb-url { padding: 4px 8px; font-size: 11.5px; line-height: 1.6; }
+@media (max-width: 760px) { .modal-b.lc { grid-template-columns: 1fr; } .lc-row { grid-template-columns: 1fr 32px; } .lc-row .lb-url { grid-column: 1 / -1; grid-row: 2; } }
+/* The row you just created: tinted for a few seconds */
+.lrow.fresh { background: var(--accent-faint); box-shadow: inset 3px 0 0 var(--accent); transition: background 1.2s var(--ease), box-shadow 1.2s var(--ease); }
