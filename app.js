@@ -176,7 +176,7 @@
     const total = Q.unfiltered.totals.clicks, cur = Q.cur.totals.clicks;
     const end = n ? `<span class="fbar-ctx num" title="Clicks that match these filters">${fmt.n(cur)} of ${fmt.n(total)} clicks</span><button class="clear" id="clear-filters">Clear</button>` : '<span class="kbd" title="Press F to filter">F</span>';
     return `<div class="fbar-row">
-      <div class="fbar ${n ? 'has' : ''}" id="fbar">${I.filter}${state.filters.map(chipHTML).join('')}<button class="fbar-add" id="filter-btn" aria-haspopup="menu" aria-expanded="false">${n ? '+ Add filter' : 'Filter by campaign, source, city…'}</button>${end}</div>
+      <div class="fbar ${n ? 'has' : ''}" id="fbar">${I.filter}${state.filters.map(chipHTML).join('')}<button class="fbar-add" id="filter-btn" aria-haspopup="menu" aria-expanded="false">${n ? '+ Add filter' : 'Filter by any value: fall_sale, linkedin, London…'}</button>${end}</div>
       <button class="tb-btn date" id="date-btn" aria-haspopup="dialog" aria-expanded="false">${I.calendar}<span>${esc(rangeLabel())}</span><span class="chev">${I.chev}</span></button>
       <div class="seg trig" role="radiogroup" aria-label="Clicks to show">
         <button data-trigger="all" class="${state.trigger === 'all' ? 'on' : ''}" title="Links and QR codes">All</button>
@@ -1786,26 +1786,66 @@
   });
 
   /* ---------- Filter menu ---------- */
-  function filterMenu(anchor) {
+  // One search for fields AND their values: typing "sale" finds Campaign = fall_sale_2026 directly,
+  // offers "Campaign contains “sale”", and still lists matching fields. ↑↓ to move, Enter to pick.
+  function filterMenu(anchor, initial = '') {
     const groups = [...new Set(D.DIMS.map(d => d.group))];
     const icon = { link: I.links, trigger: I.trigger, campaign: I.tag, source: I.tag, medium: I.tag, content: I.tag, term: I.tag, referrer: I.referrer, country: I.globe, region: I.globe, city: I.globe, device: I.device, browser: I.device, os: I.device };
+    const ctx = { range: state.view === 'links' ? ALL_RANGE : state.range, trigger: state.trigger, filters: state.view === 'link' ? [...state.filters, { dim: 'link', op: 'is', values: [state.slug] }] : state.filters };
+    let index = null; // every value of every field, built on first keystroke
+    const allValues = () => index || (index = D.DIMS.filter(d => d.key !== 'trigger').flatMap(d => D.valuesFor(d.key, ctx).filter(v => v.label !== '(not set)').map(v => {
+      // Countries match by name too ("united"); regions and cities only by their own name, like the contains filter.
+      return { dim: d.key, label: v.label, value: v.value, text: (v.label + (d.key === 'country' && D.COUNTRIES[v.label] ? ' ' + D.COUNTRIES[v.label].name : '')).toLowerCase() };
+    })));
+    const mark = (txt, ql) => esc(txt).replace(new RegExp(`(${esc(ql).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'i'), '<mark>$1</mark>');
+    const isOn = (dim, v) => state.filters.some(f => f.dim === dim && f.op === 'is' && f.values.includes(v));
+    const fieldRow = d => { const active = state.filters.some(f => f.dim === d.key); return `<button class="mi ${active ? 'on' : ''}" data-dim="${d.key}">${icon[d.key]}<span class="grow">${esc(d.label)}</span>${d.utm ? `<span class="utm">${d.utm}</span>` : ''}${active ? `<span class="check">${I.check.replace('<svg', '<svg style="width:14px;height:14px"')}</span>` : ''}<span class="chev">${I.chevR}</span></button>`; };
     const render = q => {
-      const ql = q.toLowerCase();
-      return groups.map(g => {
-        const dims = D.DIMS.filter(d => d.group === g && (!ql || d.label.toLowerCase().includes(ql) || (d.utm || '').includes(ql)));
-        if (!dims.length) return '';
-        return `<div class="group">${esc(g)}</div>` + dims.map(d => { const active = state.filters.some(f => f.dim === d.key); return `<button class="mi ${active ? 'on' : ''}" data-dim="${d.key}">${icon[d.key]}<span class="grow">${esc(d.label)}</span>${d.utm ? `<span class="utm">${d.utm}</span>` : ''}${active ? `<span class="check">${I.check.replace('<svg', '<svg style="width:14px;height:14px"')}</span>` : ''}<span class="chev">${I.chevR}</span></button>`; }).join('');
-      }).join('') || '<div class="group" style="padding:14px 10px">No matching dimensions</div>';
+      const ql = q.trim().toLowerCase();
+      if (!ql) return groups.map(g => `<div class="group">${esc(g)}</div>` + D.DIMS.filter(d => d.group === g).map(fieldRow).join('')).join('');
+      const fields = D.DIMS.filter(d => d.label.toLowerCase().includes(ql) || (d.utm || '').includes(ql));
+      const vals = allValues().filter(v => v.text.includes(ql)).sort((a, b) => (b.label.toLowerCase().startsWith(ql) - a.label.toLowerCase().startsWith(ql)) || b.value - a.value);
+      const byDim = {}; vals.forEach(v => { (byDim[v.dim] = byDim[v.dim] || []).push(v); });
+      let html = '';
+      if (fields.length) html += `<div class="group">Fields</div>` + fields.map(fieldRow).join('');
+      if (vals.length) html += `<div class="group">Values</div>` + vals.slice(0, 8).map(v => {
+        const geo = geoLabel(v.dim, v.label), on = isOn(v.dim, v.label);
+        return `<button class="mi fm-val ${on ? 'on' : ''}" data-pick="${v.dim}" data-v="${esc(v.label)}">${icon[v.dim]}<span class="grow fm-l">${geo || mark(v.label, ql)}</span><span class="fm-dim">${esc(D.DIM[v.dim].label)}</span><span class="fm-n num">${on ? 'Added' : fmt.n(v.value)}</span></button>`;
+      }).join('') + (vals.length > 8 ? `<div class="fm-more">${vals.length - 8} more. Narrow the search or use “contains” below.</div>` : '');
+      const cdims = Object.keys(byDim).filter(k => !(byDim[k].length === 1 && byDim[k][0].label.toLowerCase() === ql)); // skip when it'd equal the exact value
+      if (cdims.length) html += `<div class="group">Match text</div>` + cdims.map(k => `<button class="mi" data-contains="${k}">${I.search}<span class="grow">${esc(D.DIM[k].label)} <span class="fm-op">contains</span> “${esc(q.trim())}”</span><span class="fm-n num">${byDim[k].length} value${byDim[k].length === 1 ? '' : 's'}</span></button>`).join('');
+      return html || `<div class="fm-empty"><b>Nothing matches “${esc(q.trim())}”</b>Try part of a campaign, source, city or link.</div>`;
     };
-    openPop(anchor, `<div class="search">${I.search}<input id="dim-q" placeholder="Filter by…" aria-label="Search dimensions"></div><div class="menu" id="dim-list" style="max-height:380px;overflow-y:auto;width:280px">${render('')}</div>`, {
+    openPop(anchor, `<div class="search">${I.search}<input id="dim-q" placeholder="Search fields and values…" aria-label="Search fields and values" value="${esc(initial)}"></div><div class="menu fm" id="dim-list" style="max-height:420px;overflow-y:auto;width:360px">${render(initial)}</div><div class="fm-foot"><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>↵</kbd> add</span><span class="grow"></span><span>Try “sale” or “London”</span></div>`, {
       onMount(el) {
         const list = $('#dim-list', el), q = $('#dim-q', el);
-        q.addEventListener('input', () => { list.innerHTML = render(q.value); });
-        q.addEventListener('keydown', e => { if (e.key === 'Enter') { const b = $('.mi', list); if (b) b.click(); } });
-        list.addEventListener('click', e => { const b = e.target.closest('[data-dim]'); if (b) valuePicker(anchor, b.dataset.dim, state.filters.findIndex(f => f.dim === b.dataset.dim), true); });
+        let hl = 0;
+        const items = () => $$('.mi', list);
+        const paint = () => { items().forEach((b, k) => b.classList.toggle('hl', k === hl)); const b = items()[hl]; if (b) b.scrollIntoView({ block: 'nearest' }); };
+        const redraw = () => { list.innerHTML = render(q.value); hl = 0; if (q.value.trim()) paint(); };
+        if (initial) paint();
+        q.addEventListener('input', redraw);
+        q.addEventListener('keydown', e => {
+          const n = items().length;
+          if (e.key === 'ArrowDown' && n) { e.preventDefault(); hl = (hl + 1) % n; paint(); }
+          else if (e.key === 'ArrowUp' && n) { e.preventDefault(); hl = (hl - 1 + n) % n; paint(); }
+          else if (e.key === 'Enter') { e.preventDefault(); const b = items()[hl]; if (b) b.click(); }
+        });
+        list.addEventListener('click', e => {
+          const b = e.target.closest('.mi'); if (!b) return;
+          if (b.dataset.dim) { valuePicker(anchor, b.dataset.dim, state.filters.findIndex(f => f.dim === b.dataset.dim), true); return; }
+          if (b.dataset.contains) { const dim = b.dataset.contains, t = q.value.trim(); state.filters.push({ dim, op: 'contains', values: [t] }); closePop(); render0({ busy: true }); toast(`Added filter: ${D.DIM[dim].label} contains “${t}”`); return; }
+          const dim = b.dataset.pick, v = b.dataset.v;
+          if (isOn(dim, v)) { toast(`${D.DIM[dim].label} is already filtered to ${v}`); return; }
+          // Same field already filtered with "is"? Add this value to it (A or B) instead of a second chip.
+          const f = state.filters.find(x => x.dim === dim && x.op === 'is');
+          if (f) f.values.push(v); else state.filters.push({ dim, op: 'is', values: [v] });
+          closePop(); render0({ busy: true }); toast(`Added filter: ${D.DIM[dim].label} is ${v}`);
+        });
       },
     });
   }
+  const render0 = o => render(o);
 
   function valuePicker(anchor, dim, editIndex = -1, fromMenu = false) {
     const d = D.DIM[dim];
