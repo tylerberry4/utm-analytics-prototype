@@ -1505,11 +1505,19 @@
     const locked = t && (t.fixed || t.varies); const req = p.rules.includes('required'); const v = B.vals[p.key] || '';
     const sel = !locked && p.values.find(x => x.v === v.trim());
     const ph = p.values.length ? `${p.rules.includes('dropdown') ? 'Pick' : 'Pick or type'} ${p.hint ? '· ' + p.hint : ''}` : (p.hint || 'Type a value');
-    return `<div class="lb-f ${show && iss.lvl === 'err' ? 'bad' : ''} ${locked ? 'locked' : ''} ${t && t.asked ? 'asked' : ''}" data-f="${esc(p.key)}">
+    return `<div class="lb-f lb-tone ${pTone(p)} ${show && iss.lvl === 'err' ? 'bad' : ''} ${locked ? 'locked' : ''} ${t && t.asked ? 'asked' : ''}" data-f="${esc(p.key)}">
       <label class="lb-l" for="lb-${esc(p.key)}">${lbIcon(p)}<span class="nm">${esc(p.label)}</span>${req ? '<b class="req" title="Required">*</b>' : ''}${p.attr ? '' : `<span class="k">${esc(p.utm)}</span>`}${t && t.asked ? '<span class="ask">template asks for this</span>' : ''}${p.desc ? `<span class="tipi" tabindex="0" data-tip="${esc(p.desc)}">${I.info}</span>` : ''}</label>
       ${locked ? `<div class="lb-lock" title="${t.fixed ? 'Set by the template' : 'Each template sets its own value'}">${PI.lock}<span class="code">${esc(t.fixed || t.varies.join(' · '))}</span><span class="sm-muted">${t.fixed ? 'from template' : 'one per template'}</span></div>`
         : `<div class="lb-in ${p.values.length ? 'combo' : ''}"><input id="lb-${esc(p.key)}" data-lb="${esc(p.key)}" value="${esc(v)}" placeholder="${esc(ph)}" autocomplete="off" spellcheck="false" role="${p.values.length ? 'combobox' : 'textbox'}" aria-expanded="false" ${p.format === 'number' ? 'inputmode="numeric"' : ''}><span class="pretty">${sel && sel.pretty ? esc(sel.pretty) : ''}</span>${p.values.length ? `<span class="chev">${I.chev}</span>` : ''}</div>`}
       <div class="lb-msg ${show ? iss.lvl : ''}" data-msg="${esc(p.key)}">${lbMsgHTML(p, iss, show)}</div></div>`;
+  }
+  // Each parameter's color (same as its icon): tints its field tile and its tag in the link preview.
+  const pTone = p => p.custom ? 'p-cus' : 'p-' + p.key;
+  // Hover or focus a field → its tag lights up in the preview, and the other way round.
+  function lbHL(key) {
+    B.hl = key || null; if (!lbRoot) return;
+    $$('.lb-f.hl, .tk.hl', lbRoot).forEach(el => el.classList.remove('hl'));
+    if (key) $$(`.lb-f[data-f="${CSS.escape(key)}"], .tk[data-tk="${CSS.escape(key)}"]`, lbRoot).forEach(el => el.classList.add('hl'));
   }
   const lbIcon = p => `<span class="pi ${p.custom ? 'p-cus' : 'p-' + p.key}" title="${p.custom ? 'Custom parameter' : 'Standard UTM parameter'}">${P_ICON[p.custom ? 'custom' : p.key] || P_ICON.custom}</span>`;
   // Shown up front: what Rules require and what the picked template sets or asks for. The rest is optional and folds away.
@@ -1567,7 +1575,7 @@
   function lbTokensHTML(dest, tplKey) {
     const base = dest ? withScheme(dest.trim().replace(/[?&]$/, '')) : 'https://your-page.com'; let sep = base.includes('?') ? '&' : '?';
     const q = lbQuery(tplKey).map(({ p, v }) => { if (!v && !p.rules.includes('required')) return ''; const s = sep; if (v || p.rules.includes('required')) sep = '&';
-      return `<span class="tk ${v ? '' : 'miss'}" data-tk="${esc(p.key)}" title="${v ? esc(p.label) : esc(p.label) + ' is required'}">${s}<span class="k">${esc(p.utm)}</span>=<span class="v">${v ? esc(v) : '?'}</span></span>`; }).join('');
+      return `<span class="tk ${pTone(p)} ${v ? '' : 'miss'} ${B.hl === p.key ? 'hl' : ''}" data-tk="${esc(p.key)}" title="${v ? esc(p.label) : esc(p.label) + ' is required'}">${s}<span class="k">${esc(p.utm)}</span>=<span class="v">${v ? esc(v) : '?'}</span></span>`; }).join('');
     return `<span class="tk base ${dest ? '' : 'miss'}" data-tk="url">${esc(base)}</span>${q}`;
   }
   function lbSideHTML() {
@@ -1691,6 +1699,11 @@
     lbPaint();
     const first = o.focus ? $(`#lb-${CSS.escape(o.focus)}`, box) : B.edit || B.mode === 'ext' ? null : $('#lb-url', box);
     setTimeout(() => { if (o.focus) lbJump(o.focus); else if (first) first.focus(); }, 80);
+    const focusedKey = () => { const f = document.activeElement && document.activeElement.closest && document.activeElement.closest('.lb-f.lb-tone'); return f && box.contains(f) ? f.dataset.f : null; };
+    s.addEventListener('focusin', e => { const f = e.target.closest('.lb-f.lb-tone'); lbHL(f ? f.dataset.f : null); });
+    s.addEventListener('focusout', () => setTimeout(() => lbHL(focusedKey()), 0));
+    s.addEventListener('mouseover', e => { const el = e.target.closest('.lb-f.lb-tone, .tk[data-tk]'); const k = el ? (el.dataset.f || el.dataset.tk) : focusedKey(); if (k !== B.hl) lbHL(k); });
+    s.addEventListener('mouseleave', () => lbHL(focusedKey()));
     // All builder events are delegated from the modal so repaints don't drop listeners.
     s.addEventListener('input', e => { const t = e.target;
       if (t.dataset.lb) { B.vals[t.dataset.lb] = t.value; if (B.combo) B.combo.i = -1; lbComboOpen(t.dataset.lb); lbRefresh(); return; }

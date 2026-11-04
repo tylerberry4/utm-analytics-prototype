@@ -725,12 +725,12 @@ button.status-pill { cursor: pointer; transition: box-shadow var(--dur) var(--ea
 .pm-item .cnt { display: flex; align-items: baseline; gap: 4px; font-size: 13px; color: var(--text-muted); } .pm-item .cnt b { font-weight: 600; color: var(--text); } .pm-item .cnt b.hit { color: var(--accent-strong); }
 .pm-item .pi { width: 28px; height: 28px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; background: var(--pi-bg, var(--sunken)); color: var(--pi-fg, var(--text-muted)); }
 .pm-item .pi svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.pi.p-campaign { --pi-bg: #f3e8ff; --pi-fg: #7e22ce; }
-.pi.p-medium { --pi-bg: #e0f2fe; --pi-fg: #0369a1; }
-.pi.p-source { --pi-bg: #dcfce7; --pi-fg: #15803d; }
-.pi.p-content { --pi-bg: #ffedd5; --pi-fg: #c2410c; }
-.pi.p-term { --pi-bg: #fce7f3; --pi-fg: #be185d; }
-.pi.p-cus { --pi-bg: #eef2f6; --pi-fg: #475569; }
+.p-campaign { --pi-bg: #f3e8ff; --pi-fg: #7e22ce; }
+.p-medium { --pi-bg: #e0f2fe; --pi-fg: #0369a1; }
+.p-source { --pi-bg: #dcfce7; --pi-fg: #15803d; }
+.p-content { --pi-bg: #ffedd5; --pi-fg: #c2410c; }
+.p-term { --pi-bg: #fce7f3; --pi-fg: #be185d; }
+.p-cus { --pi-bg: #eef2f6; --pi-fg: #475569; }
 .pm-item.hidden-p .pi { opacity: .55; }
 .pm-rail .pm-add { justify-content: center; margin: 2px 2px 6px; flex: none; }
 .pm-foot { padding: 10px 10px 4px; font-size: 11px; color: var(--text-faint); line-height: 1.4; }
@@ -908,6 +908,13 @@ button.status-pill { cursor: pointer; transition: box-shadow var(--dur) var(--ea
 .lb-lock svg { width: 13px; height: 13px; stroke: var(--text-faint); fill: none; stroke-width: 1.8; flex: none; }
 .lb-lock .code { font-size: 12px; color: var(--text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .lb-lock .sm-muted { margin-left: auto; white-space: nowrap; }
 .lb-f.asked .lb-in { border-color: rgba(var(--accent-rgb), .55); background: var(--accent-faint); }
+/* Parameter tiles: each field sits on a soft tint of its parameter's color, matching its tag in the preview */
+.lb-f.lb-tone { padding: 10px 12px 12px; border-radius: 10px; background: color-mix(in srgb, var(--pi-bg) 38%, var(--card)); border: 1px solid color-mix(in srgb, var(--pi-fg) 12%, transparent); transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
+.lb-f.lb-tone .lb-l .k { color: color-mix(in srgb, var(--pi-fg) 65%, var(--text-faint)); }
+.lb-f.lb-tone.hl, .lb-f.lb-tone:focus-within { background: color-mix(in srgb, var(--pi-bg) 70%, var(--card)); border-color: color-mix(in srgb, var(--pi-fg) 40%, transparent); }
+.lb-f.lb-tone .lb-in:focus-within { border-color: var(--pi-fg); box-shadow: 0 0 0 3px color-mix(in srgb, var(--pi-fg) 14%, transparent); }
+.lb-f.lb-tone.bad { background: var(--down-bg); border-color: rgba(220, 38, 38, .3); }
+.lb-f.lb-tone.locked .lb-lock { background: var(--card); }
 
 .lb-pop { position: absolute; z-index: 5; top: 66px; left: 0; right: 0; max-height: 280px; overflow-y: auto; background: var(--card); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-lg); padding: 4px; }
 .lb-opt { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; width: 100%; padding: 7px 10px; border-radius: 6px; text-align: left; font-size: 13px; color: var(--text); }
@@ -957,6 +964,9 @@ button.status-pill { cursor: pointer; transition: box-shadow var(--dur) var(--ea
 .tk { white-space: nowrap; } .tk.base { white-space: normal; overflow-wrap: anywhere; } .tk .v { white-space: normal; overflow-wrap: anywhere; }
 .tk { cursor: pointer; border-radius: 3px; transition: background var(--dur-fast); } .tk:hover { background: var(--accent-subtle); }
 .tk.base { color: var(--text-strong); } .tk .k { color: var(--text-muted); } .tk .v { color: var(--accent-strong); font-weight: 600; }
+.tk[data-tk]:not(.base) .k { color: color-mix(in srgb, var(--pi-fg, var(--text-muted)) 60%, var(--text-faint)); }
+.tk[data-tk]:not(.base) .v { color: var(--pi-fg, var(--accent-strong)); background: color-mix(in srgb, var(--pi-bg, var(--accent-faint)) 80%, transparent); padding: 0 3px; border-radius: 3px; }
+.tk[data-tk]:not(.base):hover, .tk.hl { background: var(--pi-bg, var(--accent-subtle)); box-shadow: 0 0 0 1.5px var(--pi-fg, var(--accent)); }
 .tk.miss .v, .tk.base.miss { color: #b91c1c; background: var(--down-bg); border-radius: 3px; padding: 0 3px; }
 .lb-hint { font-size: 11.5px; }
 .lb-pv-qr { display: flex; align-items: center; gap: 12px; font-size: 12px; } .lb-pv-qr .sm-muted { white-space: normal; } .lb-pv-qr .q { display: inline-flex; padding: 6px; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
