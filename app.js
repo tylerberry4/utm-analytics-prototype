@@ -19,7 +19,7 @@
     parameters: '<svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M12 4v16"/></svg>',
     attributes: '<svg viewBox="0 0 24 24"><path d="M5 5h14M5 12h14M5 19h14"/><circle cx="8" cy="5" r="1.2" fill="currentColor"/><circle cx="8" cy="12" r="1.2" fill="currentColor"/><circle cx="8" cy="19" r="1.2" fill="currentColor"/></svg>',
     shorteners: '<svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><path d="M6 8.5v7M8.5 6h7M15.5 6c-6 0-9 5-9 9"/></svg>',
-    rules: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/></svg>',
+    rules: '<svg viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.5 3 8 7 10 4-2 7-5.5 7-10V6l-7-3z"/><path d="m9 12 2 2 4-4"/></svg>',
     members: '<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-4 3-6.5 6.5-6.5S15.5 16 15.5 20"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.5c3 0 5.5 2 5.5 5.5"/></svg>',
     support: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5"/><path d="M5.6 5.6l4 4M14.4 14.4l4 4M5.6 18.4l4-4M14.4 9.6l4-4"/></svg>',
     filter: '<svg viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg>',
@@ -129,6 +129,13 @@
     return `<span class="delta ${cls}" title="vs ${fmt.range(D.priorRange(state.range))}">${ic}<span>${Math.abs(Math.round(d * 100))}%</span></span>`;
   }
   function countrySpan(code) { const c = D.COUNTRIES[code]; return c ? `<span class="flag">${c.flag}</span>${esc(c.name)}` : esc(code); }
+  // Region / city label with its country's flag; cities also name their region.
+  function placeSpan(dim, label) {
+    const p = D.PLACE[dim][label]; if (!p) return esc(label);
+    const c = D.COUNTRIES[p.cc], where = label.startsWith('Other') ? '' : dim === 'city' && p.region ? `${p.region}, ${p.cc}` : c.name;
+    return `<span class="flag" title="${esc(c.name)}">${c.flag}</span>${esc(label)}<span class="where">${esc(where)}</span>`;
+  }
+  const geoLabel = (dim, label) => dim === 'country' ? countrySpan(label) : dim === 'region' || dim === 'city' ? placeSpan(dim, label) : null;
 
   function rowsHTML(items, opts) {
     const { dim, bar, limit = 6, showPct = true, filterable = true } = opts;
@@ -137,7 +144,7 @@
     const max = items[0].value || 1;
     return items.slice(0, limit).map(it => {
       const active = f && f.values.includes(it.label);
-      const label = dim === 'country' ? countrySpan(it.label) : dim === 'link' ? `<span class="code">${esc(it.label)}</span>` : esc(it.label);
+      const label = geoLabel(dim, it.label) || (dim === 'link' ? `<span class="code">${esc(it.label)}</span>` : esc(it.label));
       return `<div class="row ${active ? 'active-filter' : ''}" data-dim="${dim}" data-val="${esc(it.label)}" role="button" tabindex="0" style="--bar:${bar}">
         <div class="track"><div class="bar" data-w="${(it.value / max * 100).toFixed(1)}"></div><span class="lbl">${label}</span>${filterable ? `<span class="filter-hint">${active ? 'Remove filter' : 'Filter'}</span>` : ''}</div>
         <span class="val num">${fmt.n(it.value)}</span>${showPct ? `<span class="pct num">${fmt.pct(it.share)}</span>` : ''}
@@ -153,37 +160,44 @@
       <div class="card-body">${bodyHTML}</div></section>`;
   }
   function listCard(id, tabs, headers, items, dim, extra = {}) {
-    const body = `<div class="cols"><span>${esc(headers[0])}</span><span class="r">${esc(headers[1])}</span><span class="r">%</span></div><div class="rows">${rowsHTML(items, { dim, bar: CARD_BARS[id], ...extra })}</div>`;
+    const body = `<div class="cols"><span>${esc(headers[0])}</span><span class="r">${esc(headers[1])}</span><span class="r">%</span></div><div class="rows">${rowsHTML(items, { dim, bar: CARD_BARS[id], ...extra })}</div>${extra.note || ''}`;
     return card(id, tabs, body);
   }
 
   /* ---------- Toolbar ---------- */
   function toolbarHTML(title) {
     const status = 'Updated 4 min ago · suspected bots excluded';
-    const n = state.filters.length;
     return `<div class="toolbar">
       <div class="title"><h1>${esc(title)}</h1><span class="status" tabindex="0" data-tip="${esc(status)}" aria-label="${esc(status)}">4 min ago</span></div>
       <div class="controls">
-        <div class="seg" role="radiogroup" aria-label="Trigger">
-          <button data-trigger="all" class="${state.trigger === 'all' ? 'on' : ''}">All</button>
-          <button data-trigger="link" class="${state.trigger === 'link' ? 'on' : ''}">${I.links}Links</button>
-          <button data-trigger="qr" class="${state.trigger === 'qr' ? 'on' : ''}">${I.qr}QR</button>
-        </div>
-        <button class="tb-btn" id="filter-btn" aria-haspopup="menu" aria-expanded="false">${I.filter}Filter${n ? `<span class="badge">${n}</span>` : ''}</button>
         <button class="tb-btn" id="date-btn" aria-haspopup="dialog" aria-expanded="false">${I.calendar}<span>${esc(rangeLabel())}</span><span class="chev">${I.chev}</span></button>
         <button class="tb-btn icon" id="more-btn" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button>
+      </div></div>${filterBarHTML()}`;
+  }
+  // Analytics filter: a full-width bar that holds the chips, first in line before All / Links / QR (2026-10-29 review).
+  function filterBarHTML() {
+    const n = state.filters.length;
+    const total = Q.unfiltered.totals.clicks, cur = Q.cur.totals.clicks;
+    const end = n ? `<span class="fbar-ctx num" title="Clicks that match these filters">${fmt.n(cur)} of ${fmt.n(total)} clicks</span><button class="clear" id="clear-filters">Clear</button>` : '<span class="kbd" title="Press F to filter">F</span>';
+    return `<div class="fbar-row">
+      <div class="fbar ${n ? 'has' : ''}" id="fbar">${I.filter}${state.filters.map(chipHTML).join('')}<button class="fbar-add" id="filter-btn" aria-haspopup="menu" aria-expanded="false">${n ? '+ Add filter' : 'Filter by campaign, source, country, city…'}</button>${end}</div>
+      <div class="seg" role="radiogroup" aria-label="Trigger">
+        <button data-trigger="all" class="${state.trigger === 'all' ? 'on' : ''}">All</button>
+        <button data-trigger="link" class="${state.trigger === 'link' ? 'on' : ''}">${I.links}Links</button>
+        <button data-trigger="qr" class="${state.trigger === 'qr' ? 'on' : ''}">${I.qr}QR</button>
       </div></div>`;
   }
   function rangeLabel() { const p = PRESETS.find(p => p.id === state.preset); return p ? p.label : fmt.range(state.range); }
 
+  function chipHTML(f, i) {
+    const d = D.DIM[f.dim];
+    const vals = f.values.length > 2 ? `${esc(f.values[0])} <span class="op">+${f.values.length - 1} more</span>` : f.values.map(esc).join('<span class="op"> or </span>');
+    return `<span class="chip"><span class="k">${esc(d.label)}</span><span class="op">${f.op}</span><span class="v"><button data-edit-filter="${i}" title="Edit">${vals}</button></span><button class="x" data-remove-filter="${i}" aria-label="Remove filter">${I.close}</button></span>`;
+  }
   function chipsHTML() {
     if (!state.filters.length) return '<div class="chips"></div>';
     const total = Q.unfiltered.totals.clicks, cur = Q.cur.totals.clicks;
-    const chips = state.filters.map((f, i) => {
-      const d = D.DIM[f.dim];
-      const vals = f.values.length > 2 ? `${esc(f.values[0])} <span class="op">+${f.values.length - 1} more</span>` : f.values.map(esc).join('<span class="op"> or </span>');
-      return `<span class="chip"><span class="k">${esc(d.label)}</span><span class="op">${f.op}</span><span class="v"><button data-edit-filter="${i}" title="Edit">${vals}</button></span><button class="x" data-remove-filter="${i}" aria-label="Remove filter">${I.close}</button></span>`;
-    }).join('');
+    const chips = state.filters.map(chipHTML).join('');
     const ctx = state.view === 'links' ? `Showing <b>${Q.links.rows.length}</b> of ${Q.linksAll.rows.length} links` : state.view === 'qr' ? `Showing <b>${qrRows().length}</b> of ${Q.linksAll.rows.filter(r => r.link.qr > 0).length} QR codes` : `Showing <b>${fmt.n(cur)}</b> of ${fmt.n(total)} clicks (${fmt.pct(total ? cur / total : 0)})`;
     return `<div class="chips">${chips}<button class="clear" id="clear-filters">Clear all</button><span class="context num">${ctx}</span></div>`;
   }
@@ -291,7 +305,7 @@
     const body = rows.slice(0, limit).map((r, i) => {
       const pr = Q.priorBySlug[r.link.slug];
       const qrShare = r.clicks ? r.qr / r.clicks : 0;
-      const top = Object.entries(r.link.geo).sort((a, b) => b[1] - a[1])[0];
+      const top = Object.entries(D.linkCountries(r.link, state.filters)).sort((a, b) => b[1] - a[1])[0];
       const hasQR = r.link.qr > 0;
       const typeTip = hasQR ? `Has a QR code · ${Math.round(qrShare * 100)}% of clicks from scans` : 'Link only · no QR code';
       return `<div class="trow data" data-link="${esc(r.link.slug)}" role="link" tabindex="0" style="animation-delay:${Math.min(i, 10) * 25}ms">
@@ -333,7 +347,7 @@
       return `<path class="c ${it ? '' : 'dim'}" d="${d}" style="opacity:${it ? op : 1}" data-country="${code}" data-val="${it ? it.value : 0}" data-share="${it ? it.share : 0}"></path>`;
     }).join('');
     return `<div class="map-area"><div class="map" id="map"><svg viewBox="0 0 500 198"><path d="${mp.land}"/>${cs}</svg><div class="tip" id="map-tip"></div></div>
-      <div class="map-legend"><span>0</span><span class="scale"></span><span class="num">${fmt.n(max)} clicks</span><span class="hint">${f ? 'Click a country to change the filter' : 'Click a country to filter'}</span></div></div>`;
+      <div class="map-legend"><span>0</span><span class="scale"></span><span class="num">${fmt.n(max)} clicks</span>${f && f.values.length === 1 && D.COUNTRIES[f.values[0]] ? `<button class="link-btn hint" data-tab="city">See cities in ${esc(D.COUNTRIES[f.values[0]].name)} →</button>` : `<span class="hint">${f ? 'Click a country to change the filter' : 'Click a country to filter'}</span>`}</div></div>`;
   }
 
   /* ---------- Views ---------- */
@@ -358,7 +372,7 @@
   function overviewHTML() {
     const [utm, loc, dev, ref] = ['utm', 'loc', 'dev', 'ref'].map(cardFor);
     return `<div class="view">${toolbarHTML('Analytics')}</div>
-      ${chipsHTML()}${kpiChartHTML()}${tableHTML()}
+      ${kpiChartHTML()}${tableHTML()}
       <div class="grid-2">${utm}${loc}</div><div class="grid-2">${dev}${ref}</div>
       <p class="footnote">Clicks are successful redirects; suspected bots are excluded. Unique clicks reset each calendar month. Times in UTC.</p>`;
   }
@@ -366,7 +380,8 @@
     const tabs = [{ key: 'map', label: 'Map' }, { key: 'country', label: 'Countries' }, { key: 'region', label: 'Regions' }, { key: 'city', label: 'Cities' }];
     const t = state.tabs.loc;
     if (t === 'map') return card('loc', tabs, mapHTML(b('country')), { noExpand: true });
-    return listCard('loc', tabs, [D.DIM[t].label, 'Clicks'], b(t), t);
+    const note = t === 'country' ? '' : `<p class="loc-note">${I.globe}Estimated from the visitor's IP address. ${t === 'city' ? 'Cities are approximate; "Other" is clicks we couldn\'t place.' : 'Regions are states, provinces or counties.'}</p>`;
+    return listCard('loc', tabs, [D.DIM[t].label, 'Clicks'], b(t), t, { note });
   }
   function linkHTML() {
     const link = D.LINKS.find(l => l.slug === state.slug);
@@ -382,7 +397,7 @@
         <div class="meta">Created ${fmt.d(new Date(link.created), { month: 'short', day: 'numeric', year: 'numeric' })} by <span class="by">${avatar(link.by, 'xs')}${esc(link.by)}</span> · ${link.qr > 0 ? 'QR code attached' : 'No QR code'} · Tags: ${link.tags.map(esc).join(', ')}</div></div>
         <div class="actions"><button class="btn" id="qr-btn">${I.qr}QR code</button><button class="btn" id="edit-btn">${I.edit}Edit link</button></div></div></section>`;
     const [loc, dev, ref] = ['loc', 'dev', 'ref'].map(cardFor);
-    return `<div class="view">${head}</div>${toolbarHTML('Performance')}${chipsHTML()}${kpiChartHTML()}
+    return `<div class="view">${head}</div>${toolbarHTML('Performance')}${kpiChartHTML()}
       <div class="grid-2">${loc}${dev}</div>${ref}
       <p class="footnote">Clicks are successful redirects; suspected bots are excluded. Unique clicks reset each calendar month. Times in UTC.</p>`;
   }
@@ -1767,6 +1782,10 @@
   function closePop() { if (!pop) return; pop.anchor.setAttribute('aria-expanded', 'false'); pop.el.remove(); if (pop.onClose) pop.onClose(); pop = null; }
   document.addEventListener('mousedown', e => { if (pop && !pop.el.contains(e.target) && !pop.anchor.contains(e.target)) closePop(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (pop) closePop(); else closeModal(); } });
+  document.addEventListener('keydown', e => {
+    if (e.key.toLowerCase() !== 'f' || e.metaKey || e.ctrlKey || e.altKey || pop || $('.scrim') || e.target.closest('input, textarea, select, [contenteditable]')) return;
+    const b = $('#fbar #filter-btn'); if (b) { e.preventDefault(); filterMenu(b); }
+  });
 
   /* ---------- Filter menu ---------- */
   function filterMenu(anchor) {
@@ -1799,11 +1818,12 @@
     const values = dim === 'trigger' ? [{ label: 'Link click', value: Q.unfiltered.totals.linkClicks, share: 0 }, { label: 'QR scan', value: Q.unfiltered.totals.qr, share: 0 }] : D.valuesFor(dim, ctx);
     const list = q => {
       const ql = q.toLowerCase();
-      const vs = values.filter(v => !ql || v.label.toLowerCase().includes(ql) || (dim === 'country' && D.COUNTRIES[v.label] && D.COUNTRIES[v.label].name.toLowerCase().includes(ql)));
+      const cname = v => { const cc = dim === 'country' ? v.label : D.PLACE[dim] && D.PLACE[dim][v.label] && D.PLACE[dim][v.label].cc; return cc && D.COUNTRIES[cc] ? D.COUNTRIES[cc].name.toLowerCase() : ''; };
+      const vs = values.filter(v => !ql || v.label.toLowerCase().includes(ql) || cname(v).includes(ql));
       if (!vs.length) return `<div class="group" style="padding:14px 10px">No values match “${esc(q)}”</div>`;
       return vs.map(v => {
-        let label = dim === 'country' ? countrySpan(v.label) : esc(v.label);
-        if (ql && dim !== 'country') label = label.replace(new RegExp(`(${ql.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'i'), '<mark>$1</mark>');
+        let label = geoLabel(dim, v.label) || esc(v.label);
+        if (ql && !geoLabel(dim, v.label)) label = label.replace(new RegExp(`(${ql.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'i'), '<mark>$1</mark>');
         return `<label class="val ${sel.has(v.label) ? 'on' : ''}" data-v="${esc(v.label)}"><span class="box">${I.check}</span><span class="lbl">${label}</span><span class="cnt num">${fmt.n(v.value)}</span></label>`;
       }).join('');
     };
@@ -1922,7 +1942,7 @@
   function closeModal() { const s = $('.scrim', layer); if (s) s.remove(); }
   function expandModal(id) {
     const dim = state.tabs[id]; const d = D.DIM[dim]; const items = Q.cur.breakdown(dim);
-    const list = q => rowsHTML(items.filter(i => !q || i.label.toLowerCase().includes(q.toLowerCase()) || (dim === 'country' && D.COUNTRIES[i.label] && D.COUNTRIES[i.label].name.toLowerCase().includes(q.toLowerCase()))), { dim, bar: CARD_BARS[id], limit: 500 });
+    const list = q => rowsHTML(items.filter(i => !q || i.label.toLowerCase().includes(q.toLowerCase()) || (i.code && D.COUNTRIES[i.code] && D.COUNTRIES[i.code].name.toLowerCase().includes(q.toLowerCase()))), { dim, bar: CARD_BARS[id], limit: 500 });
     openModal(`<div class="modal-h"><h3>${esc(d.label)}<span class="sub">${items.length} values · ${esc(rangeLabel())}</span></h3><div class="search" style="margin:0;width:220px">${I.search}<input id="exp-q" placeholder="Search…"></div><button class="close" aria-label="Close">${I.close}</button></div>
       <div class="modal-b"><div class="cols"><span>${esc(d.label)}</span><span class="r">Clicks</span><span class="r">%</span></div><div class="rows" id="exp-rows">${list('')}</div></div>`, {
       onMount(s) { const q = $('#exp-q', s), rows = $('#exp-rows', s); const grow = () => requestAnimationFrame(() => $$('[data-w]', rows).forEach(el => el.style.width = el.dataset.w + '%')); grow(); q.addEventListener('input', () => { rows.innerHTML = list(q.value); grow(); }); setTimeout(() => q.focus(), 50);
@@ -1975,7 +1995,7 @@
       <li><b>Tags</b> on a row flag what needs a look: <i>Not saved</i> (used in links but not in the list), <i>Duplicate?</i> (e.g. <i>Facebook</i> vs <i>facebook</i>), <i>Check</i> (capitals or spaces), <i>Unused</i> (no links for 90 days) and <i>New</i>.</li>
       <li><b>Groupings</b> narrow a list: when medium is <i>paid_social</i>, source offers only paid platforms. On the Board, hover a value to see its lines; click it, then tick values in the next column to group them. Esc to finish.</li>
       <li>Type in the add row to add a value (paste a list to add several). Delete removes a value from the builder; links that already use it keep working. Merge keeps one value and moves groupings across.</li></ul>
-      <h4>Keyboard shortcuts</h4><p>With the date menu open: <kbd>D</kbd> Today · <kbd>E</kbd> Yesterday · <kbd>W</kbd> Last 7 days · <kbd>T</kbd> Last 30 days · <kbd>M</kbd> This month · <kbd>L</kbd> Last month · <kbd>Q</kbd> Last 90 days. <kbd>Esc</kbd> closes any menu.</p></div>`, { width: 560 });
+      <h4>Keyboard shortcuts</h4><p>With the date menu open: <kbd>D</kbd> Today · <kbd>E</kbd> Yesterday · <kbd>W</kbd> Last 7 days · <kbd>T</kbd> Last 30 days · <kbd>M</kbd> This month · <kbd>L</kbd> Last month · <kbd>Q</kbd> Last 90 days. <kbd>F</kbd> opens Filter. <kbd>Esc</kbd> closes any menu.</p></div>`, { width: 560 });
   }
 
   /* ---------- Toast ---------- */
@@ -2009,6 +2029,7 @@
     if ((el = hit('[data-remove-filter]'))) { const f = state.filters.splice(+el.dataset.removeFilter, 1)[0]; render({ busy: true }); toast(`Removed filter: ${D.DIM[f.dim].label}`); return; }
     if ((el = hit('[data-edit-filter]'))) { const i = +el.dataset.editFilter; valuePicker(el.closest('.chip'), state.filters[i].dim, i); return; }
     if (hit('#clear-filters')) { state.filters = []; render({ busy: true }); toast('Filters cleared'); return; }
+    if (hit('#fbar') && !hit('.chip')) { filterMenu($('#filter-btn')); return; }
     if ((el = hit('[data-metric]'))) { state.metric = el.dataset.metric; $$('[data-metric]').forEach(k => { k.classList.toggle('on', k === el); k.setAttribute('aria-selected', k === el); }); drawChart(); return; }
     if ((el = hit('[data-sort]'))) { const k = el.dataset.sort; if (state.sort.key === k) state.sort.dir *= -1; else state.sort = { key: k, dir: k === 'link' ? 1 : -1 }; swapSection($('#top-links'), tableHTML()); return; }
     if (hit('#show-all')) { state.showAll = !state.showAll; swapSection($('#top-links'), tableHTML()); return; }
@@ -2117,7 +2138,8 @@
     const p = e.target.closest && e.target.closest('[data-country]'); const map = $('#map'); if (!map) return; const tip = $('#map-tip');
     if (!p) { tip.classList.remove('show'); return; }
     const c = D.COUNTRIES[p.dataset.country]; const r = map.getBoundingClientRect();
-    tip.innerHTML = `<div><b>${c.flag} ${esc(c.name)}</b></div><div class="row-t"><span class="m">Clicks</span><b class="num">${fmt.full(+p.dataset.val)}</b></div><div class="row-t"><span class="m">Share</span><span class="num">${fmt.pct(+p.dataset.share)}</span></div>`;
+    const cities = +p.dataset.val ? (Q.cities || (Q.cities = Q.cur.breakdown('city'))).filter(x => x.code === p.dataset.country && !x.label.startsWith('Other')).slice(0, 3) : [];
+    tip.innerHTML = `<div><b>${c.flag} ${esc(c.name)}</b></div><div class="row-t"><span class="m">Clicks</span><b class="num">${fmt.full(+p.dataset.val)}</b></div><div class="row-t"><span class="m">Share</span><span class="num">${fmt.pct(+p.dataset.share)}</span></div>${cities.length ? `<div class="tip-sub">Top cities</div>${cities.map(x => `<div class="row-t"><span>${esc(x.label)}</span><span class="num">${fmt.full(Math.round(x.value))}</span></div>`).join('')}` : ''}`;
     tip.style.left = (e.clientX - r.left) + 'px'; tip.style.top = (e.clientY - r.top - 4) + 'px'; tip.classList.add('show');
   });
 
