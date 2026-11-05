@@ -442,7 +442,7 @@
       const last30 = r.series.slice(-30), prev30 = r.series.slice(-60, -30);
       const recent = last30.reduce((a, p) => a + p.clicks, 0), before = prev30.reduce((a, p) => a + p.clicks, 0);
       return { ...r, last30, recent, recentDelta: delta(recent, before) };
-    }).filter(r => !q || [r.link.slug, r.link.dest, r.link.title, r.link.campaign, r.link.source, r.link.medium, ...r.link.tags].some(s => s && s.toLowerCase().includes(q)));
+    }).filter(r => !q || [r.link.slug, r.link.dest, r.link.title, r.link.campaign, r.link.source, r.link.medium, r.link.by, ...r.link.tags].some(s => s && s.toLowerCase().includes(q)));
     const { key, dir } = state.lsort;
     rows.sort((a, b) => {
       let v = 0;
@@ -522,7 +522,7 @@
     const nf = state.filters.length;
     return `<div class="view"><div class="page-head"><div class="title"><h1>Links</h1><span class="status" tabindex="0" data-tip="${all} links in this workspace · updated 4 min ago">${all} links</span></div>
         <div class="actions"><button class="btn primary" id="create-btn"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Create link</button></div></div></div>
-      ${listBarHTML('Search links, destinations, campaigns…', `
+      ${listBarHTML('Search links, campaigns, people…', `
           <button class="tb-btn" id="group-btn" aria-haspopup="menu" aria-expanded="false"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h6"/></svg>${state.groupBy === 'none' ? 'Group' : g[1]}<span class="chev">${I.chev}</span></button>
           <button class="tb-btn" id="lsort-btn" aria-haspopup="menu" aria-expanded="false">${I.sort}${s[1]}<span class="chev">${I.chev}</span></button>
           <button class="tb-btn icon" id="links-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button>`, { filter: true, ctx: `${linkRows().length} of ${Q.linksAll.rows.length} links` })}
@@ -625,7 +625,7 @@
       const last30 = r.series.slice(-30), prev30 = r.series.slice(-60, -30);
       const recent = last30.reduce((a, p) => a + p.qr, 0), before = prev30.reduce((a, p) => a + p.qr, 0);
       return { ...r, last30, recent, recentDelta: delta(recent, before), design: designOf(r.link.slug) };
-    }).filter(r => !q || [r.link.slug, r.link.dest, r.link.title, r.link.campaign, r.link.source, r.link.medium, r.design.name, ...r.link.tags].some(s => s && s.toLowerCase().includes(q)));
+    }).filter(r => !q || [r.link.slug, r.link.dest, r.link.title, r.link.campaign, r.link.source, r.link.medium, r.link.by, r.design.name, ...r.link.tags].some(s => s && s.toLowerCase().includes(q)));
     const { key, dir } = state.lsort;
     rows.sort((a, b) => {
       let v = 0;
@@ -672,7 +672,7 @@
     const s = QSORTS.find(x => x[0] === state.lsort.key) || QSORTS[0], nf = state.filters.length;
     return `<div class="view"><div class="page-head"><div class="title"><h1>QR codes</h1><span class="status" tabindex="0" data-tip="${all.length} QR codes · ${fmt.full(scans)} scans all time · updated 4 min ago">${all.length} codes · ${fmt.n(scans)} scans</span></div>
         <div class="actions"><button class="btn" id="qr-designs-btn">${I.swatch}QR designs</button><button class="btn primary" id="create-qr-btn"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Create QR code</button></div></div></div>
-      ${listBarHTML('Search QR codes, links, campaigns…', `
+      ${listBarHTML('Search QR codes, campaigns, people…', `
           <button class="tb-btn" id="lsort-btn" aria-haspopup="menu" aria-expanded="false">${I.sort}${s[1]}<span class="chev">${I.chev}</span></button>
           <button class="tb-btn icon" id="list-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button>`, { filter: true, ctx: `${qrRows().length} of ${all.length} QR codes` })}
       ${qrTableHTML()}`;
