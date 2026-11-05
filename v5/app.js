@@ -2518,9 +2518,12 @@
     $('#nav').innerHTML = acct ? `<a href="#" class="back" data-nav="back" title="Back to ${esc(state.ws)}">${I.arrowL}<span class="nav-label">Back to ${esc(state.ws)}</span></a>${NAV_ACCT.map(navGroup).join('')}` : NAV_WS.map(navGroup).join('');
     $('#ws').classList.toggle('acct', acct); $('#ws-kicker').textContent = acct ? 'Account settings' : 'Workspace'; $('#ws-name').textContent = acct ? 'Acme Inc.' : state.ws;
   }
-  let extHidden = false; try { extHidden = localStorage.getItem('utm-v5-ext') === '1'; } catch (e) { /* ignore */ }
+  // Hiding the extension item lasts until the page is reloaded (not saved), so it's always there for demos.
+  let extHidden = false;
+  // Small full-colour Chrome mark (inline fills so the sidebar's outline-icon styles don't repaint it).
+  const CHROME_LOGO = '<svg class="chrome-logo" viewBox="0 0 24 24" aria-hidden="true"><path style="fill:#EA4335;stroke:none" d="M12 12 3.34 7A10 10 0 0 1 20.66 7Z"/><path style="fill:#FBBC04;stroke:none" d="M12 12 20.66 7A10 10 0 0 1 12 22Z"/><path style="fill:#34A853;stroke:none" d="M12 12 12 22A10 10 0 0 1 3.34 7Z"/><circle style="fill:#fff;stroke:none" cx="12" cy="12" r="4.7"/><circle style="fill:#4285F4;stroke:none" cx="12" cy="12" r="3.6"/></svg>';
   function paintFoot() {
-    $('#side-foot').innerHTML = `${extHidden ? '' : `<button class="sf" id="sf-ext" title="Chrome extension">${I.chrome}<span class="nav-label">Chrome extension</span><span class="x" id="sf-ext-x" role="button" aria-label="Hide" title="Hide (already installed)">${I.close}</span></button>`}
+    $('#side-foot').innerHTML = `${extHidden ? '' : `<button class="sf" id="sf-ext" title="Chrome extension">${CHROME_LOGO}<span class="nav-label">Chrome extension</span><span class="x" id="sf-ext-x" role="button" aria-label="Hide" title="Hide (already installed)">${I.close}</span></button>`}
       <button class="sf" id="sf-help" aria-haspopup="menu" title="Help">${I.help}<span class="nav-label">Help</span></button>
       <button class="sf user" id="sf-user" aria-haspopup="menu" title="Tyler Berry"><span class="avatar">${I.user}</span><span class="nav-label"><b>Tyler Berry</b><small>Admin · Acme Inc.</small></span><svg class="caret" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 7.5 6 4.5 9 7.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>`;
   }
@@ -2539,7 +2542,7 @@
   $('#ws').addEventListener('click', e => wsMenu(e.currentTarget));
   $('#ws').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); wsMenu(e.currentTarget); } });
   $('#side-foot').addEventListener('click', e => {
-    if (e.target.closest('#sf-ext-x')) { e.stopPropagation(); extHidden = true; try { localStorage.setItem('utm-v5-ext', '1'); } catch (er) { /* ignore */ } paintFoot(); toast('Hidden. The extension is still under Help.'); return; }
+    if (e.target.closest('#sf-ext-x')) { e.stopPropagation(); extHidden = true; paintFoot(); toast('Hidden until you reload. The extension is still under Help.'); return; }
     if (e.target.closest('#sf-ext')) { setDrawer(false); openBuilder({ mode: 'ext' }); return; }
     const help = e.target.closest('#sf-help');
     if (help) { openPop(help, `<div class="menu" style="width:240px"><button class="mi" data-h="tips">${I.info}<span class="grow">Tips &amp; shortcuts</span></button><button class="mi" data-h="docs">${I.external}<span class="grow">Help center</span></button><button class="mi" data-h="ext">${I.chrome}<span class="grow">Chrome extension</span></button><button class="mi" data-h="chat">${I.help}<span class="grow">Contact support</span></button></div>`, { onMount(el) { el.addEventListener('click', ev => { const b = ev.target.closest('.mi'); if (!b) return; closePop(); const h = b.dataset.h; if (h === 'tips') tipsModal(); else if (h === 'ext') openBuilder({ mode: 'ext' }); else toast(`${b.textContent.trim()} is outside this prototype`); }); } }); return; }

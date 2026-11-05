@@ -1284,3 +1284,6 @@ button.status-pill { cursor: pointer; transition: box-shadow var(--dur) var(--ea
 .content.instant .pm-layout, .content.instant .pb-area { animation: fade-in .16s var(--ease) both; }
 /* "How grouping works" footnote wraps (it was cut off) */
 .pb-how .pb-how-note { margin: 10px 0 0; font-size: 12px; color: var(--text-muted); white-space: normal; }
+
+/* Chrome extension item: colour logo, a touch smaller than the outline icons */
+.side-foot .sf svg.chrome-logo { width: 18px; height: 18px; margin: 0 1px; }
