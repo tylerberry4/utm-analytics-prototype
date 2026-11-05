@@ -48,7 +48,7 @@
     trigger: '<svg viewBox="0 0 24 24"><path d="M13 3 5 14h6l-1 7 8-11h-6z"/></svg>',
     sort: '<svg viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></svg>',
     info: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>',
-    swatch: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16"/></svg>',
+    swatch: '<svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1.2 0 1.8-1 1.3-2l-.3-.7c-.6-1.2.3-2.5 1.6-2.5H17a4 4 0 0 0 4-4c0-4.9-4-8.8-9-8.8z"/><circle cx="7.5" cy="11.5" r="1.2"/><circle cx="10" cy="7.2" r="1.2"/><circle cx="15" cy="7.5" r="1.2"/></svg>',
     reset: '<svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>',
   };
 
@@ -492,20 +492,29 @@
         return `<div class="grp ${open ? 'open' : ''}"><button class="grp-h" data-group="${esc(g)}" aria-expanded="${open}"><span class="chev">${I.chevR}</span>${state.groupBy === 'by' ? avatar(g, 'xs') : ''}<span class="g">${esc(g)}</span><span class="sm-muted">${rs.length} link${rs.length === 1 ? '' : 's'} · ${fmt.n(clicks)} clicks</span></button>${open ? rs.map(linkRowHTML).join('') : ''}</div>`;
       }).join('');
     }
-    return `<section class="card" id="links-table"><div class="ltable">${head}${body}</div>
+    return `<section class="card" id="links-table">${bulkBarHTML()}<div class="ltable">${head}${body}</div>
       <div class="tbl-foot"><span>Showing ${rows.length} of ${total} link${total === 1 ? '' : 's'}${state.lq ? ` matching “${esc(state.lq)}”` : ''}</span><span class="grow"></span><span>Lifetime clicks · 25 per page</span></div></section>`;
   }
 
+  // Selection bar: when rows are ticked, the table's header row turns into this bar (Gmail / GitHub pattern),
+  // pinned under the top bar while you scroll, so the actions sit right above what you selected.
   function bulkBarHTML() {
     const n = state.sel.size; if (!n) return '';
+    const ids = selectableIds(), all = ids.length > 0 && ids.every(i => state.sel.has(i));
+    const b = (act, icon, label, extra = '') => `<button class="btn sm ${act.includes('delete') ? 'danger' : ''}" data-bulk="${act}" ${extra}>${icon}${label}</button>`;
     const acts = state.view === 'parameters'
-      ? `<button data-bulk="merge" ${n < 2 ? 'disabled title="Select 2 or more values to merge"' : ''}>${PI.merge}Merge</button><button data-bulk="pcsv">${I.download}Export CSV</button><button data-bulk="pdelete" class="danger">${I.close}Delete</button>`
+      ? b('merge', PI.merge, 'Merge', n < 2 ? 'disabled title="Select 2 or more values to merge"' : '') + b('pcsv', I.download, 'Export CSV') + b('pdelete', PI.trash, 'Delete')
       : state.view === 'qr'
-      ? `<button data-bulk="png">${I.download}Download PNGs</button><button data-bulk="copy">${I.copy}Copy links</button><button data-bulk="csv">${I.download}Export CSV</button><button data-bulk="design">${I.swatch}Change design</button><button data-bulk="delete" class="danger">${I.close}Delete</button>`
-      : `<button data-bulk="copy">${I.copy}Copy links</button><button data-bulk="csv">${I.download}Export CSV</button><button data-bulk="tag">${I.tag}Add tag</button><button data-bulk="archive">${I.reset}Archive</button><button data-bulk="delete" class="danger">${I.close}Delete</button>`;
-    return `<div class="bulk" role="toolbar" aria-label="Selected items"><span class="cnt"><b>${n}</b> selected</span>${acts}
-      <button class="x" data-bulk="clear" aria-label="Clear selection">${I.close}</button></div>`;
+      ? b('png', I.download, 'Download PNGs') + b('copy', I.copy, 'Copy links') + b('csv', I.download, 'Export CSV') + b('design', I.swatch, 'Change design') + b('delete', PI.trash, 'Delete')
+      : b('copy', I.copy, 'Copy links') + b('csv', I.download, 'Export CSV') + b('tag', I.tag, 'Add tag') + b('archive', I.reset, 'Archive') + b('delete', PI.trash, 'Delete');
+    const noun = state.view === 'parameters' ? 'value' : state.view === 'qr' ? 'QR code' : 'link';
+    return `<div class="selbar" role="toolbar" aria-label="Selected items">
+      <button class="cb on ${all ? '' : 'part'}" data-bulk="${all ? 'clear' : 'all'}" role="checkbox" aria-checked="${all ? 'true' : 'mixed'}" aria-label="${all ? 'Clear selection' : 'Select all'}">${all ? I.check : '<svg viewBox="0 0 24 24"><path d="M6 12h12"/></svg>'}</button>
+      <span class="cnt"><b>${n}</b> ${noun}${n === 1 ? '' : 's'} selected</span>${all ? '' : `<button class="link-btn" data-bulk="all">Select all ${ids.length}</button>`}
+      <span class="sep"></span><div class="acts">${acts}</div><span class="grow"></span>
+      <button class="link-btn clr" data-bulk="clear">Clear</button></div>`;
   }
+
 
   function linksHTML() {
     const n = Q.links.rows.length, all = Q.linksAll.rows.length;
@@ -517,7 +526,7 @@
           <button class="tb-btn" id="group-btn" aria-haspopup="menu" aria-expanded="false"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h6"/></svg>${state.groupBy === 'none' ? 'Group' : g[1]}<span class="chev">${I.chev}</span></button>
           <button class="tb-btn" id="lsort-btn" aria-haspopup="menu" aria-expanded="false">${I.sort}${s[1]}<span class="chev">${I.chev}</span></button>
           <button class="tb-btn icon" id="links-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button>`, { filter: true, ctx: `${linkRows().length} of ${Q.linksAll.rows.length} links` })}
-      ${linksTableHTML()}${bulkBarHTML()}`;
+      ${linksTableHTML()}`;
   }
 
   function groupMenu(anchor) {
@@ -566,7 +575,8 @@
   }
   function bulk(act) {
     const slugs = [...state.sel];
-    if (act === 'clear') { state.sel.clear(); render(); return; }
+    if (act === 'clear') { state.sel.clear(); refreshSelection(); return; }
+    if (act === 'all') { selectableIds().forEach(id => state.sel.add(id)); refreshSelection(); return; }
     if (act === 'copy') { copyText(slugs.map(s => 'https://' + s).join('\n'), `Copied ${slugs.length} links`); return; }
     if (act === 'csv') { toast(`Exported ${slugs.length} ${state.view === 'qr' ? 'QR codes' : 'links'} as CSV`); return; }
     if (act === 'png') { toast(`Downloading ${slugs.length} QR codes as PNG`); return; }
@@ -654,7 +664,7 @@
       <div>${sortBtn('link', 'QR code')}</div><div>${sortBtn('campaign', 'Campaign')}</div><div>${sortBtn('clicks', 'Scans')}</div><div>${sortBtn('created', 'Created')}</div><div>Design</div><div></div></div>`;
     const body = rows.length ? rows.map(qrRowHTML).join('')
       : `<div class="empty" style="min-height:200px"><strong>No QR codes match</strong>${state.lq ? 'Try a different search' : 'Try fewer filters'}, or create one from any link.<div style="margin-top:10px;display:flex;gap:8px"><button class="btn" id="clear-search">Clear search &amp; filters</button><button class="btn primary" id="create-qr-empty">Create QR code</button></div></div>`;
-    return `<section class="card" id="list-table"><div class="ltable">${head}${body}</div>
+    return `<section class="card" id="list-table">${bulkBarHTML()}<div class="ltable">${head}${body}</div>
       <div class="tbl-foot"><span>Showing ${rows.length} of ${total} QR code${total === 1 ? '' : 's'}${state.lq ? ` matching “${esc(state.lq)}”` : ''}</span><span class="grow"></span><span>Lifetime scans · Click a row to preview and download</span></div></section>`;
   }
   function qrHTML() {
@@ -665,7 +675,7 @@
       ${listBarHTML('Search QR codes, links, campaigns…', `
           <button class="tb-btn" id="lsort-btn" aria-haspopup="menu" aria-expanded="false">${I.sort}${s[1]}<span class="chev">${I.chev}</span></button>
           <button class="tb-btn icon" id="list-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button>`, { filter: true, ctx: `${qrRows().length} of ${all.length} QR codes` })}
-      ${qrTableHTML()}${bulkBarHTML()}`;
+      ${qrTableHTML()}`;
   }
   function qrDesignsModal(slugs) {
     const picking = !!(slugs && slugs.length);
@@ -736,13 +746,13 @@
     const head = `<div class="lrow trow-t head" role="row"><div>${sortBtn('name', 'Template')}</div><div>Parameters <span class="sm-muted" style="font-weight:400">· dashed = asked for in the builder</span></div><div>${sortBtn('uses', 'Used by')}</div><div>${sortBtn('created', 'Created')}</div><div></div></div>`;
     const body = rows.length ? rows.map(templateRowHTML).join('')
       : `<div class="empty" style="min-height:200px"><strong>No templates match</strong>Try a different search, or create a new template.<div style="margin-top:10px;display:flex;gap:8px"><button class="btn" id="clear-search">Clear search</button><button class="btn primary" id="create-tpl-empty">Create template</button></div></div>`;
-    return `<section class="card" id="list-table"><div class="ltable">${head}${body}</div>
+    return `<section class="card" id="list-table">${bulkBarHTML()}<div class="ltable">${head}${body}</div>
       <div class="tbl-foot"><span>Showing ${rows.length} of ${TEMPLATE_LIST.length} templates${state.lq ? ` matching “${esc(state.lq)}”` : ''}</span><span class="grow"></span><span>Click a row to see the full template</span></div></section>`;
   }
   function templatesHTML() {
     const s = TSORTS.find(x => x[0] === state.lsort.key) || TSORTS[0];
     return `<div class="view"><div class="page-head"><div class="title"><h1>Templates</h1><span class="status" tabindex="0" data-tip="${TEMPLATE_LIST.length} UTM templates · template selection is required in the link builder">${TEMPLATE_LIST.length} templates · required in builder</span></div>
-        <div class="actions"><button class="btn" id="import-tpl-btn">${I.download}Import CSV</button><button class="btn primary" id="create-tpl-btn"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Create template</button></div></div></div>
+        <div class="actions"><button class="btn primary" id="create-tpl-btn"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Create template</button></div></div></div>
       ${listBarHTML('Search templates, parameters, people…', `
           <button class="tb-btn" id="lsort-btn" aria-haspopup="menu" aria-expanded="false">${I.sort}${s[1]}<span class="chev">${I.chev}</span></button>
           <button class="tb-btn icon" id="list-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button>`)}
@@ -821,7 +831,7 @@
     const sortBtn = (key, label) => `<button data-lsort="${key}" class="${state.lsort.key === key ? 'on' : ''} ${state.lsort.key === key && state.lsort.dir === 1 ? 'asc' : ''}">${label}${I.sort}</button>`;
     const head = `<div class="lrow srow head" role="row"><div>${sortBtn('domain', 'Shortener')}</div><div>Status</div><div>Default redirect</div><div>${sortBtn('links', 'Used by')}</div><div>New links</div><div></div></div>`;
     const body = rows.length ? rows.map(shortenerRowHTML).join('') : `<div class="empty" style="min-height:160px"><strong>No shorteners match</strong>Try a different search.<div style="margin-top:10px"><button class="btn" id="clear-search">Clear search</button></div></div>`;
-    return `<section class="card" id="list-table"><div class="ltable">${head}${body}</div>
+    return `<section class="card" id="list-table">${bulkBarHTML()}<div class="ltable">${head}${body}</div>
       <div class="tbl-foot"><span>${SHORTENERS.length} shorteners · the default is pre-selected in the link builder</span><span class="grow"></span><span>Turning one off keeps existing links working</span></div></section>`;
   }
   function shortenersHTML() {
@@ -1050,7 +1060,7 @@
     const head = `<div class="lrow prow head" role="row"><span class="cb" id="sel-all" role="checkbox" aria-checked="false" title="Select all">${I.check}</span><div>${sortBtn('value', 'Value')}</div><div>Groupings</div><div>${sortBtn('links', 'Used by')}</div><div>${sortBtn('last', 'Last used')}</div><div>${sortBtn('created', 'Added')}</div><div></div></div>`;
     const empty = !p.values.length && !all.length ? `<div class="empty" style="min-height:180px"><strong>No saved values yet</strong>${p.format === 'number' ? 'Members type a number per link. Add values here to offer a dropdown instead.' : 'Add values above, paste a list, or import a CSV.'}</div>`
       : `<div class="empty" style="min-height:160px"><strong>No values match</strong>Try a different search.${state.lq ? `<div style="margin-top:10px"><button class="btn" id="pm-clear">Show all values</button></div>` : ''}</div>`;
-    return `<section class="card" id="list-table"><div class="ltable">${head}${rows.length ? rows.map(valueRowHTML).join('') : empty}</div>
+    return `<section class="card" id="list-table">${bulkBarHTML()}<div class="ltable">${head}${rows.length ? rows.map(valueRowHTML).join('') : empty}</div>
       <div class="tbl-foot"><span>Showing ${rows.length} of ${all.length} values${state.lq ? ` matching “${esc(state.lq)}”` : ''}</span><span class="grow"></span><span>Click a row to edit · ${p.rules.includes('dropdown') ? 'members can only pick from this list' : 'members can also type a new value'}</span></div></section>`;
   }
   const pviewSeg = () => `<div class="seg pm-view" role="tablist" aria-label="View"><button type="button" data-pview="board" class="${state.pview === 'list' ? '' : 'on'}">${PI.branch}Board</button><button type="button" data-pview="list" class="${state.pview === 'list' ? 'on' : ''}">${PI.list}List</button></div>`;
@@ -1063,7 +1073,7 @@
       <form class="pm-addrow" id="pv-add-form" autocomplete="off"><label class="ic" for="pv-add" title="Add a value">${PI.plus}</label><div class="pm-addtxt"><input id="pv-add" placeholder="Add a ${esc(p.label.toLowerCase())} value…" aria-label="Add value" ${p.format === 'number' ? 'inputmode="numeric"' : ''}><span class="hint" id="pv-hint">${esc(p.hint)} · ${p.rules.includes('lowercase') ? 'lowercase · ' : ''}${p.format === 'number' ? 'numbers only · ' : ''}spaces become “-” · paste a list to add several</span></div><button class="btn sm pm-addbtn" type="submit">${PI.plus}Add value</button></form>` : '';
     return `<div class="view"><div class="page-head"><div class="title"><h1>Parameters</h1><span class="sm-muted">${PARAMS.length} parameters</span></div></div>
       ${bar}
-      <div class="pm-layout">${railHTML()}<div class="pm-main">${paramHeadHTML(p)}${state.ptab === 'values' ? tools + paramValuesCard(p) : groupingsHTML(p)}</div></div>${bulkBarHTML()}</div>`;
+      <div class="pm-layout">${railHTML()}<div class="pm-main">${paramHeadHTML(p)}${state.ptab === 'values' ? tools + paramValuesCard(p) : groupingsHTML(p)}</div></div></div>`;
   }
 
   /* ---------- Parameters board: every parameter side by side, groupings drawn as lines ----------
@@ -1130,14 +1140,14 @@
       <p>Grouping decides which values the link builder offers. Pick <b class="code">paid_social</b> as the medium, and the source list only shows the sources grouped with it.</p>
       <ol><li><b>Hover</b> a value to trace what it's grouped with across columns.</li><li><b>Click</b> it to select it. Its details appear at the bottom.</li><li><b>Tick</b> values in the next column to group or ungroup them. <kbd>Esc</kbd> finishes.</li></ol>
       <div class="pb-how-key"><span><i class="ln"></i>Grouped</span><span><i class="ln on"></i>Selected value's chain</span></div>
-      <p class="sm-muted">Columns run left to right in the order fields appear in the link builder.</p></div>`, { align: 'right', role: 'dialog' });
+      <p class="pb-how-note">Columns run left to right in the order fields appear in the link builder.</p></div>`, { align: 'right', role: 'dialog' });
   }
   const pbAreaHTML = () => `<div class="pb-area" id="list-table"><div class="pb" id="pb"><svg class="pb-svg" id="pb-svg" aria-hidden="true"></svg>${PARAMS.map(pbColHTML).join('')}<button type="button" class="pb-ghost" id="pm-add-param">${PI.plus}Add parameter</button></div></div>`;
   function boardPageHTML() {
     const grouped = PARAMS.filter(p => p.deps).length;
     return `<div class="view"><div class="page-head"><div class="title"><h1>Parameters</h1><span class="sm-muted">${PARAMS.length} parameters · ${grouped ? `${grouped} grouped` : 'no groupings yet'}</span></div>
 </div>
-      ${listBarHTML("Search every parameter's values…", `<button class="tb-btn" id="pm-how" aria-haspopup="dialog" aria-expanded="false">${I.info}<span>How grouping works</span></button>${pviewSeg()}<button class="tb-btn icon" id="pm-page-more" aria-haspopup="menu" aria-expanded="false" aria-label="Import, export and more" title="Import, export and more">${I.more}</button>`)}
+      ${listBarHTML("Search every parameter's values…", `${pviewSeg()}<button class="tb-btn icon" id="pm-page-more" aria-haspopup="menu" aria-expanded="false" aria-label="Import, export and more" title="Import, export and more">${I.more}</button>`)}
       ${pbAreaHTML()}</div>${pbBarHTML()}`; // bar sits outside .view so it can float over the page
   }
   // Lines: measured after layout, redrawn on resize, search and grouping changes.
@@ -1396,8 +1406,9 @@
       <button class="mi" data-act="csv">${I.download}<span class="grow">Export all parameters as CSV</span></button>
       <button class="mi" data-act="import">${PI.upload}<span class="grow">Import parameters via CSV</span></button>
       <button class="mi" data-act="ga">${I.analytics}<span class="grow">Import from Google Analytics</span></button>
-      <div class="sep"></div>
+      <div class="sep"></div>${state.pview === 'list' ? '' : `<button class="mi" data-act="how">${PI.branch}<span class="grow">How grouping works</span></button>`}
       <button class="mi" data-act="about">${I.info}<span class="grow">Tips &amp; shortcuts</span></button></div>`, { align: 'right', onMount(el) { el.addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (!b) return; closePop(); const a = b.dataset.act;
+        if (a === 'how') { pbHowPop(anchor); return; }
         if (a === 'csv') toast('Exported all parameters as CSV'); else if (a === 'import') importParamsModal(); else if (a === 'about') tipsModal(); else toast(`${b.textContent.trim()} is outside this prototype`); }); } });
   }
 
@@ -1819,7 +1830,7 @@
     const what = state.view === 'qr' ? 'QR codes' : state.view === 'templates' ? 'templates' : 'shorteners';
     openPop(anchor, `<div class="menu" style="width:230px">
       <button class="mi" data-act="list-csv">${I.download}<span class="grow">Export ${what} as CSV</span></button>
-      ${state.view === 'qr' ? `<button class="mi" data-act="qr-designs">${I.swatch}<span class="grow">QR designs…</span></button>` : state.view === 'templates' ? `<button class="mi" data-act="tpl-import">${I.download}<span class="grow">Import templates via CSV</span></button>` : `<button class="mi" data-act="cleaner">${I.sliders}<span class="grow">UTM Page Cleaner…</span></button>`}
+      ${state.view === 'qr' ? `<button class="mi" data-act="qr-designs">${I.swatch}<span class="grow">QR designs…</span></button>` : state.view === 'templates' ? `<button class="mi" data-act="tpl-import">${PI.upload}<span class="grow">Import templates via CSV</span></button>` : `<button class="mi" data-act="cleaner">${I.sliders}<span class="grow">UTM Page Cleaner…</span></button>`}
       <div class="sep"></div>
       <button class="mi" data-act="about">${I.info}<span class="grow">Tips &amp; shortcuts</span></button></div>`, { align: 'right', onMount(el) { el.addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (!b) return; closePop(); const a = b.dataset.act;
         if (a === 'list-csv') toast(`Exported ${what} as CSV`); else if (a === 'qr-designs') qrDesignsModal(); else if (a === 'about') tipsModal(); else toast(`${b.textContent.trim()} is outside this prototype`); }); } });
@@ -1832,6 +1843,8 @@
     compute();
     const view = $('#view');
     const y = window.scrollY;
+    // instant: same page, different view (e.g. Parameters Board ↔ List). Header and toolbar stay put; only the content fades.
+    view.classList.toggle('instant', !!opts.instant); if (opts.instant) setTimeout(() => view.classList.remove('instant'), 400);
     if (opts.busy) { view.classList.add('busy'); setTimeout(() => view.classList.remove('busy'), 500); }
     const VIEWS = { build: () => `<div class="view lb-page${B && B.done ? ' is-done' : ''}" id="lb-page"></div>`, link: linkHTML, links: linksHTML, qr: qrHTML, templates: templatesHTML, shorteners: shortenersHTML, parameters: parametersHTML };
     Object.assign(VIEWS, V5_RENDER); paintNav();
@@ -2248,7 +2261,7 @@
     // Parameters page
     if (state.view === 'parameters') {
       const p = curParam(); const pvId = el => el.dataset.pvId || el.dataset.pvEdit || el.dataset.pvMore || el.dataset.pvLinks || el.dataset.pv; const rowOf = id => paramValueRows(p, { all: true }).find(r => r.id === id);
-      if ((el = hit('[data-pview]'))) { state.pview = el.dataset.pview; state.psel = null; state.padd = null; state.sel.clear(); render(); return; }
+      if ((el = hit('[data-pview]'))) { if (state.pview === el.dataset.pview) return; state.pview = el.dataset.pview; state.psel = null; state.padd = null; state.sel.clear(); render({ instant: true }); return; }
       if (state.pview !== 'list' && pbClick(e)) return;
       if ((el = hit('[data-pm]'))) { goParam(el.dataset.pm, el.dataset.ptab || null); return; }
       if (hit('#pm-add-param')) { paramModal(null); return; }
@@ -2305,8 +2318,8 @@
   function refreshSelection() {
     $$('.lrow[data-link], .lrow[data-qr-open], .lrow[data-pv]').forEach(r => { const id = r.dataset.link || r.dataset.qrOpen || r.dataset.pv; const on = state.sel.has(id); r.classList.toggle('sel', on); const cb = $('.cb[data-sel]', r); if (!cb) return; cb.classList.toggle('on', on); cb.setAttribute('aria-checked', on); });
     const ids = selectableIds(), all = ids.length > 0 && ids.every(i => state.sel.has(i)); const sa = $('#sel-all'); if (sa) { sa.classList.toggle('on', all); sa.setAttribute('aria-checked', all); }
-    const old = $('.bulk'); const html = bulkBarHTML();
-    if (old && !html) old.remove(); else if (!old && html) $('#view').insertAdjacentHTML('beforeend', html); else if (old) { if (state.view === 'parameters') old.outerHTML = html; else old.querySelector('.cnt b').textContent = state.sel.size; }
+    const old = $('.selbar'), html = bulkBarHTML(), card = $('#links-table, #list-table');
+    if (old && !html) old.remove(); else if (old) old.outerHTML = html; else if (html && card) card.insertAdjacentHTML('afterbegin', html);
   }
 
   // Map hover tooltip

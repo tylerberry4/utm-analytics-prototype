@@ -1263,3 +1263,24 @@ button.status-pill { cursor: pointer; transition: box-shadow var(--dur) var(--ea
 .xrow .nm svg { width: 16px; height: 16px; flex: none; stroke: var(--text-muted); fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .xrow .nm .avatar svg { stroke: currentColor; }
 .xrow .utm-chip { cursor: pointer; margin: 2px 0; }
+
+/* Selection bar: replaces the table header while rows are ticked, pinned under the top bar */
+.selbar { position: sticky; top: var(--topbar-h); z-index: 6; display: flex; align-items: center; gap: 10px; height: 52px; margin-bottom: -52px; padding: 0 12px 0 20px; background: color-mix(in srgb, var(--accent) 8%, var(--card)); border-bottom: 1px solid rgba(var(--accent-rgb), .25); border-radius: var(--radius) var(--radius) 0 0; box-shadow: 0 6px 12px -10px rgba(16, 24, 40, .25); animation: selbar-in .18s var(--ease) both; overflow-x: auto; }
+@keyframes selbar-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.selbar .cb { flex: none; } .selbar .cb.part svg { stroke-width: 3; }
+.selbar .cnt { font-size: 13px; color: var(--text); white-space: nowrap; } .selbar .cnt b { color: var(--accent-strong); font-weight: 700; }
+.selbar .link-btn { font-size: 13px; white-space: nowrap; }
+.selbar .sep { width: 1px; height: 22px; background: rgba(var(--accent-rgb), .25); flex: none; margin: 0 2px; }
+.selbar .acts { display: flex; gap: 6px; flex: none; }
+.selbar .btn.sm { height: 32px; padding: 0 10px; background: var(--card); white-space: nowrap; }
+.selbar .btn.sm svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.selbar .btn.sm:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-strong); }
+.selbar .btn.danger { color: var(--down); } .selbar .btn.danger:hover { border-color: var(--down) !important; background: var(--down-bg); color: var(--down) !important; }
+.selbar .btn:disabled { opacity: .5; cursor: not-allowed; }
+.selbar .grow { flex: 1; } .selbar .clr { color: var(--text-muted); } .selbar .clr:hover { color: var(--text-strong); }
+
+/* Same-page view switch (Parameters Board ↔ List): no page entrance, toolbar stays still, content just fades in */
+.content.instant .view, .content.instant .lrow, .content.instant .card, .content.instant .fbar-row { animation: none !important; }
+.content.instant .pm-layout, .content.instant .pb-area { animation: fade-in .16s var(--ease) both; }
+/* "How grouping works" footnote wraps (it was cut off) */
+.pb-how .pb-how-note { margin: 10px 0 0; font-size: 12px; color: var(--text-muted); white-space: normal; }
