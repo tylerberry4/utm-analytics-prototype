@@ -48,7 +48,7 @@
     trigger: '<svg viewBox="0 0 24 24"><path d="M13 3 5 14h6l-1 7 8-11h-6z"/></svg>',
     sort: '<svg viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></svg>',
     info: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>',
-    swatch: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16"/></svg>',
+    swatch: '<svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1.2 0 1.8-1 1.3-2l-.3-.7c-.6-1.2.3-2.5 1.6-2.5H17a4 4 0 0 0 4-4c0-4.9-4-8.8-9-8.8z"/><circle cx="7.5" cy="11.5" r="1.2"/><circle cx="10" cy="7.2" r="1.2"/><circle cx="15" cy="7.5" r="1.2"/></svg>',
     reset: '<svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>',
   };
 
@@ -752,7 +752,7 @@
   function templatesHTML() {
     const s = TSORTS.find(x => x[0] === state.lsort.key) || TSORTS[0];
     return `<div class="view"><div class="page-head"><div class="title"><h1>Templates</h1><span class="status" tabindex="0" data-tip="${TEMPLATE_LIST.length} UTM templates · template selection is required in the link builder">${TEMPLATE_LIST.length} templates · required in builder</span></div>
-        <div class="actions"><button class="btn" id="import-tpl-btn">${I.download}Import CSV</button><button class="btn primary" id="create-tpl-btn"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Create template</button></div></div></div>
+        <div class="actions"><button class="btn primary" id="create-tpl-btn"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Create template</button></div></div></div>
       ${listBarHTML('Search templates, parameters, people…', `
           <button class="tb-btn" id="lsort-btn" aria-haspopup="menu" aria-expanded="false">${I.sort}${s[1]}<span class="chev">${I.chev}</span></button>
           <button class="tb-btn icon" id="list-more" aria-haspopup="menu" aria-expanded="false" aria-label="More">${I.more}</button>`)}
@@ -1140,14 +1140,14 @@
       <p>Grouping decides which values the link builder offers. Pick <b class="code">paid_social</b> as the medium, and the source list only shows the sources grouped with it.</p>
       <ol><li><b>Hover</b> a value to trace what it's grouped with across columns.</li><li><b>Click</b> it to select it. Its details appear at the bottom.</li><li><b>Tick</b> values in the next column to group or ungroup them. <kbd>Esc</kbd> finishes.</li></ol>
       <div class="pb-how-key"><span><i class="ln"></i>Grouped</span><span><i class="ln on"></i>Selected value's chain</span></div>
-      <p class="sm-muted">Columns run left to right in the order fields appear in the link builder.</p></div>`, { align: 'right', role: 'dialog' });
+      <p class="pb-how-note">Columns run left to right in the order fields appear in the link builder.</p></div>`, { align: 'right', role: 'dialog' });
   }
   const pbAreaHTML = () => `<div class="pb-area" id="list-table"><div class="pb" id="pb"><svg class="pb-svg" id="pb-svg" aria-hidden="true"></svg>${PARAMS.map(pbColHTML).join('')}<button type="button" class="pb-ghost" id="pm-add-param">${PI.plus}Add parameter</button></div></div>`;
   function boardPageHTML() {
     const grouped = PARAMS.filter(p => p.deps).length;
     return `<div class="view"><div class="page-head"><div class="title"><h1>Parameters</h1><span class="sm-muted">${PARAMS.length} parameters · ${grouped ? `${grouped} grouped` : 'no groupings yet'}</span></div>
 </div>
-      ${listBarHTML("Search every parameter's values…", `<button class="tb-btn" id="pm-how" aria-haspopup="dialog" aria-expanded="false">${I.info}<span>How grouping works</span></button>${pviewSeg()}<button class="tb-btn icon" id="pm-page-more" aria-haspopup="menu" aria-expanded="false" aria-label="Import, export and more" title="Import, export and more">${I.more}</button>`)}
+      ${listBarHTML("Search every parameter's values…", `${pviewSeg()}<button class="tb-btn icon" id="pm-page-more" aria-haspopup="menu" aria-expanded="false" aria-label="Import, export and more" title="Import, export and more">${I.more}</button>`)}
       ${pbAreaHTML()}</div>${pbBarHTML()}`; // bar sits outside .view so it can float over the page
   }
   // Lines: measured after layout, redrawn on resize, search and grouping changes.
@@ -1406,8 +1406,9 @@
       <button class="mi" data-act="csv">${I.download}<span class="grow">Export all parameters as CSV</span></button>
       <button class="mi" data-act="import">${PI.upload}<span class="grow">Import parameters via CSV</span></button>
       <button class="mi" data-act="ga">${I.analytics}<span class="grow">Import from Google Analytics</span></button>
-      <div class="sep"></div>
+      <div class="sep"></div>${state.pview === 'list' ? '' : `<button class="mi" data-act="how">${PI.branch}<span class="grow">How grouping works</span></button>`}
       <button class="mi" data-act="about">${I.info}<span class="grow">Tips &amp; shortcuts</span></button></div>`, { align: 'right', onMount(el) { el.addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (!b) return; closePop(); const a = b.dataset.act;
+        if (a === 'how') { pbHowPop(anchor); return; }
         if (a === 'csv') toast('Exported all parameters as CSV'); else if (a === 'import') importParamsModal(); else if (a === 'about') tipsModal(); else toast(`${b.textContent.trim()} is outside this prototype`); }); } });
   }
 
@@ -1829,7 +1830,7 @@
     const what = state.view === 'qr' ? 'QR codes' : state.view === 'templates' ? 'templates' : 'shorteners';
     openPop(anchor, `<div class="menu" style="width:230px">
       <button class="mi" data-act="list-csv">${I.download}<span class="grow">Export ${what} as CSV</span></button>
-      ${state.view === 'qr' ? `<button class="mi" data-act="qr-designs">${I.swatch}<span class="grow">QR designs…</span></button>` : state.view === 'templates' ? `<button class="mi" data-act="tpl-import">${I.download}<span class="grow">Import templates via CSV</span></button>` : `<button class="mi" data-act="cleaner">${I.sliders}<span class="grow">UTM Page Cleaner…</span></button>`}
+      ${state.view === 'qr' ? `<button class="mi" data-act="qr-designs">${I.swatch}<span class="grow">QR designs…</span></button>` : state.view === 'templates' ? `<button class="mi" data-act="tpl-import">${PI.upload}<span class="grow">Import templates via CSV</span></button>` : `<button class="mi" data-act="cleaner">${I.sliders}<span class="grow">UTM Page Cleaner…</span></button>`}
       <div class="sep"></div>
       <button class="mi" data-act="about">${I.info}<span class="grow">Tips &amp; shortcuts</span></button></div>`, { align: 'right', onMount(el) { el.addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (!b) return; closePop(); const a = b.dataset.act;
         if (a === 'list-csv') toast(`Exported ${what} as CSV`); else if (a === 'qr-designs') qrDesignsModal(); else if (a === 'about') tipsModal(); else toast(`${b.textContent.trim()} is outside this prototype`); }); } });
@@ -1842,6 +1843,8 @@
     compute();
     const view = $('#view');
     const y = window.scrollY;
+    // instant: same page, different view (e.g. Parameters Board ↔ List). Header and toolbar stay put; only the content fades.
+    view.classList.toggle('instant', !!opts.instant); if (opts.instant) setTimeout(() => view.classList.remove('instant'), 400);
     if (opts.busy) { view.classList.add('busy'); setTimeout(() => view.classList.remove('busy'), 500); }
     const VIEWS = { build: () => `<div class="view lb-page${B && B.done ? ' is-done' : ''}" id="lb-page"></div>`, link: linkHTML, links: linksHTML, qr: qrHTML, templates: templatesHTML, shorteners: shortenersHTML, parameters: parametersHTML };
     view.innerHTML = (VIEWS[state.view] || overviewHTML)();
@@ -2257,7 +2260,7 @@
     // Parameters page
     if (state.view === 'parameters') {
       const p = curParam(); const pvId = el => el.dataset.pvId || el.dataset.pvEdit || el.dataset.pvMore || el.dataset.pvLinks || el.dataset.pv; const rowOf = id => paramValueRows(p, { all: true }).find(r => r.id === id);
-      if ((el = hit('[data-pview]'))) { state.pview = el.dataset.pview; state.psel = null; state.padd = null; state.sel.clear(); render(); return; }
+      if ((el = hit('[data-pview]'))) { if (state.pview === el.dataset.pview) return; state.pview = el.dataset.pview; state.psel = null; state.padd = null; state.sel.clear(); render({ instant: true }); return; }
       if (state.pview !== 'list' && pbClick(e)) return;
       if ((el = hit('[data-pm]'))) { goParam(el.dataset.pm, el.dataset.ptab || null); return; }
       if (hit('#pm-add-param')) { paramModal(null); return; }
