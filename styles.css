@@ -905,6 +905,8 @@ button.status-pill { cursor: pointer; transition: box-shadow var(--dur) var(--ea
 .lb-msg:empty { min-height: 0; } .lb-msg > span { flex: 1; min-width: 0; } .lb-msg > .link-btn { flex: none; } .lb-msg svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 1.8; flex: none; margin-top: 1px; }
 .lb-msg b { color: var(--text); font-weight: 600; } .lb-msg.err { color: #b91c1c; } .lb-msg.info { color: var(--accent-strong); }
 .lb-msg .link-btn { font-size: 12px; }
+/* Quiet note: value not on the list yet / possible typo. Dot in the parameter's colour. */
+.lb-msg.new { color: var(--text-faint); align-items: center; } .lb-msg.new .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--pi-fg, var(--text-faint)); opacity: .55; margin: 0 2px 0 1px; } .lb-msg.new .link-btn { font-weight: 500; }
 .lb-lock { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border-radius: 8px; background: var(--sunken); border: 1px dashed var(--border-strong); font-size: 12px; min-width: 0; }
 .lb-lock svg { width: 13px; height: 13px; stroke: var(--text-faint); fill: none; stroke-width: 1.8; flex: none; }
 .lb-lock .code { font-size: 12px; color: var(--text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .lb-lock .sm-muted { margin-left: auto; white-space: nowrap; }

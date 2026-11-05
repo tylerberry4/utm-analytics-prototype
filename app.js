@@ -1466,7 +1466,15 @@
     const saved = p.values.find(x => x.v === v);
     if (p.rules.includes('dropdown') && !saved) return { lvl: 'err', msg: `“${v}” isn't a saved ${label}. Pick one from the list.`, add: !p.attr };
     const n = lbNarrow(p); if (n && saved && !n.allow.includes(v)) return { lvl: 'err', msg: `“${v}” isn't used with ${n.par.label.toLowerCase()} “${n.pv}”. Pick another ${label}.` };
-    const norm = normalizeValue(p, v); if (norm !== v) return { lvl: 'info', msg: `Will be saved as “${norm}”` };
+    const norm = normalizeValue(p, v);
+    // Free-typing fields: a quiet note when the value isn't on the list yet (or looks like a typo of one that is). Never blocks saving.
+    if (!saved && p.values.length && !p.values.find(x => x.v === norm)) {
+      const squash = x => x.toLowerCase().replace(/[\s_-]+/g, '');
+      const near = p.values.find(x => squash(x.v) === squash(v));
+      if (near) return { lvl: 'new', msg: 'Did you mean', use: near.v };
+      return { lvl: 'new', msg: `New ${label}, not in the list yet${norm !== v ? ` · saved as “${norm}”` : ''}`, add: !p.attr };
+    }
+    if (norm !== v) return { lvl: 'info', msg: `Will be saved as “${norm}”` };
     return null;
   }
   function lbUrlIssue() {
@@ -1513,7 +1521,7 @@
   }
   /* Rendering */
   function lbFieldHTML(p) {
-    const t = tplState(p); const iss = lbIssue(p); const show = iss && (iss.lvl === 'info' || B.touched.has(p.key) || B.submitted);
+    const t = tplState(p); const iss = lbIssue(p); const show = iss && (iss.lvl !== 'err' || B.touched.has(p.key) || B.submitted);
     const locked = t && (t.fixed || t.varies); const req = p.rules.includes('required'); const v = B.vals[p.key] || '';
     const sel = !locked && p.values.find(x => x.v === v.trim());
     const ph = p.values.length ? `${p.rules.includes('dropdown') ? 'Pick' : 'Pick or type'} ${p.hint ? '· ' + p.hint : ''}` : (p.hint || 'Type a value');
@@ -1535,6 +1543,9 @@
   // Shown up front: what Rules require and what the picked template sets or asks for. The rest is optional and folds away.
   const lbUp = p => p.rules.includes('required') || !!tplState(p);
   function lbMsgHTML(p, iss, show) {
+    if (show && iss.lvl === 'new') return iss.use
+      ? `<i class="dot"></i><span>${esc(iss.msg)} <button class="link-btn" data-lb-use="${esc(p.key)}" data-v="${esc(iss.use)}" type="button">${esc(iss.use)}</button>?</span>`
+      : `<i class="dot"></i><span>${esc(iss.msg)}</span>${iss.add ? `<button class="link-btn" data-lb-addval="${esc(p.key)}" type="button">Add to list</button>` : ''}`;
     if (show) return `${iss.lvl === 'err' ? LBI.bad : I.info}<span>${esc(iss.msg)}</span>${iss.add ? `<button class="link-btn" data-lb-addval="${esc(p.key)}" type="button">Add it to the list</button>` : ''}`;
     const n = lbNarrow(p); if (n) return `${PI.branch}<span>${n.allow.length} ${esc(p.label.toLowerCase())} value${n.allow.length === 1 ? '' : 's'} for ${esc(n.par.label.toLowerCase())} <b>${esc(n.pv)}</b></span>`;
     return '';
@@ -1642,7 +1653,7 @@
   function lbRefresh() {
     if (!lbRoot || B.done) return; const box = lbRoot;
     const side = $('#lb-side', box); if (side) side.innerHTML = lbSideHTML(); const foot = $('#lb-foot', box); if (foot) { foot.innerHTML = lbFootHTML(); $$('.close', foot).forEach(b => b.addEventListener('click', lbClose)); }
-    lbAll().forEach(p => { const el = $(`[data-f="${CSS.escape(p.key)}"]`, box); if (!el) return; const iss = lbIssue(p); const show = iss && (iss.lvl === 'info' || B.touched.has(p.key) || B.submitted);
+    lbAll().forEach(p => { const el = $(`[data-f="${CSS.escape(p.key)}"]`, box); if (!el) return; const iss = lbIssue(p); const show = iss && (iss.lvl !== 'err' || B.touched.has(p.key) || B.submitted);
       el.classList.toggle('bad', !!(show && iss.lvl === 'err')); const m = $('.lb-msg', el); m.className = `lb-msg ${show ? iss.lvl : ''}`; m.innerHTML = lbMsgHTML(p, iss, show);
       const pr = $('.pretty', el); if (pr) { const s = p.values.find(x => x.v === (B.vals[p.key] || '').trim()); pr.textContent = s && s.pretty ? s.pretty : ''; } });
     const sl = $('#lb-slug', box); if (sl && !B.slugEdited && !B.edit && document.activeElement !== sl) sl.value = lbCombos().length > 1 ? '' : lbSlug();
@@ -1655,7 +1666,9 @@
     let pop = $('.lb-pop', f); if (!pop) { pop = document.createElement('div'); pop.className = 'lb-pop'; pop.setAttribute('role', 'listbox'); f.appendChild(pop); }
     const q = (B.vals[key] || '').trim(); const ql = q.toLowerCase(); const n = p.attr ? null : lbNarrow(p);
     const base = lbOptions(p); const exact = base.find(x => x.v === q);
-    const list = (exact ? base : base.filter(x => !ql || x.v.toLowerCase().includes(ql) || (x.pretty && x.pretty.toLowerCase().includes(ql)))).slice(0, 60);
+    // Ignore case, spaces, - and _ when matching, so "Carousel V2" still finds the saved carousel_v2.
+    const squash = x => x.toLowerCase().replace(/[\s_-]+/g, ''), qs = squash(q);
+    const list = (exact ? base : base.filter(x => !ql || x.v.toLowerCase().includes(ql) || (qs && squash(x.v).includes(qs)) || (x.pretty && x.pretty.toLowerCase().includes(ql)))).slice(0, 60);
     const uses = x => p.attr ? 0 : linksWith(p, x.v).length;
     const norm = q ? normalizeValue(p, q) : '';
     const extra = q && !exact && !base.find(x => x.v === norm) ? (p.rules.includes('dropdown') ? `<div class="lb-opt-none">No saved ${esc(p.label.toLowerCase())} matches “${esc(q)}”.${p.attr ? '' : ` <button type="button" class="link-btn" data-lb-addval="${esc(key)}">Add “${esc(norm)}” to the list</button><span class="sm-muted"> · admins only</span>`}</div>` : `<button type="button" class="lb-opt new" data-opt="${esc(norm)}">${PI.plus}<span>Use “<b class="code">${esc(norm)}</b>”</span>${norm !== q ? '<span class="sm-muted">cleaned up for you</span>' : ''}</button>`) : '';
@@ -1797,6 +1810,7 @@
       else if (e.key === 'Escape' && pop) { e.stopPropagation(); lbComboClose(); } });
     s.addEventListener('click', e => { const h = sel => e.target.closest(sel); let el;
       if ((el = h('[data-opt]'))) { const f = el.closest('[data-f]'); lbPick(f.dataset.f, el.dataset.opt); return; }
+      if ((el = h('[data-lb-use]'))) { lbPick(el.dataset.lbUse, el.dataset.v); return; }
       if ((el = h('[data-lb-addval]'))) { const p = lbP(el.dataset.lbAddval); const v = normalizeValue(p, (B.vals[p.key] || '').trim()); if (v && !p.values.find(x => x.v === v)) { addValues(p, [v]); toast(`Added “${v}” to ${p.label.toLowerCase()} on Parameters`); } lbPick(p.key, v); return; }
       if ((el = h('[data-lb-multi]'))) { B.multi = el.dataset.lbMulti === '1'; if (B.multi && !B.urls && B.url) B.urls = B.url; if (!B.multi && !B.url && B.urls) B.url = lbUrls()[0] || ''; lbPaint(); const i = $(B.multi ? '#lb-urls' : '#lb-url', box); if (i) i.focus(); return; }
       if ((el = h('[data-tpl-pick]'))) { const k = el.dataset.tplPick; B.tpls = B.tpls.includes(k) ? B.tpls.filter(x => x !== k) : [...B.tpls, k]; lbApplyTemplateDefaults(); lbPaint(); return; }
