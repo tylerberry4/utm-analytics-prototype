@@ -1142,7 +1142,7 @@
       <div class="pb-how-key"><span><i class="ln"></i>Grouped</span><span><i class="ln on"></i>Selected value's chain</span></div>
       <p class="pb-how-note">Columns run left to right in the order fields appear in the link builder.</p></div>`, { align: 'right', role: 'dialog' });
   }
-  const pbAreaHTML = () => `<div class="pb-area" id="list-table"><div class="pb" id="pb"><svg class="pb-svg" id="pb-svg" aria-hidden="true"></svg>${PARAMS.map(pbColHTML).join('')}<button type="button" class="pb-ghost" id="pm-add-param">${PI.plus}Add parameter</button></div></div>`;
+  const pbAreaHTML = () => `<div class="pb-area" id="list-table"><div class="pb-scroll" id="pb-scroll"><div class="pb-edge l"><button type="button" class="pb-more" data-pbmore="-1" aria-label="Scroll to earlier columns">${I.chevR}<span></span></button></div><div class="pb-edge r"><button type="button" class="pb-more" data-pbmore="1" aria-label="Scroll to more columns"><span></span>${I.chevR}</button></div><div class="pb" id="pb"><svg class="pb-svg" id="pb-svg" aria-hidden="true"></svg>${PARAMS.map(pbColHTML).join('')}<button type="button" class="pb-ghost" id="pm-add-param">${PI.plus}Add parameter</button></div></div></div>`;
   function boardPageHTML() {
     const grouped = PARAMS.filter(p => p.deps).length;
     return `<div class="view"><div class="page-head"><div class="title"><h1>Parameters</h1><span class="sm-muted">${PARAMS.length} parameters · ${grouped ? `${grouped} grouped` : 'no groupings yet'}</span></div>
@@ -1151,6 +1151,19 @@
       ${pbAreaHTML()}</div>${pbBarHTML()}`; // bar sits outside .view so it can float over the page
   }
   // Lines: measured after layout, redrawn on resize, search and grouping changes.
+  // More columns off to the side? Fade that edge and show a small arrow naming the next hidden column.
+  function pbScrollHints() {
+    const wrap = $('#pb'), box = $('#pb-scroll'); if (!wrap || !box) return;
+    const r = wrap.getBoundingClientRect(), cols = $$('.pb-col', wrap);
+    const left = wrap.scrollLeft > 4, right = wrap.scrollLeft + wrap.clientWidth < wrap.scrollWidth - 4;
+    box.classList.toggle('more-l', left); box.classList.toggle('more-r', right);
+    const nextR = cols.find(c => c.getBoundingClientRect().right > r.right + 4), nextL = [...cols].reverse().find(c => c.getBoundingClientRect().left < r.left - 4);
+    const name = c => c ? (paramOf(c.dataset.bcol) || {}).label || '' : '';
+    const rest = cols.filter(c => c.getBoundingClientRect().left > r.right - 40).length;
+    $('.pb-edge.r span', box).textContent = nextR ? `${name(nextR)}${rest > 1 ? ` +${rest - 1}` : ''}` : '';
+    $('.pb-edge.l span', box).textContent = name(nextL);
+  }
+  document.addEventListener('scroll', e => { if (e.target && e.target.id === 'pb') pbScrollHints(); }, true);
   function pbDraw() {
     const wrap = $('#pb'); if (!wrap) return; const svg = $('#pb-svg', wrap); const box = wrap.getBoundingClientRect();
     const els = new Map(); $$('.pb-v', wrap).forEach(el => { el.classList.remove('pl', 'pr'); els.set(BK(el.dataset.bk, el.dataset.bv), el); });
@@ -1161,6 +1174,7 @@
         const [x1, y1] = pt(a, 'r'), [x2, y2] = pt(b, 'l'); const c = (x2 - x1) * .5; a.classList.add('pr'); b.classList.add('pl');
         d += `<path data-i="${pbEdges.length}" d="M${x1} ${y1}C${x1 + c} ${y1} ${x2 - c} ${y2} ${x2} ${y2}"/>`; pbEdges.push({ a: BK(L.key, pv), b: BK(R.key, cv) }); }); }); });
     svg.setAttribute('width', wrap.scrollWidth); svg.setAttribute('height', wrap.scrollHeight); svg.innerHTML = d; pbApply();
+    pbScrollHints();
   }
   function pbApply() {
     const wrap = $('#pb'); if (!wrap) return; const f = pbHover || state.psel; const chain = f ? pbChain(f.key, f.v) : null;
@@ -2278,6 +2292,7 @@
       if (state.pview !== 'list' && pbClick(e)) return;
       if ((el = hit('[data-pm]'))) { goParam(el.dataset.pm, el.dataset.ptab || null); return; }
       if (hit('#pm-add-param')) { paramModal(null); return; }
+      if ((el = hit('[data-pbmore]'))) { const w = $('#pb'), c = $('.pb-col', w); w.scrollBy({ left: +el.dataset.pbmore * (c ? c.offsetWidth + 44 : 280), behavior: 'smooth' }); return; }
       if (hit('#pm-how')) { pbHowPop(hit('#pm-how')); return; }
       if (hit('#pm-page-more')) { paramsMoreMenu(hit('#pm-page-more')); return; }
       if (hit('#pm-export')) { toast('Exported all parameters as CSV'); return; }

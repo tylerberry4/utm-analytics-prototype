@@ -1181,3 +1181,19 @@ button.status-pill { cursor: pointer; transition: box-shadow var(--dur) var(--ea
 .content.instant .pm-layout, .content.instant .pb-area { animation: fade-in .16s var(--ease) both; }
 /* "How grouping works" footnote wraps (it was cut off) */
 .pb-how .pb-how-note { margin: 10px 0 0; font-size: 12px; color: var(--text-muted); white-space: normal; }
+
+/* Board: more columns to the side → that edge fades out and a small arrow names the next column */
+.pb-scroll { position: relative; }
+.pb-edge { position: absolute; top: 0; bottom: 18px; width: 88px; z-index: 4; pointer-events: none; opacity: 0; transition: opacity var(--dur) var(--ease); }
+.pb-edge.r { right: -6px; background: linear-gradient(to right, rgba(249, 250, 251, 0), var(--canvas) 70%); }
+.pb-edge.l { left: -6px; background: linear-gradient(to left, rgba(249, 250, 251, 0), var(--canvas) 70%); }
+.more-r .pb-edge.r, .more-l .pb-edge.l { opacity: 1; }
+.pb-more { position: absolute; top: 12px; display: inline-flex; align-items: center; gap: 4px; height: 30px; padding: 0 8px 0 10px; border-radius: 15px; background: var(--card); border: 1px solid var(--border); box-shadow: var(--shadow-sm, 0 2px 6px rgba(16, 24, 40, .08)); font-size: 12px; font-weight: 500; color: var(--text-muted); white-space: nowrap; pointer-events: auto; transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease), transform var(--dur) var(--ease); }
+.pb-edge.r .pb-more { right: 8px; } .pb-edge.l .pb-more { left: 8px; padding: 0 10px 0 8px; }
+.pb-more:hover { color: var(--accent-strong); border-color: var(--accent); }
+.pb-edge.r .pb-more:hover { transform: translateX(2px); } .pb-edge.l .pb-more:hover { transform: translateX(-2px); }
+.pb-more svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.pb-edge.l .pb-more svg { transform: rotate(180deg); }
+.pb-more span:empty { display: none; } .pb-more:has(span:empty) { padding: 0; width: 30px; justify-content: center; }
+.pb-edge:not(.on) .pb-more { pointer-events: auto; }
+.pb-scroll:not(.more-r) .pb-edge.r .pb-more, .pb-scroll:not(.more-l) .pb-edge.l .pb-more { pointer-events: none; }
