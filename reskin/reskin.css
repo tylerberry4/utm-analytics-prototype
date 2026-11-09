@@ -299,3 +299,28 @@
   .rf-row > label { text-align: left; }
   .rf-prev, .rf-row .hint { grid-column: 1; }
 }
+
+/* Rules: workspace defaults as setting cards (2026-11-09) */
+.rd-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin: 4px 0 18px; }
+.rd-head h1 { margin: 0; font-size: 22px; font-weight: 600; color: var(--text-strong); letter-spacing: -.01em; }
+.rd-head p { margin: 4px 0 0; font-size: 13.5px; color: var(--text-muted); }
+.rd-eyebrow { font-size: 12px; font-weight: 600; color: var(--accent); margin-bottom: 4px; }
+.rd-head2 { margin-top: 36px; }
+.rd-head2 h1 { font-size: 18px; }
+.rd-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.rd-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-xs); overflow: hidden; }
+.rd-card header { display: flex; align-items: center; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--border); }
+.rd-card h3 { margin: 0; font-size: 14.5px; font-weight: 600; color: var(--text-strong); }
+.rd-card header p { margin: 2px 0 0; font-size: 12.5px; color: var(--text-muted); }
+.rd-ic { width: 32px; height: 32px; border-radius: 8px; background: var(--accent-faint, #f4effb); color: var(--accent); display: grid; place-items: center; flex: none; }
+.rd-ic svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.rd-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 64px; padding: 12px 18px; border-top: 1px solid var(--border); transition: opacity var(--dur) var(--ease); }
+.rd-card header + .rd-row { border-top: 0; }
+.rd-row.off { opacity: .45; pointer-events: none; }
+.rd-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rd-txt b { font-size: 13.5px; font-weight: 500; color: var(--text); }
+.rd-txt span { font-size: 12.5px; color: var(--text-muted); line-height: 1.4; }
+.rd-c { flex: none; display: flex; justify-content: flex-end; }
+.rd-ctl { width: 200px; }
+@media (max-width: 1100px) { .rd-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 560px) { .rd-row:not(:has(.switch)) { flex-wrap: wrap; } .rd-row:has(.switch) .rd-c { width: auto; } .rd-c { width: 100%; justify-content: flex-start; } .rd-c .rd-ctl { width: 100%; } }

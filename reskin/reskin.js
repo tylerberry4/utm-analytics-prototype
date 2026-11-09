@@ -185,22 +185,40 @@
 
   /* ---------- Rules (Workspace Defaults + Workspace Rules) ---------- */
   const info = '<svg class="info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>';
+  // Workspace defaults (Rules page): four setting cards; each row = label + hint on the left, control on the right.
+  const RD_IC = {
+    format: '<svg viewBox="0 0 24 24"><path d="M4 7V5h16v2M9 19h6M12 5v14"/></svg>',
+    tpl: '<svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 9h16M9 9v11"/></svg>',
+    qr: '<svg viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><path d="M14 14h2v2h-2zM18 18h2v2h-2zM14 18h2M18 14h2"/></svg>',
+    link: '<svg viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>' };
+  const rdCard = (icon, title, desc, rows) => `<section class="rd-card"><header><span class="rd-ic">${icon}</span><div><h3>${title}</h3><p>${desc}</p></div></header>${rows.join('')}</section>`;
+  const rdRow = (label, hint, ctl, off) => `<div class="rd-row${off ? ' off' : ''}"><div class="rd-txt"><b>${label}</b><span>${hint}</span></div><div class="rd-c">${ctl}</div></div>`;
+  const rdSel = (list, value, ph) => `<button type="button" class="inp sel rd-ctl" data-pick-list="${esc(list)}"><span class="grow${ph ? ' ph' : ''}">${esc(value)}</span>${I.chev.replace('<svg', '<svg class="caret"')}</button>`;
+  const rdSw = (on, attrs = '') => `<button type="button" class="switch ${on ? 'on' : ''}" role="switch" aria-checked="${on}" data-rdsw ${attrs}><i></i></button>`;
   function rulesPage() {
     const ruleRows = A.PARAMS.filter(p => !p.custom).map(p => `<tr><td><b style="font-weight:500">${esc(p.key)}</b></td>
       <td>${cbHTML(p.rules.includes('required'), 'data-rulecb')}</td><td>${cbHTML(false, 'data-rulecb')}</td><td>${cbHTML(p.rules.includes('lowercase'), 'data-rulecb')}</td><td>${cbHTML(!p.rules.includes('dropdown'), 'data-rulecb')}</td><td>${cbHTML(p.shown === false, 'data-rulecb')}</td><td>${cbHTML(false, 'data-rulecb')}</td>
       <td><label class="inp sm"><input placeholder="Enter value"></label></td><td><label class="inp sm"><input placeholder="Prohibited values separated by comma"></label></td><td><label class="inp sm"><input placeholder="e.g. holiday special, …"></label></td></tr>`);
-    return `<div class="view rk-page rk-rules">${head(`Manage ${WS} Workspace Defaults`)}
-      <div class="rf-grid">
-        <div class="rf-field"><label>Space Character</label><button type="button" class="inp sel" data-pick-list="Hyphen|Underscore|Plus|None"><span class="grow">Hyphen</span>${I.chev.replace('<svg', '<svg class="caret"')}</button><div class="hint">Replaces spaces in parameters with your chosen character.</div></div>
-        <div class="rf-field"><label>Prohibited Characters ${info}</label><label class="inp"><input placeholder=""></label><div class="hint">Characters which are not allowed to use in the builder, separated with a comma</div></div>
+    const tplOn = R.rdTpl !== false;
+    return `<div class="view rk-page rk-rules">
+      <div class="rd-head"><div><div class="rd-eyebrow">${esc(WS)}</div><h1>Workspace defaults</h1><p>Settings every new link in this workspace starts with.</p></div>
+        <button type="button" class="btn primary lg" data-toast="Workspace settings saved">Save workspace settings</button></div>
+      <div class="rd-grid">
+        ${rdCard(RD_IC.format, 'Formatting', 'How parameter values are written.', [
+          rdRow('Space character', 'What replaces a space in a value.', rdSel('Hyphen|Underscore|Plus|None', 'Hyphen')),
+          rdRow('Prohibited characters', 'Blocked in the builder. Separate with commas.', `<label class="inp rd-ctl"><input placeholder="e.g.  # , &amp;"></label>`),
+          rdRow('Force lowercase', 'All campaign parameters are saved in lowercase.', rdSw(true))])}
+        ${rdCard(RD_IC.tpl, 'Templates', 'Which template the link builder starts with.', [
+          rdRow('Require a template', 'Members pick one before they can save a link.', rdSw(tplOn, 'data-rdtpl')),
+          rdRow('Default template', 'Pre-selected in the link builder.', rdSel(A.TEMPLATE_LIST.map(t => t.name).join('|'), 'None', true), !tplOn),
+          rdRow('Lock to default', 'Members can\'t choose a different template.', rdSw(false), !tplOn)])}
+        ${rdCard(RD_IC.qr, 'QR codes', 'How QR codes look by default.', [
+          rdRow('Default design', 'Used when a link gets a QR code.', rdSel('Default|Acme brand|Dark', 'None', true)),
+          rdRow('Members can customize', 'Allow changing the design per link.', rdSw(false))])}
+        ${rdCard(RD_IC.link, 'Short links', 'Where new short links point from.', [
+          rdRow('Default shortener', 'Pre-selected in the link builder.', rdSel(A.SHORTENERS.map(x => x.domain).join('|'), 'None', true))])}
       </div>
-      <label class="chk">${cbHTML(true, 'data-rulecb')}<span>Force all campaigns parameters to lowercase<span class="sub">Helps maintain consistency</span></span></label>
-      <div class="rf-grid">
-        <div class="rf-field"><label>Choose the Default QR Code Design</label><button type="button" class="inp sel" data-pick-list="No Template|Default|Acme brand|Dark"><span class="grow ph">No Template</span>${I.chev.replace('<svg', '<svg class="caret"')}</button><label class="chk" style="margin-top:8px">${cbHTML(false, 'data-rulecb')}<span>Allow the members to customize the QR code designs</span></label></div>
-        <div class="rf-field"><label class="chk">${cbHTML(true, 'data-rulecb')}<span>Require template selection in link builder ${info}</span></label><label>Choose the default template for your workspace ${info}</label><button type="button" class="inp sel" data-pick-list="${A.TEMPLATE_LIST.map(t => t.name).join('|')}"><span class="grow ph">No Templates Selected</span>${I.chev.replace('<svg', '<svg class="caret"')}</button><label class="chk" style="margin-top:8px">${cbHTML(false, 'data-rulecb')}<span>Do not allow members to select different templates ${info}</span></label></div>
-        <div class="rf-field"><label>Choose the Default Shortener</label><button type="button" class="inp sel" data-pick-list="${A.SHORTENERS.map(s => s.domain).join('|')}"><span class="grow ph">No Shortener Selected</span>${I.chev.replace('<svg', '<svg class="caret"')}</button></div>
-      </div>
-      <div class="rk-head" style="margin-top:8px"><h1 style="font-size:18px">Manage ${WS} Workspace Rules</h1><div class="right"><button type="button" class="btn primary lg" data-toast="New rules are outside this prototype">${X.plus}Create rule</button><button type="button" class="btn primary lg" data-toast="Workspace settings saved">Save workspace settings</button></div></div>
+      <div class="rd-head rd-head2"><div><h1>Workspace rules</h1><p>What each parameter must, can or can't contain.</p></div><button type="button" class="btn primary lg" data-toast="New rules are outside this prototype">${X.plus}Create rule</button></div>
       <div class="rk-rule ${R.rulesOpen ? '' : 'closed'}"><div class="rk-rule-h"><b>Rule 1</b><button type="button" class="icon-btn" title="Rename" data-toast="Renaming rules is outside this prototype">${I.edit}</button><button type="button" class="icon-btn" title="Delete rule" data-toast="Deleting rules is outside this prototype">${X.trash}</button><span class="grow"></span><button type="button" class="icon-btn chev" id="rk-rule-toggle" aria-label="Collapse">${I.chev}</button></div>
         ${table([{ l: 'Parameter' }, { l: 'Required' }, { l: 'Blocked' }, { l: 'Force Lowercase' }, { l: 'Can Type' }, { l: 'Hidden' }, { l: 'Unique' }, { l: 'Max. characters' }, { l: 'Prohibited values' }, { l: 'Custom instructions' }], ruleRows)}</div></div>`;
   }
@@ -434,6 +452,7 @@
     if ((el = hit('[data-qr-of]'))) { const u = el.dataset.qrOf; const l = D.LINKS.find(x => shortUrl(x) === u || fullUrl(x) === u); if (l) A.qrModal(l); return; }
     if ((el = hit('[data-qr-open]'))) { A.qrModal(D.LINKS.find(x => x.slug === el.dataset.qrOpen)); return; }
     if ((el = hit('[data-sel]'))) { const k = el.dataset.sel; if (R.sel.has(k)) R.sel.delete(k); else R.sel.add(k); el.classList.toggle('on', R.sel.has(k)); el.setAttribute('aria-checked', R.sel.has(k)); el.closest('tr').classList.toggle('sel', R.sel.has(k)); return; }
+    if ((el = hit('[data-rdsw]'))) { const on = !el.classList.contains('on'); el.classList.toggle('on', on); el.setAttribute('aria-checked', on); if (el.hasAttribute('data-rdtpl')) { R.rdTpl = on; render(); } return; }
     if ((el = hit('[data-rulecb]'))) { const on = !el.classList.contains('on'); el.classList.toggle('on', on); el.setAttribute('aria-checked', on); return; }
     if ((el = hit('[data-pick-list]'))) { pickList(el); return; }
     if (hit('[data-fakesel]')) { toast('Multi-select is outside this prototype'); return; }
