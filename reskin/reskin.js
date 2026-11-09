@@ -503,7 +503,7 @@
 
   /* ---------- Boot ---------- */
   (function boot() {
-    const h = (location.hash || '').replace('#', '');
+    const h = (window.BOOT_HASH || location.hash || '').replace('#', '');
     if (h === 'overview' || h === 'analytics') { A.goOverview(); return; }
     if (h.startsWith('link-')) return; // app.js already opened the link report
     const v = PAGES[h] ? h : 'links';
