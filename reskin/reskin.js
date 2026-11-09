@@ -296,7 +296,7 @@
       const add = c.field ? '' : `<div class="rk-addrow">${R.addRow === c.key ? `<form data-add-val="${esc(c.key)}"><input placeholder="New ${esc(c.label)}" autofocus aria-label="New value"><button type="submit" class="btn primary">Add</button></form>` : `<button type="button" class="btn lnk" data-add-row="${esc(c.key)}">+ Add another ${esc(c.label)}</button>`}</div>`;
       return `<div class="rk-col${c.field ? ' field' : ''}" data-col="${esc(c.key)}">${head}<div class="rk-col-b">${body}</div>${add}</div>`;
     };
-    return `<div class="rk-board${g ? ' grouping' : ''}${R.bd.checked.size ? ' checking' : ''}" data-noun="${noun}"><svg class="rk-wires" aria-hidden="true"></svg>${cols.map(colHTML).join('')}</div>`;
+    return `<div class="rk-scrollbox rk-bscroll"><div class="rk-board${g ? ' grouping' : ''}${R.bd.checked.size ? ' checking' : ''}" data-noun="${noun}"><svg class="rk-wires" aria-hidden="true"></svg>${cols.map(colHTML).join('')}</div><button type="button" class="rk-more" id="rk-more" hidden><span></span>${I.chev}</button></div>`;
   }
   function boardTools(noun, manage) {
     const g = R.bd.grouping && R.bd.grouping.noun === noun;
@@ -328,7 +328,16 @@
   function boardAfterRender() {
     const board = $('.rk-board'); if (!board) return;
     if (R.bd.grouping) { const g = R.bd.grouping; drawWires(new Set([g.node, ...nbrs(g.node, g.draft)])); }
+    // Same side-scroll hints as the tables: soft edges + "N more columns" (counts columns past the right edge)
+    const btn = $('#rk-more');
+    const update = () => {
+      const max = board.scrollWidth - board.clientWidth; board.classList.toggle('scrolled', board.scrollLeft > 2); board.classList.toggle('more', board.scrollLeft < max - 2);
+      const edge = board.scrollLeft + board.clientWidth; const hidden = $$('.rk-col', board).filter(c => c.offsetLeft + c.offsetWidth / 2 > edge).length;
+      btn.hidden = !hidden; $('span', btn).textContent = `${hidden} more column${hidden === 1 ? '' : 's'}`;
+    };
+    board.addEventListener('scroll', update, { passive: true }); update();
   }
+  window.addEventListener('resize', () => { if ($('.rk-board')) boardAfterRender(); });
   let hoverNode = null;
   function boardHover(n) {
     if (n === hoverNode) return; hoverNode = n; const board = $('.rk-board'); if (!board || R.bd.grouping) return;
@@ -707,7 +716,7 @@
     if (hit('[data-fakesel]')) { toast('Multi-select is outside this prototype'); return; }
     if ((el = hit('[data-export]'))) { toast(`Exported ${el.dataset.export} as CSV`); return; }
     if (hit('#rk-cols')) { columnsPop(hit('#rk-cols')); return; }
-    if (hit('#rk-more')) { const w = $('.rk-sx'); w.scrollBy({ left: w.clientWidth * 0.7, behavior: 'smooth' }); return; }
+    if (hit('#rk-more')) { const w = $('.rk-sx') || $('.rk-board'); w.scrollBy({ left: w.clientWidth * 0.7, behavior: 'smooth' }); return; }
     if (hit('#rq-clear')) { R.rq = ''; render({ focusSearch: true }); return; }
     if ((el = hit('.sortb'))) { toast('Sorting is outside this prototype'); return; }
     // Links / QR

@@ -386,3 +386,10 @@
 .btn.ghost-del svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.8; }
 .btn.ghost-del:hover { background: rgba(220, 38, 38, .06); }
 .scrim ~ .popover { z-index: 70; } /* pickers opened from a modal sit above it */
+/* Boards get the same side-scroll hints (2026-11-09) */
+.rk-scrollbox:has(.rk-board.more)::after { opacity: 1; }
+.rk-bscroll::after { border-radius: 0; width: 36px; bottom: 8px; }
+.rk-bscroll::before { content: ""; position: absolute; top: 0; left: 0; bottom: 8px; width: 36px; pointer-events: none; z-index: 4; background: linear-gradient(to right, rgba(17,24,39,.07), transparent); opacity: 0; transition: opacity var(--dur) var(--ease); }
+.rk-bscroll:has(.rk-board.scrolled)::before { opacity: 1; }
+.rk-bscroll::after { z-index: 4; }
+.rk-bscroll .rk-more { top: 10px; right: 12px; }
