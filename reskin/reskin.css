@@ -188,7 +188,7 @@
 .lbm .rf { gap: 10px; }
 .lbm .rf-row { grid-template-columns: 96px 1fr; }
 .lbm .rf-row > label { font-size: 12.5px; }
-.lbm-side { position: sticky; top: 0; display: flex; flex-direction: column; align-items: center; gap: 18px; padding-top: 4px; }
+.lbm-side { position: sticky; top: 0; align-self: start; display: flex; flex-direction: column; align-items: center; gap: 18px; padding-top: 4px; }
 .lbm-side canvas { width: 240px; height: 240px; image-rendering: pixelated; border: 1px solid var(--border); border-radius: 12px; padding: 12px; background: #fff; }
 .lbm-side .lbl { font-size: 12px; color: var(--text-faint); letter-spacing: .06em; text-transform: uppercase; font-weight: 600; }
 .lbm-foot { display: flex; align-items: center; gap: 10px; padding: 14px 24px; border-top: 1px solid var(--border); background: var(--sunken); }
@@ -324,3 +324,29 @@
 .rd-ctl { width: 200px; }
 @media (max-width: 1100px) { .rd-grid { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 560px) { .rd-row:not(:has(.switch)) { flex-wrap: wrap; } .rd-row:has(.switch) .rd-c { width: auto; } .rd-c { width: 100%; justify-content: flex-start; } .rd-c .rd-ctl { width: 100%; } }
+
+/* Links: parameters as chips + expandable row + pinned columns (2026-11-09) */
+.pchip { display: inline-flex; align-items: baseline; gap: 5px; height: 24px; line-height: 24px; padding: 0 8px; border-radius: 6px; background: var(--hover); color: var(--text-strong); font-size: 12.5px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: none; }
+.pchip i { font-style: normal; color: var(--text-muted); font-size: 11px; }
+.pline { display: flex; flex-wrap: wrap; gap: 6px; }
+.rk-links tbody.has-pl tr:first-child td { border-bottom: 0; height: 48px; padding-bottom: 2px; }
+.rk-links tr.pl td { height: auto; padding-top: 0; padding-bottom: 12px; white-space: normal; }
+.rk-links tbody.lkb:hover td { background: var(--hover); }
+.rk-links tbody.lkb:has(tr.sel) td { background: var(--accent-faint); }
+.rk-links tbody.lkb tr:hover { background: none; }
+.rk-links .pcol { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+/* Checkbox + actions stay put when the table scrolls sideways; a soft edge shows there's more to the right */
+.rk-links .rk-table .pin0, .rk-links .rk-table .pin1 { position: sticky; z-index: 2; background: var(--card); }
+.rk-links .rk-table th.pin0, .rk-links .rk-table th.pin1 { z-index: 3; }
+.rk-links .rk-table .pin0 { left: 0; }
+.rk-links .rk-table .pin1 { left: 36px; box-shadow: 1px 0 0 var(--grid); }
+.rk-links .rk-table tbody tr:hover .pin0, .rk-links .rk-table tbody tr:hover .pin1 { background: var(--hover); }
+.rk-links .rk-table tbody tr.sel .pin0, .rk-links .rk-table tbody tr.sel .pin1 { background: var(--accent-faint); }
+.rk-links { background:
+  linear-gradient(to left, var(--card) 40%, rgba(255,255,255,0)) right / 40px 100% no-repeat local,
+  radial-gradient(farthest-side at 100% 50%, rgba(17,24,39,.12), transparent) right / 14px 100% no-repeat scroll,
+  var(--card); }
+.rk-cols .mh { padding: 6px 10px 4px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-faint); }
+.rk-links tbody.lkb tr:last-child td { border-bottom: 1px solid var(--grid); }
+.rk-links tbody.lkb:last-child tr:last-child td { border-bottom: 0; }
+.rk-links tbody.lkb:hover .pchip, .rk-links tbody.lkb:has(tr.sel) .pchip { background: var(--card); box-shadow: inset 0 0 0 1px var(--border); }

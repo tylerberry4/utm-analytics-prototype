@@ -66,7 +66,7 @@
   const SH_STATUS = { active: ['ok', 'Activated'], verified: ['ok', 'Verified'], pending: ['warn', 'Pending DNS'], connected: ['ok', 'Activated'] };
 
   /* ---------- State for these pages ---------- */
-  const R = { rq: '', sel: new Set(), groupBy: null, sort: null, lastWs: 'links', cols: {}, pretty: true, rulesOpen: true, addRow: null, yearly: true, deleted: new Set(), extra: {} };
+  const R = { rq: '', sel: new Set(), groupBy: null, sort: null, lastWs: 'links', cols: {}, pretty: true, rulesOpen: true, addRow: null, yearly: true, deleted: new Set(), extra: {}, pcols: new Set(), pline: true };
   const OWN = ['links', 'qr', 'templates', 'parameters', 'attributes', 'shorteners', 'rules', 'members', 'mg-workspaces', 'mg-parameters', 'mg-attributes', 'mg-templates', 'mg-qr', 'mg-sso', 'mg-integrations', 'mg-api', 'mg-members', 'mg-shorteners', 'mg-billing', 'mg-zapier'];
   const MANAGE_SHELL = ['mg-workspaces', 'mg-parameters', 'mg-attributes', 'mg-templates', 'mg-qr', 'mg-integrations', 'mg-members', 'mg-shorteners', 'mg-billing', 'mg-zapier']; // SSO + API keys keep the sidebar today
   const TITLES = { links: 'Activity History', qr: 'Custom QR Codes', templates: 'UTM Templates', parameters: 'Parameters', attributes: 'Attributes', shorteners: 'Link Shorteners', rules: 'Workspace Defaults', members: 'Members' };
@@ -104,28 +104,53 @@
   const gear = () => `<button type="button" class="btn lg icon" id="rk-cols" title="Columns">${X.gear}</button>`;
   const exportBtn = (what) => `<button type="button" class="btn lg" data-export="${esc(what)}">Export to CSV</button>`;
   const recordsFoot = n => `<div class="rk-foot"><span class="fakesel" data-fakesel>${n} records ${I.chev}</span></div>`;
-  const table = (cols, rows, opts = {}) => `<div class="rk-tablewrap"><table class="rk-table" style="${opts.minw ? `min-width:${opts.minw}px` : ''}"><thead><tr>${cols.map(c => `<th class="${c.cls || ''}">${c.sort ? `<button type="button" class="sortb">${c.l}${c.sort === 'up' ? X.arrowUp : ''}</button>` : c.l}</th>`).join('')}</tr></thead><tbody>${rows.join('') || `<tr><td colspan="${cols.length}"><div class="rk-empty">${opts.empty || 'Nothing matches your search.'}</div></td></tr>`}</tbody></table></div>`;
+  const table = (cols, rows, opts = {}) => `<div class="rk-tablewrap ${opts.cls || ''}"><table class="rk-table" style="${opts.minw ? `min-width:${opts.minw}px` : ''}"><thead><tr>${cols.map(c => `<th class="${c.cls || ''}">${c.sort ? `<button type="button" class="sortb">${c.l}${c.sort === 'up' ? X.arrowUp : ''}</button>` : c.l}</th>`).join('')}</tr></thead>${opts.bodies && rows.length ? '' : '<tbody>'}${rows.join('') || `<tr><td colspan="${cols.length}"><div class="rk-empty">${opts.empty || 'Nothing matches your search.'}</div></td></tr>`}${opts.bodies && rows.length ? '' : '</tbody>'}</table></div>`;
   const acts = (items) => `<span class="acts">${items.map(([ic, title, attr, cls]) => `<button type="button" class="icon-btn ${cls || ''}" title="${esc(title)}" aria-label="${esc(title)}" ${attr}>${ic}</button>`).join('')}</span>`;
   // One line per URL: domain + path in purple, the ?utm_… part greyed and cut with "…". Hover shows the whole URL; copy copies it.
-  const urlCell = (url, withQr) => { const i = url.indexOf('?'), base = i > -1 ? url.slice(0, i) : url, qs = i > -1 ? url.slice(i) : '';
+  const urlCell = (url, withQr, noQs) => { const i = url.indexOf('?'), base = i > -1 ? url.slice(0, i) : url, qs = i > -1 && !noQs ? url.slice(i) : '';
     return `<div class="url-cell">${withQr ? `<button type="button" class="icon-btn" title="QR code" data-qr-of="${esc(url)}">${I.qr}</button>` : ''}<button type="button" class="icon-btn" title="Copy" data-copy-url="${esc(url)}">${I.copy}</button><a class="url" href="${esc(url)}" target="_blank" rel="noopener" title="${esc(url)}">${esc(base.replace(/^https?:\/\//, ''))}${qs ? `<span class="qs">${esc(qs)}</span>` : ''}</a></div>`; };
 
   /* ---------- Links ---------- */
+  /* Links: parameters on a thin line under each link (2026-11-09).
+     Today's app gives each UTM + custom parameter its own column and scrolls sideways.
+     Here the columns stay as they are and each link gets a second line of chips
+     (campaign, medium, source, … custom ones too) that spans the row, so nothing scrolls.
+     Gear: turn the line off for compact rows, or give any parameter its own column
+     (it then leaves the line). */
+  const LINK_PARAMS = [['campaign', 'Campaign Name', 'utm_campaign'], ['medium', 'Medium', 'utm_medium'], ['source', 'Source', 'utm_source'], ['term', 'Term', 'utm_term'], ['content', 'Content', 'utm_content'], ['region', 'Region', 'region'], ['promo', 'Promo code', 'promo'], ['ad_id', 'Ad ID', 'ad_id']];
+  // Example custom-parameter values (prototype only; staging shows custom params like "test1" as extra columns)
+  const customOf = l => { const c = {}; c.region = ['us', 'uk', 'emea', 'apac'][l.id % 4]; if (/paid|cpc|display/.test(l.medium)) c.ad_id = 'ad_' + (4810 + l.id * 37); if (l.id % 3 === 0) c.promo = ['FALL20', 'VIP10', 'WELCOME'][l.id % 9 / 3 | 0]; return c; };
+  const paramVal = (l, k) => l[k] !== undefined ? l[k] : customOf(l)[k];
+  const pinned = k => R.pcols.has(k);
+  const paramName = p => R.pretty ? p[1] : p[2];
+  const plineRow = (l, span) => { const set = LINK_PARAMS.filter(p => !pinned(p[0]) && paramVal(l, p[0]));
+    return `<tr class="pl"><td class="pin0"></td><td class="pin1"></td><td colspan="${span - 2}"><div class="pline">${set.map(p => `<span class="pchip" title="${esc(p[2])}=${esc(paramVal(l, p[0]))}"><i>${esc(paramName(p))}</i>${esc(paramVal(l, p[0]))}</span>`).join('') || '<span class="muted">No parameters</span>'}</div></td></tr>`; };
   function linksPage() {
-    const rows = links().filter(l => matches([l.slug, l.dest, l.by, l.campaign, l.source, l.medium, A.templateOf(l)].join(' ')));
-    const row = l => `<tr class="${R.sel.has(l.slug) ? 'sel' : ''}" data-row="${esc(l.slug)}"><td class="w-cb">${cbHTML(R.sel.has(l.slug), `data-sel="${esc(l.slug)}"`)}</td>
-      <td class="w-acts">${acts([[I.edit, 'Edit link', `data-edit-link="${esc(l.slug)}"`], [X.trash, 'Delete link', `data-del-link="${esc(l.slug)}"`, 'del'], [I.analytics, 'Link analytics', `data-link-analytics="${esc(l.slug)}"`]])}</td>
-      <td>${who(l.by)}</td><td class="muted nw">${fdate(l.created)}</td><td>${esc(A.templateOf(l))}</td><td class="num nw"><a href="#" class="clk" data-link-analytics="${esc(l.slug)}" title="Open analytics">${fmt.full(clicksOf(l.slug))}</a></td>
-      <td>${urlCell(shortUrl(l), true)}</td><td>${urlCell(fullUrl(l), true)}</td></tr>`;
+    const rows = links().filter(l => matches([l.slug, l.dest, l.by, A.templateOf(l), ...LINK_PARAMS.map(p => paramVal(l, p[0]) || '')].join(' ')));
+    const vis = c => R.cols['links' + c] !== false;
+    const COLS = [
+      { l: '', cls: 'w-cb pin0', td: l => cbHTML(R.sel.has(l.slug), `data-sel="${esc(l.slug)}"`) },
+      { l: '', cls: 'w-acts pin1', td: l => acts([[I.edit, 'Edit link', `data-edit-link="${esc(l.slug)}"`], [X.trash, 'Delete link', `data-del-link="${esc(l.slug)}"`, 'del'], [I.analytics, 'Link analytics', `data-link-analytics="${esc(l.slug)}"`]]) },
+      { l: 'Created By', td: l => who(l.by) },
+      { l: 'Created At', cls: 'muted', td: l => fdate(l.created) },
+      { l: 'Template', td: l => esc(A.templateOf(l)) },
+      { l: 'Clicks', cls: 'num', td: l => `<a href="#" class="clk" data-link-analytics="${esc(l.slug)}" title="Open analytics">${fmt.full(clicksOf(l.slug))}</a>` },
+      { l: 'Short URL', cls: 'w-short', td: l => urlCell(shortUrl(l), true) },
+      { l: 'Full URL', td: l => urlCell(fullUrl(l), true, R.pline) },
+      ...LINK_PARAMS.filter(p => pinned(p[0])).map(p => ({ l: paramName(p), cls: 'pcol', td: l => paramVal(l, p[0]) ? `<span class="mono" title="${esc(paramVal(l, p[0]))}">${esc(paramVal(l, p[0]))}</span>` : '<span class="muted">—</span>' })),
+    ].filter(c => !c.l || c.cls === 'pcol' || vis(c.l));
+    // One <tbody> per link so the row and its parameter line hover and select together
+    const row = l => `<tbody class="lkb${R.pline ? ' has-pl' : ''}"><tr class="${R.sel.has(l.slug) ? 'sel' : ''}" data-row="${esc(l.slug)}">${COLS.map(c => `<td class="${c.cls || ''}">${c.td(l)}</td>`).join('')}</tr>${R.pline ? plineRow(l, COLS.length) : ''}</tbody>`;
     let body;
     if (R.groupBy) {
       const g = R.groupBy; const key = l => g === 'by' ? l.by : g === 'created' ? fdate(l.created) : g === 'template' ? A.templateOf(l) : (l[g] || 'Not set');
       const groups = {}; rows.forEach(l => (groups[key(l)] = groups[key(l)] || []).push(l));
-      body = Object.entries(groups).map(([k, ls]) => `<tr><td colspan="8" style="background:var(--sunken);font-weight:600;color:var(--text-strong)">${esc(k)} <span class="muted" style="font-weight:400">· ${ls.length} link${ls.length === 1 ? '' : 's'}</span></td></tr>` + ls.map(row).join(''));
+      body = Object.entries(groups).map(([k, ls]) => `<tbody class="grp"><tr><td colspan="${COLS.length}" style="background:var(--sunken);font-weight:600;color:var(--text-strong)">${esc(k)} <span class="muted" style="font-weight:400">· ${ls.length} link${ls.length === 1 ? '' : 's'}</span></td></tr></tbody>` + ls.map(row).join(''));
     } else body = rows.map(row);
+    const minw = 1060 + R.pcols.size * 140;
     return `<div class="view rk-page">${head(`${WS} Activity History`, `<button type="button" class="btn lg" data-toast="Import links via CSV is outside this prototype">Import links via CSV</button>`)}
       <div class="rk-tools"><button type="button" class="btn primary lg" id="rk-create-link">Create link</button><button type="button" class="btn lg" id="rk-group">${R.groupBy ? 'Grouped by ' + ({ by: 'Created by', created: 'Created at', campaign: 'Campaign name', medium: 'Medium', source: 'Source', term: 'Term', content: 'Content', template: 'Template' })[R.groupBy] : 'Group by'}${caret}</button>${search('Search links')}${exportBtn('links')}${gear()}</div>
-      ${table([{ l: '', cls: 'w-cb' }, { l: '', cls: 'w-acts' }, { l: 'Created By' }, { l: 'Created At' }, { l: 'Template' }, { l: 'Clicks', cls: 'num' }, { l: 'Short URL' }, { l: 'Full URL' }], body, { minw: 1060 })}
+      ${table(COLS, body, { minw, cls: 'rk-links', bodies: true })}
       ${recordsFoot(10)}</div>`;
   }
 
@@ -412,8 +437,19 @@
   }
   function columnsPop(anchor) {
     const cols = { links: ['Created By', 'Created At', 'Template', 'Clicks', 'Short URL', 'Full URL', 'Campaign Name', 'Medium', 'Source', 'Term', 'Content', 'Notes'], qr: ['Created By', 'Created At', 'Template', 'Short URL', 'Clicks', 'Full URL'], templates: ['Created By', 'Created At', 'Name', 'Template Slug', 'Campaign Name', 'Medium', 'Source', 'Term', 'Content'], parameters: A.PARAMS.map(p => p.label) }[S.view] || ['Created By', 'Created At', 'Name', 'Status'];
+    if (S.view === 'links') return linkColsPop(anchor);
     const on = c => R.cols[S.view + c] !== false;
     openPop(anchor, `<div class="menu rk-cols"><label class="mi" style="cursor:pointer">${cbHTML(R.pretty, 'data-pretty')}<span class="grow">Show pretty names</span></label><div class="sep"></div>${cols.map(c => `<label class="mi" style="cursor:pointer">${cbHTML(on(c), `data-colcb="${esc(c)}"`)}<span class="grow">${esc(c)}</span></label>`).join('')}</div>`, { align: 'right', onMount(el) { el.addEventListener('click', e => { const b = e.target.closest('.cb'); if (!b) return; const now = !b.classList.contains('on'); b.classList.toggle('on', now); b.setAttribute('aria-checked', now); if (b.dataset.colcb) R.cols[S.view + b.dataset.colcb] = now; else R.pretty = now; }); } });
+  }
+  // Links: the table's columns, plus "Own column" for each parameter (pinned ones leave the chips)
+  function linkColsPop(anchor) {
+    const base = ['Created By', 'Created At', 'Template', 'Clicks', 'Short URL', 'Full URL'];
+    const html = () => `<div class="menu rk-cols" style="width:290px"><label class="mi" style="cursor:pointer">${cbHTML(R.pretty, 'data-pretty')}<span class="grow">Show pretty names</span></label><label class="mi" style="cursor:pointer">${cbHTML(R.pline, 'data-pline')}<span class="grow">Show parameters under each link</span></label><div class="sep"></div>
+      <div class="mh">Columns</div>${base.map(c => `<label class="mi" style="cursor:pointer">${cbHTML(R.cols['links' + c] !== false, `data-colcb="${esc(c)}"`)}<span class="grow">${esc(c)}</span></label>`).join('')}<div class="sep"></div>
+      <div class="mh">Give a parameter its own column</div>${LINK_PARAMS.map(p => `<label class="mi" style="cursor:pointer">${cbHTML(R.pcols.has(p[0]), `data-pcol="${p[0]}"`)}<span class="grow">${esc(p[1])}</span>${LINK_PARAMS.indexOf(p) > 4 ? '<span class="tag">Custom</span>' : ''}</label>`).join('')}</div>`;
+    openPop(anchor, html(), { align: 'right', onMount(el) { el.addEventListener('click', e => { const b = e.target.closest('.cb'); if (!b) return; e.preventDefault(); const now = !b.classList.contains('on'); b.classList.toggle('on', now); b.setAttribute('aria-checked', now);
+      if (b.dataset.colcb) R.cols['links' + b.dataset.colcb] = now; else if (b.hasAttribute('data-pline')) R.pline = now; else if (b.dataset.pcol) { if (now) R.pcols.add(b.dataset.pcol); else R.pcols.delete(b.dataset.pcol); } else R.pretty = now;
+      render(); }); } });
   }
   function groupPop(anchor) {
     const opts = [['', 'Links'], ['by', 'Created By'], ['created', 'Created At'], ['campaign', 'Campaign Name'], ['medium', 'Medium'], ['source', 'Source'], ['term', 'Term'], ['content', 'Content'], ['template', 'Template']];
