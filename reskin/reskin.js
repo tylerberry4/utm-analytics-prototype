@@ -212,25 +212,195 @@
       ${sxTable(COLS, rows.map(row))}</div>`;
   }
 
-  /* ---------- Parameters + Attributes boards ---------- */
-  function boardHTML(cols, noun) {
-    return `<div class="rk-board">${cols.map(c => `<div class="rk-col" data-col="${esc(c.key)}"><div class="rk-col-h"><span>${esc(c.label)}</span>${c.common ? '<span class="tag" title="Added to every new workspace">Common</span>' : ''}<span class="grow"></span><button type="button" class="icon-btn" data-col-menu="${esc(c.key)}" aria-label="More">${I.more}</button></div>
-      <div class="rk-col-b">${c.desc ? `<div class="rk-val desc"><b>${esc(c.desc)}</b><span>${esc(c.help)}</span></div>` : c.values.map(v => `<div class="rk-val" data-val="${esc(v)}"><span class="grow">${esc(v)}</span><button type="button" class="icon-btn" data-val-menu="${esc(c.key)}|${esc(v)}" aria-label="More">${I.more}</button></div>`).join('')}</div>
-      ${c.desc ? '' : `<div class="rk-addrow">${R.addRow === c.key ? `<form data-add-val="${esc(c.key)}"><input placeholder="New ${esc(c.label)}" autofocus aria-label="New value"><button type="submit" class="btn primary">Add</button></form>` : `<button type="button" class="btn lnk" data-add-row="${esc(c.key)}">+ Add another ${esc(c.label)}</button>`}</div>`}</div>`).join('')}
-      <button type="button" class="rk-col-ghost" data-add-col="${noun}">${X.plus}Add ${noun}</button></div>`;
+  /* ---------- Parameters + Attributes boards (match staging's behavior, 2026-11-09) ----------
+     Same board UX as staging app.utm.io:
+     - Hover a value: group (branch), settings (gear) and a checkbox appear; values linked to it light up
+       across the columns, with lines between them (left and right along the chain).
+     - Group icon: "Finish grouping" mode. Click values in other columns to link / unlink them;
+       Finish saves, Esc cancels.
+     - Settings: name (locked), value, pretty name; Delete / Cancel / Save.
+     - Checkboxes (+ a select-all in each header): an "Actions" menu appears with "Delete all checked".
+     - Column menu: UTM params Move right/left + Sort by; custom params also Edit, Delete, Archive
+       (Edit is refused once links use it); attributes Edit, Delete, Archive, Sort by.
+     - Gear: show / hide columns. Number and Date fields are description cards, no values. */
+  const BI = {
+    branch: '<svg viewBox="0 0 24 24"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10M18 9c0 4.5-4 5-10.5 8.5"/></svg>',
+    right: '<svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
+    left: '<svg viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>',
+    archive: '<svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M4 20h16"/></svg>',
+    sort: '<svg viewBox="0 0 24 24"><path d="M7 4v16M4 17l3 3 3-3M14 5h6M14 10h5M14 15h4"/></svg>',
+    chevR: '<svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>',
+  };
+  const FIELD_DESC = { number: ['Number Field', 'The user will be prompted to enter a value in a text box.'], date: ['Date Picker', 'The user will be prompted to select a MM-DD-YYYY date with a calendar picker.'] };
+  const SORTS = [['alpha', 'Alphabetically'], ['chrono', 'Chronological'], ['numeric', 'Numeric'], ['custom', 'Custom']];
+  R.bd = { order: {}, sort: {}, hidden: new Set(), archived: new Set(), checked: new Set(), grouping: null, edges: {}, pretty: {} };
+  const NODE = (k, v) => k + '::' + v;
+  const nodeKey = n => n.slice(0, n.indexOf('::'));
+  const nodeVal = n => n.slice(n.indexOf('::') + 2);
+  const edgeKey = (a, b) => [a, b].sort().join('>>');
+  const pVals = p => p.values.map((x, i) => ({ v: x.v !== undefined ? x.v : x[0], pretty: x.pretty || '', created: x.created || '2026-01-01', i }));
+  // Every column, in board order, before hiding / search
+  function allCols(noun) {
+    const cols = noun === 'parameter'
+      ? A.PARAMS.map(p => ({ key: p.key, label: p.key === 'campaign' ? 'campaign' : p.label.toLowerCase(), name: p.label, kind: p.custom ? 'custom' : 'utm', common: p.common,
+          field: !p.values.length && (p.format === 'number' || p.format === 'date') ? p.format : null, values: pVals(p) }))
+      : ATTRS.map(a => ({ key: 'a:' + a.key, label: a.label, name: a.label, kind: 'attr', field: a.type === 'number' || a.type === 'date' ? a.type : null,
+          values: (a.values || []).map((v, i) => ({ v, pretty: '', created: `2026-0${1 + (i * 3) % 9}-1${i % 9}`, i })) }));
+    cols.forEach(c => (R.extra[c.key] || []).forEach((v, j) => c.values.push({ v, pretty: '', created: '2026-11-09', i: 1000 + j })));
+    const ord = R.bd.order[noun] = (R.bd.order[noun] || []).filter(k => cols.some(c => c.key === k));
+    cols.forEach(c => { if (!ord.includes(c.key)) ord.push(c.key); });
+    return ord.map(k => cols.find(c => c.key === k)).filter(c => !R.bd.archived.has(c.key));
   }
-  const paramCols = () => A.PARAMS.map(p => ({ key: p.key, label: p.key === 'campaign' ? 'campaign' : p.label.toLowerCase(), common: p.common, values: p.values.map(v => v.v !== undefined ? v.v : v[0]).filter(v => !R.rq || v.toLowerCase().includes(R.rq.toLowerCase())).concat(R.extra[p.key] || []) }));
-  const attrCols = () => ATTRS.map(a => ({ key: 'a:' + a.key, label: a.label, desc: a.desc, help: a.help, values: (a.values || []).filter(v => !R.rq || v.includes(R.rq.toLowerCase())).concat(R.extra['a:' + a.key] || []) }));
+  function sortVals(c) {
+    const m = R.bd.sort[c.key] || 'custom', vs = c.values.slice();
+    if (m === 'alpha') vs.sort((a, b) => a.v.localeCompare(b.v, undefined, { sensitivity: 'base' }));
+    if (m === 'chrono') vs.sort((a, b) => a.created.localeCompare(b.created));
+    if (m === 'numeric') vs.sort((a, b) => (parseFloat(a.v) || Infinity) - (parseFloat(b.v) || Infinity) || a.v.localeCompare(b.v));
+    return vs;
+  }
+  // Example groupings: params follow the example links' chains (campaign → medium → source → content → term); attributes a few pairs
+  function edgesFor(noun) {
+    if (R.bd.edges[noun]) return R.bd.edges[noun];
+    const E = new Set();
+    if (noun === 'parameter') {
+      const has = (k, v) => { const p = A.PARAMS.find(x => x.key === k); return p && pVals(p).some(x => x.v === v); };
+      D.LINKS.forEach(l => { const ch = ['campaign', 'medium', 'source', 'content', 'term'].filter(k => l[k] && has(k, l[k])).map(k => NODE(k, l[k])); for (let i = 0; i < ch.length - 1; i++) E.add(edgeKey(ch[i], ch[i + 1])); });
+    } else {
+      [['customers', ['us', 'uk']], ['prospects', ['us', 'de']], ['partners', ['de', 'au']]].forEach(([a, ms]) => ms.forEach(m => E.add(edgeKey(NODE('a:audience', a), NODE('a:market', m)))));
+    }
+    return (R.bd.edges[noun] = E);
+  }
+  const nbrs = (n, E) => { const out = []; E.forEach(e => { const [a, b] = e.split('>>'); if (a === n) out.push(b); else if (b === n) out.push(a); }); return out; };
+  // The chain staging lights up: walk right from the value through links to columns further right, and left the same way
+  function chainOf(n, E, idx) {
+    const out = new Set([n]);
+    [1, -1].forEach(dir => { const q = [n]; while (q.length) { const c = q.shift(); nbrs(c, E).forEach(m => { if (out.has(m)) return; if ((idx[nodeKey(m)] - idx[nodeKey(c)]) * dir > 0) { out.add(m); q.push(m); } }); } });
+    return out;
+  }
+  const boardNoun = () => (S.view === 'parameters' || S.view === 'mg-parameters') ? 'parameter' : 'attribute';
+  function boardHTML(noun) {
+    const g = R.bd.grouping && R.bd.grouping.noun === noun ? R.bd.grouping : null;
+    const E = g ? g.draft : edgesFor(noun);
+    const gsel = g ? new Set([g.node, ...nbrs(g.node, E)]) : null;
+    const cols = allCols(noun).filter(c => !R.bd.hidden.has(c.key));
+    const q = (R.rq || '').toLowerCase();
+    const colHTML = (c, ci) => {
+      const vals = c.field ? [] : sortVals(c).filter(x => !q || x.v.toLowerCase().includes(q));
+      const nodes = vals.map(x => NODE(c.key, x.v)), nCk = nodes.filter(n => R.bd.checked.has(n)).length;
+      const head = `<div class="rk-col-h"><span class="ttl">${esc(c.label)}</span>${c.common ? '<span class="tag" title="Added to every new workspace">Common</span>' : ''}<span class="grow"></span>
+        ${c.field || !nodes.length ? '' : `<span class="colall${nCk ? ' on' : ''}">${cbHTML(nCk > 0 && nCk === nodes.length, `data-colall="${esc(c.key)}" aria-label="Select all ${esc(c.label)}"`)}</span>`}<button type="button" class="icon-btn" data-col-menu="${esc(c.key)}" aria-label="${esc(c.label)} options">${I.more}</button></div>`;
+      const body = c.field ? `<div class="rk-val desc"><b>${FIELD_DESC[c.field][0]}</b><span>${FIELD_DESC[c.field][1]}</span></div>`
+        : vals.map(x => { const n = NODE(c.key, x.v), ck = R.bd.checked.has(n), pretty = R.bd.pretty[n] !== undefined ? R.bd.pretty[n] : x.pretty;
+          return `<div class="rk-val${ck ? ' ck' : ''}${gsel && gsel.has(n) ? ' gsel' : ''}${g && g.node === n ? ' ganchor' : ''}" data-node="${esc(n)}"${pretty ? ` title="Pretty name: ${esc(pretty)}"` : ''}><span class="grow">${esc(x.v)}</span>
+            <span class="rk-vt"><button type="button" class="icon-btn" data-grp title="Group with other values" aria-label="Group ${esc(x.v)}">${BI.branch}</button><button type="button" class="icon-btn" data-vset title="Settings" aria-label="${esc(x.v)} settings">${X.gear}</button></span>${cbHTML(ck, 'data-vck')}</div>`; }).join('');
+      const add = c.field ? '' : `<div class="rk-addrow">${R.addRow === c.key ? `<form data-add-val="${esc(c.key)}"><input placeholder="New ${esc(c.label)}" autofocus aria-label="New value"><button type="submit" class="btn primary">Add</button></form>` : `<button type="button" class="btn lnk" data-add-row="${esc(c.key)}">+ Add another ${esc(c.label)}</button>`}</div>`;
+      return `<div class="rk-col${c.field ? ' field' : ''}" data-col="${esc(c.key)}">${head}<div class="rk-col-b">${body}</div>${add}</div>`;
+    };
+    return `<div class="rk-board${g ? ' grouping' : ''}${R.bd.checked.size ? ' checking' : ''}" data-noun="${noun}"><svg class="rk-wires" aria-hidden="true"></svg>${cols.map(colHTML).join('')}</div>`;
+  }
+  function boardTools(noun, manage) {
+    const g = R.bd.grouping && R.bd.grouping.noun === noun;
+    const primary = g ? `<button type="button" class="btn primary lg" id="rk-gfinish">${I.info}Finish grouping</button>`
+      : noun === 'parameter' ? `<button type="button" class="btn primary lg" id="rk-add-param">${I.info}Add custom URL parameter</button>` : `<button type="button" class="btn primary lg" id="rk-add-attr">${I.info}Add attribute</button>`;
+    return `<div class="rk-tools">${primary}${R.bd.checked.size ? `<button type="button" class="btn lg" id="rk-bactions">Actions${caret}</button>` : ''}${search(noun === 'parameter' ? 'Search parameters' : 'Search attributes')}${exportBtn(noun + 's')}${gear()}</div>
+      ${g ? `<div class="rk-gbanner">${I.info}<span>Click values in other columns to group them with <b>${esc(nodeVal(R.bd.grouping.node))}</b>. Click <b>Finish grouping</b> when you're done, or press Esc to cancel.</span></div>` : ''}`;
+  }
   function parametersPage(manage) {
     return `<div class="view rk-page">${head(manage ? 'Parameters Management' : `${WS} Parameters`, manage ? '' : `<button type="button" class="btn lg" data-toast="Import parameters via CSV is outside this prototype">Import parameters via CSV</button>`)}
-      <div class="rk-tools"><button type="button" class="btn primary lg" id="rk-add-param">${I.info}Add custom URL parameter</button>${search('Search parameters')}${exportBtn('parameters')}${gear()}</div>
-      ${boardHTML(paramCols(), 'parameter')}</div>`;
+      ${boardTools('parameter', manage)}${boardHTML('parameter')}</div>`;
   }
   function attributesPage(manage) {
     return `<div class="view rk-page">${head(manage ? 'Attributes Management' : `${WS} Attributes`, manage ? '' : `<button type="button" class="btn lg" data-toast="Import attributes via CSV is outside this prototype">Import attributes via CSV</button>`)}
-      <div class="rk-tools"><button type="button" class="btn primary lg" id="rk-add-attr">${I.info}Add attribute</button>${search('Search attributes')}${exportBtn('attributes')}${gear()}</div>
-      ${boardHTML(attrCols(), 'attribute')}</div>`;
+      ${boardTools('attribute', manage)}${boardHTML('attribute')}</div>`;
   }
+  // Lines between linked values (drawn inside the board, so they scroll with it)
+  function drawWires(set) {
+    const board = $('.rk-board'); if (!board) return; const svg = $('.rk-wires', board);
+    const noun = board.dataset.noun, E = R.bd.grouping ? R.bd.grouping.draft : edgesFor(noun);
+    svg.setAttribute('width', board.scrollWidth); svg.setAttribute('height', board.scrollHeight);
+    const bb = board.getBoundingClientRect(), els = {}; $$('.rk-val[data-node]', board).forEach(el => { els[el.dataset.node] = el; });
+    const pos = n => { const el = els[n]; if (!el) return null; const r = el.getBoundingClientRect(); return { l: r.left - bb.left + board.scrollLeft, r: r.right - bb.left + board.scrollLeft, y: r.top - bb.top + board.scrollTop + r.height / 2 }; };
+    let d = '';
+    E.forEach(e => { const [a, b] = e.split('>>'); if (!set || !set.has(a) || !set.has(b)) return; let pa = pos(a), pb = pos(b); if (!pa || !pb) return; if (pa.l > pb.l) [pa, pb] = [pb, pa];
+      const x1 = pa.r, x2 = pb.l, mx = (x1 + x2) / 2; d += `M${x1},${pa.y} C${mx},${pa.y} ${mx},${pb.y} ${x2},${pb.y} `; });
+    svg.innerHTML = d ? `<path d="${d}"/>` : '';
+  }
+  function boardAfterRender() {
+    const board = $('.rk-board'); if (!board) return;
+    if (R.bd.grouping) { const g = R.bd.grouping; drawWires(new Set([g.node, ...nbrs(g.node, g.draft)])); }
+  }
+  let hoverNode = null;
+  function boardHover(n) {
+    if (n === hoverNode) return; hoverNode = n; const board = $('.rk-board'); if (!board || R.bd.grouping) return;
+    $$('.rk-val.hl', board).forEach(el => el.classList.remove('hl'));
+    if (!n) { drawWires(null); return; }
+    const idx = {}; $$('.rk-col', board).forEach((c, i) => { idx[c.dataset.col] = i; });
+    const set = chainOf(n, edgesFor(board.dataset.noun), idx);
+    $$('.rk-val[data-node]', board).forEach(el => { if (set.has(el.dataset.node)) el.classList.add('hl'); });
+    drawWires(set);
+  }
+  // Value data changes (rename / delete) keep links, checks and pretty names in step
+  function renameNode(from, to) {
+    Object.values(R.bd.edges).forEach(E => { [...E].forEach(e => { const [a, b] = e.split('>>'); if (a === from || b === from) { E.delete(e); E.add(edgeKey(a === from ? to : a, b === from ? to : b)); } }); });
+    if (R.bd.checked.delete(from)) R.bd.checked.add(to);
+    if (R.bd.pretty[from] !== undefined) { R.bd.pretty[to] = R.bd.pretty[from]; delete R.bd.pretty[from]; }
+  }
+  function dropNode(n) { Object.values(R.bd.edges).forEach(E => [...E].forEach(e => { if (e.split('>>').includes(n)) E.delete(e); })); R.bd.checked.delete(n); }
+  function colInfo(k) { const noun = k.startsWith('a:') ? 'attribute' : 'parameter'; return { noun, col: allCols(noun).find(c => c.key === k) }; }
+  function valueSettingsModal(n) {
+    const k = nodeKey(n), v = nodeVal(n), { noun, col } = colInfo(k); if (!col) return;
+    const x = col.values.find(y => y.v === v) || {}; const pretty = R.bd.pretty[n] !== undefined ? R.bd.pretty[n] : (x.pretty || ''); const word = noun === 'parameter' ? 'Parameter' : 'Attribute';
+    openModal(`<div class="modal-h"><h3>${esc(col.label)} ${esc(v)} Settings</h3><button class="close" aria-label="Close">${I.close}</button></div>
+      <div class="modal-b"><form class="rf" id="vs-form">
+        <div class="rf-row"><label>${word} name</label><label class="inp dis"><input value="${esc(col.label)}" disabled></label></div>
+        <div class="rf-row"><label><span class="req">*</span>${word} value</label><label class="inp"><input name="v" value="${esc(v)}" required></label></div>
+        <div class="rf-row"><label>Pretty name</label><label class="inp"><input name="p" value="${esc(pretty)}" placeholder="Shown instead of the value in pickers"></label></div>
+        <div class="rf-actions vs-actions"><button type="button" class="btn lg ghost-del" id="vs-del">${X.trash}Delete</button><span class="grow"></span><button type="button" class="btn lg close">Cancel</button><button type="submit" class="btn primary lg">Save</button></div></form></div>`, {
+      onMount(s) { $('.modal', s).classList.add('rk'); $('.modal', s).style.width = 'min(520px,100%)'; const inp = $('[name=v]', s); inp.focus(); inp.select();
+        $('#vs-del', s).addEventListener('click', () => { closeModal(); confirmModal('Delete value?', `<b>${esc(v)}</b> will be removed from ${esc(col.label)}, with its groupings. Links that already use it keep working.`, () => { dropNode(n); removeValue(k, v); }); });
+        $('#vs-form', s).addEventListener('submit', e => { e.preventDefault(); const nv = $('[name=v]', s).value.trim(), np = $('[name=p]', s).value.trim(); if (!nv) return; closeModal();
+          if (nv !== v) { renameNode(n, NODE(k, nv)); R.bd.pretty[NODE(k, nv)] = np; renameValue(k, v, nv); } else { R.bd.pretty[n] = np; render(); toast('Saved'); } }); },
+    });
+  }
+  const USED_CUSTOM = ['region', 'promo'];   // example: these custom params are already on links
+  function colMenu(el) {
+    const k = el.dataset.colMenu, { noun, col } = colInfo(k); if (!col) return;
+    const ord = R.bd.order[noun].filter(x => !R.bd.archived.has(x)), i = ord.indexOf(k), cur = R.bd.sort[k] || 'custom';
+    const mi = (act, icon, label, cls = '') => `<button type="button" class="mi ${cls}" data-cact="${act}">${icon}<span class="grow">${label}</span></button>`;
+    const items = [];
+    if (col.kind !== 'utm') items.push(mi('edit', I.edit, 'Edit'), mi('delete', X.trash, 'Delete'));
+    if (col.kind !== 'attr') { if (i < ord.length - 1) items.push(mi('right', BI.right, 'Move to right')); if (i > 0) items.push(mi('left', BI.left, 'Move to left')); }
+    if (col.kind !== 'utm') items.push(mi('archive', BI.archive, 'Archive'));
+    items.push(`<div class="mi has-sub" tabindex="0">${BI.sort}<span class="grow">Sort by</span>${BI.chevR}<div class="menu sub">${SORTS.map(([m, l]) => `<button type="button" class="mi ${cur === m ? 'on' : ''}" data-csort="${m}"><span class="check">${I.check}</span><span class="grow">${l}</span></button>`).join('')}</div></div>`);
+    openPop(el, `<div class="menu rk-colmenu" style="width:190px">${items.join('')}</div>`, { align: 'right', onMount(p) { p.addEventListener('click', ev => {
+      const sb = ev.target.closest('[data-csort]'); if (sb) { R.bd.sort[k] = sb.dataset.csort; closePop(); render(); toast(`${col.label}: sorted ${SORTS.find(x => x[0] === sb.dataset.csort)[1].toLowerCase()}`); return; }
+      const b = ev.target.closest('[data-cact]'); if (!b) return; closePop(); const a = b.dataset.cact; const o = R.bd.order[noun], j = o.indexOf(k);
+      if (a === 'right' || a === 'left') { let t = j; do { t += a === 'right' ? 1 : -1; } while (t >= 0 && t < o.length && R.bd.archived.has(o[t])); if (t >= 0 && t < o.length) { [o[j], o[t]] = [o[t], o[j]]; render(); } return; }
+      if (a === 'edit') { if (noun === 'parameter' && USED_CUSTOM.includes(k)) { toast(`Cannot edit this field ${col.label} because it was already used to create links.`); return; }
+        simpleModal(`Edit ${col.label}`, [['Field name', col.name]], 'Save', vals => { const nm = vals[0]; if (!nm) return; const src = noun === 'parameter' ? A.PARAMS.find(p => p.key === k) : ATTRS.find(x => 'a:' + x.key === k); if (src) src.label = nm; render(); toast(`Renamed to “${nm}”`); });
+        const inp = $('#sm-form input'); if (inp) inp.value = col.name; return; }
+      if (a === 'delete') { confirmModal(`Delete ${col.label}?`, `The <b>${esc(col.label)}</b> ${noun} and its ${col.values.length} value${col.values.length === 1 ? '' : 's'} will be removed from this workspace.`, () => {
+          if (noun === 'parameter') { const ix = A.PARAMS.findIndex(p => p.key === k); if (ix > -1) A.PARAMS.splice(ix, 1); } else { const ix = ATTRS.findIndex(x => 'a:' + x.key === k); if (ix > -1) ATTRS.splice(ix, 1); }
+          col.values.forEach(x => dropNode(NODE(k, x.v))); render(); toast(`Deleted “${col.label}”`); }); return; }
+      if (a === 'archive') { R.bd.archived.add(k); render(); toast(`Archived “${col.label}”. It's hidden here and from new links.`); }
+    }); } });
+  }
+  function boardColsPop(anchor) {
+    const noun = boardNoun(), cols = allCols(noun);
+    openPop(anchor, `<div class="menu rk-cols">${cols.map(c => `<label class="mi" style="cursor:pointer">${cbHTML(!R.bd.hidden.has(c.key), `data-bcol="${esc(c.key)}"`)}<span class="grow">${esc(c.name)}</span></label>`).join('')}</div>`, { align: 'right', onMount(el) { el.addEventListener('click', e => { const b = e.target.closest('.cb'); if (!b) return; e.preventDefault(); const k = b.dataset.bcol, on = R.bd.hidden.has(k); if (on) R.bd.hidden.delete(k); else R.bd.hidden.add(k); b.classList.toggle('on', on); b.setAttribute('aria-checked', on); render(); }); } });
+  }
+  function bulkActions(anchor) {
+    openPop(anchor, `<div class="menu" style="width:200px"><button type="button" class="mi" data-bulk="del" style="color:var(--down)">${X.trash}<span class="grow">Delete all checked</span></button></div>`, { onMount(p) { p.addEventListener('click', ev => { if (!ev.target.closest('[data-bulk]')) return; closePop(); const ns = [...R.bd.checked], n = ns.length;
+      confirmModal(`Delete ${n} value${n === 1 ? '' : 's'}?`, `${ns.slice(0, 6).map(x => `<b>${esc(nodeVal(x))}</b>`).join(', ')}${n > 6 ? ` and ${n - 6} more` : ''} will be removed, with their groupings. Links that already use them keep working.`, () => {
+        ns.forEach(x => { const k = nodeKey(x), v = nodeVal(x); dropNode(x); const p = A.PARAMS.find(y => y.key === k); if (p) { const i = p.values.findIndex(y => (y.v !== undefined ? y.v : y[0]) === v); if (i > -1) p.values.splice(i, 1); } else { const a = ATTRS.find(y => 'a:' + y.key === k); if (a && a.values) a.values = a.values.filter(y => y !== v); } if (R.extra[k]) R.extra[k] = R.extra[k].filter(y => y !== v); });
+        R.bd.checked.clear(); render(); toast(`Deleted ${n} value${n === 1 ? '' : 's'}`); }); }); } });
+  }
+  function endGrouping(save) {
+    const g = R.bd.grouping; if (!g) return; R.bd.grouping = null;
+    if (save) { const before = edgesFor(g.noun), added = [...g.draft].filter(e => !before.has(e)).length, removed = [...before].filter(e => !g.draft.has(e)).length; R.bd.edges[g.noun] = g.draft; render(); toast(added || removed ? `Grouping saved${added ? ` · ${added} linked` : ''}${removed ? ` · ${removed} unlinked` : ''}` : 'No changes to grouping'); }
+    else { render(); toast('Grouping cancelled'); }
+  }
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && R.bd.grouping && !document.querySelector('.modal')) { e.preventDefault(); endGrouping(false); } });
 
   /* ---------- Link shorteners ---------- */
   function shortenersPage(manage) {
@@ -438,12 +608,16 @@
     openModal(`<div class="modal-h"><h3>${attr ? 'Add new attribute' : 'Add new custom parameter'}</h3><button class="close" aria-label="Close">${I.close}</button></div>
       <div class="modal-b"><form class="rf" id="ap-form">
         <div class="rf-stack"><label><span class="req">*</span>Field name</label><label class="inp"><input placeholder="Field name" required></label></div>
-        <div class="rf-stack"><label><span class="req">*</span>${attr ? 'Attribute' : 'Parameter'} type</label><button type="button" class="inp sel has-val" data-pick-list="Freeform (Default)|Dropdown only|Number Field|Date Picker"><span class="grow">Freeform (Default)</span>${ic(I.chev)}</button></div>
+        <div class="rf-stack"><label><span class="req">*</span>${attr ? 'Attribute' : 'Parameter'} type</label><button type="button" class="inp sel has-val" data-pick-list="Freeform (Default)|Number|Date"><span class="grow">Freeform (Default)</span>${ic(I.chev)}</button></div>
         <div class="rf-stack"><label>Select workspace</label><button type="button" class="inp sel has-val" data-pick-list="${WORKSPACES.map(w => w.name).join('|')}"><span class="chip">${WS}</span><span class="grow"></span>${ic(I.chev)}</button></div>
         <label class="chk">${cbHTML(false, 'data-rulecb')}<span>This is a common ${attr ? 'attribute' : 'parameter'}, and should be added to all future workspaces</span></label>
         <div class="rf-actions"><button type="submit" class="btn primary lg">Add ${attr ? 'attribute' : 'parameter'}</button></div></form></div>`, {
-      onMount(s) { $('.modal', s).classList.add('rk'); $('#ap-form', s).addEventListener('submit', e => { e.preventDefault(); const name = $('input', e.target).value.trim(); if (!name) return;
-        if (attr) ATTRS.push({ key: name.toLowerCase().replace(/\W+/g, '_'), label: name, type: 'list', values: [] }); else A.PARAMS.push({ key: name.toLowerCase().replace(/\W+/g, '_'), label: name, utm: name.toLowerCase().replace(/\W+/g, '_'), custom: true, format: 'text', rules: [], values: [], shown: true, deps: null, hint: '' });
+      onMount(s) { $('.modal', s).classList.add('rk');
+        // Pickers + checkbox inside the modal (the page's click handler only covers #view)
+        $('#ap-form', s).addEventListener('click', e => { const pk = e.target.closest('[data-pick-list]'); if (pk) { pickList(pk); return; } const cb = e.target.closest('[data-rulecb]'); if (cb) { const on = !cb.classList.contains('on'); cb.classList.toggle('on', on); cb.setAttribute('aria-checked', on); } });
+        $('#ap-form', s).addEventListener('submit', e => { e.preventDefault(); const name = $('input', e.target).value.trim(); if (!name) return;
+        const ty = ($('[data-pick-list] .grow', e.target).textContent || '').toLowerCase(), fmt2 = ty.startsWith('number') ? 'number' : ty.startsWith('date') ? 'date' : 'text';
+        if (attr) ATTRS.push({ key: name.toLowerCase().replace(/\W+/g, '_'), label: name, type: fmt2 === 'text' ? 'list' : fmt2, values: [] }); else A.PARAMS.push({ key: name.toLowerCase().replace(/\W+/g, '_'), label: name, utm: name.toLowerCase().replace(/\W+/g, '_'), custom: true, format: fmt2, rules: [], values: [], shown: true, deps: null, hint: '' });
         closeModal(); render(); toast(`${attr ? 'Attribute' : 'Parameter'} “${name}” added`); }); },
     });
   }
@@ -473,6 +647,7 @@
   function columnsPop(anchor) {
     const cols = { links: ['Created By', 'Created At', 'Template', 'Clicks', 'Short URL', 'Full URL', 'Campaign Name', 'Medium', 'Source', 'Term', 'Content', 'Notes'], qr: ['Created By', 'Created At', 'Template', 'Short URL', 'Clicks', 'Full URL'], templates: ['Created By', 'Created At', 'Name', 'Template Slug', 'Campaign Name', 'Medium', 'Source', 'Term', 'Content'], parameters: A.PARAMS.map(p => p.label) }[S.view] || ['Created By', 'Created At', 'Name', 'Status'];
     if (SX_MENU[S.view]) return sxColsPop(anchor);
+    if (['parameters', 'attributes', 'mg-parameters', 'mg-attributes'].includes(S.view)) return boardColsPop(anchor);
     const on = c => R.cols[S.view + c] !== false;
     openPop(anchor, `<div class="menu rk-cols"><label class="mi" style="cursor:pointer">${cbHTML(R.pretty, 'data-pretty')}<span class="grow">Show pretty names</span></label><div class="sep"></div>${cols.map(c => `<label class="mi" style="cursor:pointer">${cbHTML(on(c), `data-colcb="${esc(c)}"`)}<span class="grow">${esc(c)}</span></label>`).join('')}</div>`, { align: 'right', onMount(el) { el.addEventListener('click', e => { const b = e.target.closest('.cb'); if (!b) return; const now = !b.classList.contains('on'); b.classList.toggle('on', now); b.setAttribute('aria-checked', now); if (b.dataset.colcb) R.cols[S.view + b.dataset.colcb] = now; else R.pretty = now; }); } });
   }
@@ -504,12 +679,13 @@
     $$('.nav a').forEach(a => a.classList.toggle('active', a.dataset.nav === S.view));
     $('#topbar-title').textContent = MG_TITLES[S.view] || TITLES[S.view] || WS;
     if ($('.rk-sx')) setupScroll();
+    if ($('.rk-board')) { hoverNode = null; boardAfterRender(); }
     document.title = `${MG_TITLES[S.view] || TITLES[S.view]} · UTM.io vReskin`;
     try { location.hash = S.view; } catch (e) { /* ignore */ }
     if (!manage && !S.view.startsWith('mg-')) R.lastWs = S.view;
     const f = $('#rq'); if (f && opts.focusSearch) { f.focus(); f.setSelectionRange(f.value.length, f.value.length); }
   }
-  function go(view, opts = {}) { if (!PAGES[view]) return; closePop(); closeModal(); S.view = view; S.slug = null; R.rq = ''; R.sel.clear(); R.addRow = null; if (view !== 'links') R.groupBy = null; A.compute(); render({ top: true, ...opts }); }
+  function go(view, opts = {}) { if (!PAGES[view]) return; closePop(); closeModal(); R.bd.grouping = null; R.bd.checked.clear(); S.view = view; S.slug = null; R.rq = ''; R.sel.clear(); R.addRow = null; if (view !== 'links') R.groupBy = null; A.compute(); render({ top: true, ...opts }); }
   window.RESKIN = { owns: v => OWN.includes(v), render, go };
 
   /* ---------- Events (capture, so app.js's handlers don't also run on these pages) ---------- */
@@ -547,10 +723,20 @@
     // Boards
     if (hit('#rk-add-param')) { addParamModal(false); return; }
     if (hit('#rk-add-attr')) { addParamModal(true); return; }
-    if ((el = hit('[data-add-col]'))) { addParamModal(el.dataset.addCol === 'attribute'); return; }
     if ((el = hit('[data-add-row]'))) { R.addRow = el.dataset.addRow; render(); const i = $('[data-add-val] input'); if (i) i.focus(); return; }
-    if ((el = hit('[data-col-menu]'))) { openPop(el, `<div class="menu" style="width:200px"><button class="mi" data-toast="Renaming is outside this prototype">${I.edit}<span class="grow">Rename</span></button><button class="mi" data-toast="Import is outside this prototype">${I.download}<span class="grow">Import values</span></button><div class="sep"></div><button class="mi" data-toast="Deleting is outside this prototype" style="color:var(--down)">${X.trash}<span class="grow">Delete</span></button></div>`, { align: 'right', onMount(p) { p.addEventListener('click', ev => { const b = ev.target.closest('[data-toast]'); if (b) { closePop(); toast(b.dataset.toast); } }); } }); return; }
-    if ((el = hit('[data-val-menu]'))) { const [k, v] = el.dataset.valMenu.split('|'); openPop(el, `<div class="menu" style="width:200px"><button class="mi" data-act="edit">${I.edit}<span class="grow">Edit value</span></button><div class="sep"></div><button class="mi" data-act="del" style="color:var(--down)">${X.trash}<span class="grow">Delete value</span></button></div>`, { align: 'right', onMount(p) { p.addEventListener('click', ev => { const b = ev.target.closest('[data-act]'); if (!b) return; closePop(); if (b.dataset.act === 'edit') simpleModal('Edit value', [['Value', v]], 'Save', vals => { renameValue(k, v, vals[0]); }); else confirmModal('Delete value?', `<b>${esc(v)}</b> will be removed from the list. Links that already use it keep working.`, () => { removeValue(k, v); }); }); } }); return; }
+    // Parameters / Attributes boards
+    if (hit('#rk-gfinish')) { endGrouping(true); return; }
+    if ((el = hit('#rk-bactions'))) { bulkActions(el); return; }
+    if ((el = hit('[data-col-menu]'))) { colMenu(el); return; }
+    if ((el = hit('[data-colall]'))) { const col = el.closest('.rk-col'); const ns = $$('.rk-val[data-node]', col).map(x => x.dataset.node); const all = ns.every(n => R.bd.checked.has(n)); ns.forEach(n => all ? R.bd.checked.delete(n) : R.bd.checked.add(n)); render(); return; }
+    if ((el = hit('.rk-val[data-node]'))) {
+      const n = el.dataset.node, g = R.bd.grouping;
+      if (g) { if (n === g.node) return; if (nodeKey(n) === nodeKey(g.node)) { toast('Pick values in other columns to group with ' + nodeVal(g.node)); return; } const e2 = edgeKey(g.node, n); if (g.draft.has(e2)) g.draft.delete(e2); else g.draft.add(e2); render(); return; }
+      if (hit('[data-grp]')) { R.bd.grouping = { noun: $('.rk-board').dataset.noun, node: n, draft: new Set(edgesFor($('.rk-board').dataset.noun)) }; R.bd.checked.clear(); render(); return; }
+      if (hit('[data-vset]')) { valueSettingsModal(n); return; }
+      if (hit('[data-vck]')) { if (R.bd.checked.has(n)) R.bd.checked.delete(n); else R.bd.checked.add(n); render(); return; }
+      return;
+    }
     // Shorteners
     if (hit('#rk-add-dom')) { addShortenerModal(); return; }
     if ((el = hit('[data-toggle-dom]'))) { const d = el.dataset.toggleDom; if (S.disabledDomains.has(d)) S.disabledDomains.delete(d); else S.disabledDomains.add(d); render(); toast(`${d} ${S.disabledDomains.has(d) ? 'disabled' : 'enabled'} for this workspace`); return; }
@@ -566,6 +752,8 @@
   }, true);
   function renameValue(k, from, to) { if (!to || to === from) return; const p = A.PARAMS.find(x => x.key === k); if (p) { const v = p.values.find(x => (x.v !== undefined ? x.v : x[0]) === from); if (v) { if (v.v !== undefined) v.v = to; else v[0] = to; } } else { const a = ATTRS.find(x => 'a:' + x.key === k); if (a && a.values) a.values = a.values.map(x => x === from ? to : x); } const ex = R.extra[k]; if (ex) R.extra[k] = ex.map(x => x === from ? to : x); render(); toast(`Renamed to “${to}”`); }
   function removeValue(k, v) { const p = A.PARAMS.find(x => x.key === k); if (p) { const i = p.values.findIndex(x => (x.v !== undefined ? x.v : x[0]) === v); if (i > -1) p.values.splice(i, 1); } else { const a = ATTRS.find(x => 'a:' + x.key === k); if (a && a.values) a.values = a.values.filter(x => x !== v); } if (R.extra[k]) R.extra[k] = R.extra[k].filter(x => x !== v); render(); toast(`Deleted “${v}”`); }
+  $('#view').addEventListener('mouseover', e => { if (!$('.rk-board')) return; const v = e.target.closest('.rk-val[data-node]'); boardHover(v ? v.dataset.node : null); });
+  $('#view').addEventListener('mouseleave', () => boardHover(null));
   $('#view').addEventListener('submit', e => {
     const f = e.target.closest('[data-add-val]');
     if (f) { e.preventDefault(); e.stopPropagation(); const k = f.dataset.addVal; const v = $('input', f).value.trim(); if (!v) return; (R.extra[k] = R.extra[k] || []).push(v); R.addRow = null; render(); toast(`Added “${v}”`); return; }

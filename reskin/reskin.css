@@ -345,3 +345,44 @@
 .rk-sx .rk-table td.pin-last::after, .rk-sx .rk-table th.pin-last::after { content: ""; position: absolute; top: 0; bottom: -1px; right: -14px; width: 14px; pointer-events: none; background: linear-gradient(to right, rgba(17,24,39,.09), transparent); border-left: 1px solid var(--border); opacity: 0; transition: opacity var(--dur) var(--ease); }
 .rk-sx.scrolled .rk-table td.pin-last::after, .rk-sx.scrolled .rk-table th.pin-last::after { opacity: 1; }
 .rk-sx .rk-table .w-qr { width: 72px; }
+
+/* Parameters + Attributes boards: staging's grouping / settings / checkboxes (2026-11-09) */
+.rk-board { position: relative; }
+.rk-wires { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 1; overflow: visible; }
+.rk-wires path { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-linecap: round; }
+.rk-col-h .ttl { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rk-col-h .colall { display: none; }
+.rk-col:hover .rk-col-h .colall, .rk-col-h .colall.on, .rk-board.checking .rk-col-h .colall { display: inline-flex; }
+.rk-col-h .cb, .rk-val .cb { width: 16px; height: 16px; flex: none; }
+.rk-val { position: relative; z-index: 2; }
+.rk-val .rk-vt { display: none; align-items: center; gap: 2px; padding: 0 2px; border-radius: 6px; background: var(--card); box-shadow: 0 0 0 1px var(--border); }
+.rk-val .rk-vt .icon-btn { opacity: 1; width: 24px; height: 24px; }
+.rk-val .rk-vt svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.rk-val:hover .rk-vt { display: inline-flex; }
+.rk-val > .cb { visibility: hidden; }
+.rk-col:hover .rk-val > .cb, .rk-board.checking .rk-val > .cb, .rk-val.ck > .cb { visibility: visible; }
+.rk-val.hl { background: var(--accent-faint); border-color: var(--accent); }
+.rk-val.ck { border-color: rgba(var(--accent-rgb), .5); }
+.rk-board.grouping .rk-val { cursor: pointer; }
+.rk-board.grouping .rk-val .rk-vt, .rk-board.grouping .rk-val > .cb { display: none; }
+.rk-board.grouping .rk-val:hover { border-color: var(--accent); }
+.rk-val.gsel { background: var(--accent-subtle); border-color: var(--accent); }
+.rk-val.ganchor { box-shadow: 0 0 0 3px rgba(var(--accent-rgb), .25); border-color: var(--accent-strong); color: var(--text-strong); font-weight: 500; }
+.rk-gbanner { display: flex; align-items: center; gap: 10px; margin: -4px 0 16px; padding: 10px 14px; border-radius: 10px; background: var(--accent-faint); border: 1px solid rgba(var(--accent-rgb), .25); color: var(--text); font-size: 13.5px; }
+.rk-gbanner svg { width: 16px; height: 16px; stroke: var(--accent-strong); fill: none; stroke-width: 2; flex: none; }
+.rk-col.field { min-height: 0; }
+.rk-colmenu .mi svg, .rk-colmenu .has-sub > svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.rk-colmenu .has-sub { position: relative; cursor: default; }
+.rk-colmenu .has-sub .sub { display: none; position: absolute; top: -6px; left: calc(100% + 2px); width: 180px; z-index: 5; padding: 6px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-lg); }
+.rk-colmenu .has-sub:hover .sub, .rk-colmenu .has-sub:focus-within .sub { display: block; }
+.rk-colmenu .sub .mi .check { width: 16px; display: inline-flex; visibility: hidden; color: var(--accent-strong); }
+.rk-colmenu .sub .mi.on .check { visibility: visible; }
+.rk-colmenu .sub .mi.on { font-weight: 500; }
+.inp.dis { background: var(--sunken); color: var(--text-muted); }
+.inp.dis input { color: var(--text-muted); }
+.vs-actions { align-items: center; }
+.vs-actions .grow { flex: 1; }
+.btn.ghost-del { color: var(--down); box-shadow: none; background: none; padding-left: 4px; gap: 6px; }
+.btn.ghost-del svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+.btn.ghost-del:hover { background: rgba(220, 38, 38, .06); }
+.scrim ~ .popover { z-index: 70; } /* pickers opened from a modal sit above it */
