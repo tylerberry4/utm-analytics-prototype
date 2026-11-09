@@ -66,7 +66,7 @@
   const SH_STATUS = { active: ['ok', 'Activated'], verified: ['ok', 'Verified'], pending: ['warn', 'Pending DNS'], connected: ['ok', 'Activated'] };
 
   /* ---------- State for these pages ---------- */
-  const R = { rq: '', sel: new Set(), groupBy: null, sort: null, lastWs: 'links', cols: {}, pretty: true, rulesOpen: true, addRow: null, yearly: true, deleted: new Set(), extra: {}, pcols: new Set(), pline: true };
+  const R = { rq: '', sel: new Set(), groupBy: null, sort: null, lastWs: 'links', cols: {}, pretty: true, rulesOpen: true, addRow: null, yearly: true, deleted: new Set(), extra: {} };
   const OWN = ['links', 'qr', 'templates', 'parameters', 'attributes', 'shorteners', 'rules', 'members', 'mg-workspaces', 'mg-parameters', 'mg-attributes', 'mg-templates', 'mg-qr', 'mg-sso', 'mg-integrations', 'mg-api', 'mg-members', 'mg-shorteners', 'mg-billing', 'mg-zapier'];
   const MANAGE_SHELL = ['mg-workspaces', 'mg-parameters', 'mg-attributes', 'mg-templates', 'mg-qr', 'mg-integrations', 'mg-members', 'mg-shorteners', 'mg-billing', 'mg-zapier']; // SSO + API keys keep the sidebar today
   const TITLES = { links: 'Activity History', qr: 'Custom QR Codes', templates: 'UTM Templates', parameters: 'Parameters', attributes: 'Attributes', shorteners: 'Link Shorteners', rules: 'Workspace Defaults', members: 'Members' };
@@ -111,48 +111,55 @@
     return `<div class="url-cell">${withQr ? `<button type="button" class="icon-btn" title="QR code" data-qr-of="${esc(url)}">${I.qr}</button>` : ''}<button type="button" class="icon-btn" title="Copy" data-copy-url="${esc(url)}">${I.copy}</button><a class="url" href="${esc(url)}" target="_blank" rel="noopener" title="${esc(url)}">${esc(base.replace(/^https?:\/\//, ''))}${qs ? `<span class="qs">${esc(qs)}</span>` : ''}</a></div>`; };
 
   /* ---------- Links ---------- */
-  /* Links: parameters on a thin line under each link (2026-11-09).
-     Today's app gives each UTM + custom parameter its own column and scrolls sideways.
-     Here the columns stay as they are and each link gets a second line of chips
-     (campaign, medium, source, … custom ones too) that spans the row, so nothing scrolls.
-     Gear: turn the line off for compact rows, or give any parameter its own column
-     (it then leaves the line). */
+  /* Links: today's side scroll, made easier to use (Tyler, 2026-11-09).
+     Like staging, every UTM + custom parameter gets its own column and the table scrolls sideways.
+     Added: checkbox, row icons and Short URL stay pinned on the left; a soft edge and a
+     "N more columns →" button show what's off to the right; the gear shows/hides any column. */
   const LINK_PARAMS = [['campaign', 'Campaign Name', 'utm_campaign'], ['medium', 'Medium', 'utm_medium'], ['source', 'Source', 'utm_source'], ['term', 'Term', 'utm_term'], ['content', 'Content', 'utm_content'], ['region', 'Region', 'region'], ['promo', 'Promo code', 'promo'], ['ad_id', 'Ad ID', 'ad_id']];
   // Example custom-parameter values (prototype only; staging shows custom params like "test1" as extra columns)
   const customOf = l => { const c = {}; c.region = ['us', 'uk', 'emea', 'apac'][l.id % 4]; if (/paid|cpc|display/.test(l.medium)) c.ad_id = 'ad_' + (4810 + l.id * 37); if (l.id % 3 === 0) c.promo = ['FALL20', 'VIP10', 'WELCOME'][l.id % 9 / 3 | 0]; return c; };
   const paramVal = (l, k) => l[k] !== undefined ? l[k] : customOf(l)[k];
-  const pinned = k => R.pcols.has(k);
   const paramName = p => R.pretty ? p[1] : p[2];
-  const plineRow = (l, span) => { const set = LINK_PARAMS.filter(p => !pinned(p[0]) && paramVal(l, p[0]));
-    return `<tr class="pl"><td class="pin0"></td><td class="pin1"></td><td colspan="${span - 2}"><div class="pline">${set.map(p => `<span class="pchip" title="${esc(p[2])}=${esc(paramVal(l, p[0]))}"><i>${esc(paramName(p))}</i>${esc(paramVal(l, p[0]))}</span>`).join('') || '<span class="muted">No parameters</span>'}</div></td></tr>`; };
+  const LINK_BASE = ['Created By', 'Created At', 'Template', 'Clicks', 'Full URL'];
   function linksPage() {
     const rows = links().filter(l => matches([l.slug, l.dest, l.by, A.templateOf(l), ...LINK_PARAMS.map(p => paramVal(l, p[0]) || '')].join(' ')));
     const vis = c => R.cols['links' + c] !== false;
     const COLS = [
       { l: '', cls: 'w-cb pin0', td: l => cbHTML(R.sel.has(l.slug), `data-sel="${esc(l.slug)}"`) },
       { l: '', cls: 'w-acts pin1', td: l => acts([[I.edit, 'Edit link', `data-edit-link="${esc(l.slug)}"`], [X.trash, 'Delete link', `data-del-link="${esc(l.slug)}"`, 'del'], [I.analytics, 'Link analytics', `data-link-analytics="${esc(l.slug)}"`]]) },
+      { l: 'Short URL', cls: 'pin2', td: l => urlCell(shortUrl(l), true) },
       { l: 'Created By', td: l => who(l.by) },
       { l: 'Created At', cls: 'muted', td: l => fdate(l.created) },
       { l: 'Template', td: l => esc(A.templateOf(l)) },
       { l: 'Clicks', cls: 'num', td: l => `<a href="#" class="clk" data-link-analytics="${esc(l.slug)}" title="Open analytics">${fmt.full(clicksOf(l.slug))}</a>` },
-      { l: 'Short URL', cls: 'w-short', td: l => urlCell(shortUrl(l), true) },
-      { l: 'Full URL', td: l => urlCell(fullUrl(l), true, R.pline) },
-      ...LINK_PARAMS.filter(p => pinned(p[0])).map(p => ({ l: paramName(p), cls: 'pcol', td: l => paramVal(l, p[0]) ? `<span class="mono" title="${esc(paramVal(l, p[0]))}">${esc(paramVal(l, p[0]))}</span>` : '<span class="muted">—</span>' })),
-    ].filter(c => !c.l || c.cls === 'pcol' || vis(c.l));
-    // One <tbody> per link so the row and its parameter line hover and select together
-    const row = l => `<tbody class="lkb${R.pline ? ' has-pl' : ''}"><tr class="${R.sel.has(l.slug) ? 'sel' : ''}" data-row="${esc(l.slug)}">${COLS.map(c => `<td class="${c.cls || ''}">${c.td(l)}</td>`).join('')}</tr>${R.pline ? plineRow(l, COLS.length) : ''}</tbody>`;
+      { l: 'Full URL', td: l => urlCell(fullUrl(l), true) },
+      ...LINK_PARAMS.map(p => ({ l: paramName(p), key: 'p:' + p[0], cls: 'pcol', td: l => paramVal(l, p[0]) ? `<span title="${esc(paramVal(l, p[0]))}">${esc(paramVal(l, p[0]))}</span>` : '' })),
+    ].filter(c => !c.l || c.cls === 'pin2' || vis(c.key || c.l));
+    const row = l => `<tr class="${R.sel.has(l.slug) ? 'sel' : ''}" data-row="${esc(l.slug)}">${COLS.map(c => `<td class="${c.cls || ''}">${c.td(l)}</td>`).join('')}</tr>`;
     let body;
     if (R.groupBy) {
-      const g = R.groupBy; const key = l => g === 'by' ? l.by : g === 'created' ? fdate(l.created) : g === 'template' ? A.templateOf(l) : (l[g] || 'Not set');
+      const g = R.groupBy; const key = l => g === 'by' ? l.by : g === 'created' ? fdate(l.created) : g === 'template' ? A.templateOf(l) : (paramVal(l, g) || 'Not set');
       const groups = {}; rows.forEach(l => (groups[key(l)] = groups[key(l)] || []).push(l));
-      body = Object.entries(groups).map(([k, ls]) => `<tbody class="grp"><tr><td colspan="${COLS.length}" style="background:var(--sunken);font-weight:600;color:var(--text-strong)">${esc(k)} <span class="muted" style="font-weight:400">· ${ls.length} link${ls.length === 1 ? '' : 's'}</span></td></tr></tbody>` + ls.map(row).join(''));
+      body = Object.entries(groups).map(([k, ls]) => `<tr class="grp"><td class="pin0"></td><td colspan="${COLS.length - 1}" style="font-weight:600;color:var(--text-strong)"><span class="grp-t">${esc(k)} <span class="muted" style="font-weight:400">· ${ls.length} link${ls.length === 1 ? '' : 's'}</span></span></td></tr>` + ls.map(row).join(''));
     } else body = rows.map(row);
-    const minw = 1060 + R.pcols.size * 140;
     return `<div class="view rk-page">${head(`${WS} Activity History`, `<button type="button" class="btn lg" data-toast="Import links via CSV is outside this prototype">Import links via CSV</button>`)}
       <div class="rk-tools"><button type="button" class="btn primary lg" id="rk-create-link">Create link</button><button type="button" class="btn lg" id="rk-group">${R.groupBy ? 'Grouped by ' + ({ by: 'Created by', created: 'Created at', campaign: 'Campaign name', medium: 'Medium', source: 'Source', term: 'Term', content: 'Content', template: 'Template' })[R.groupBy] : 'Group by'}${caret}</button>${search('Search links')}${exportBtn('links')}${gear()}</div>
-      ${table(COLS, body, { minw, cls: 'rk-links', bodies: true })}
+      <div class="rk-scrollbox">${table(COLS, body, { cls: 'rk-links' })}<button type="button" class="rk-more" id="rk-more" hidden><span></span>${I.chev}</button></div>
       ${recordsFoot(10)}</div>`;
   }
+  // After render: place the pinned Short URL column, then keep the edge shadow + "N more columns" button current
+  function setupLinksScroll() {
+    const w = $('.rk-links'); if (!w) return; const btn = $('#rk-more');
+    const p1 = $('th.pin1', w); const left = p1 ? p1.offsetLeft + p1.offsetWidth : 0;
+    $$('.pin2', w).forEach(c => c.style.left = left + 'px');
+    const update = () => {
+      const max = w.scrollWidth - w.clientWidth; w.classList.toggle('scrolled', w.scrollLeft > 2); w.classList.toggle('more', w.scrollLeft < max - 2);
+      const edge = w.scrollLeft + w.clientWidth; const hidden = $$('thead th', w).filter(th => th.offsetLeft + th.offsetWidth / 2 > edge).length;
+      btn.hidden = !hidden; $('span', btn).textContent = `${hidden} more column${hidden === 1 ? '' : 's'}`;
+    };
+    w.addEventListener('scroll', update, { passive: true }); update();
+  }
+  window.addEventListener('resize', () => { if (S.view === 'links') setupLinksScroll(); });
 
   /* ---------- QR codes ---------- */
   function qrPage() {
@@ -442,14 +449,13 @@
     openPop(anchor, `<div class="menu rk-cols"><label class="mi" style="cursor:pointer">${cbHTML(R.pretty, 'data-pretty')}<span class="grow">Show pretty names</span></label><div class="sep"></div>${cols.map(c => `<label class="mi" style="cursor:pointer">${cbHTML(on(c), `data-colcb="${esc(c)}"`)}<span class="grow">${esc(c)}</span></label>`).join('')}</div>`, { align: 'right', onMount(el) { el.addEventListener('click', e => { const b = e.target.closest('.cb'); if (!b) return; const now = !b.classList.contains('on'); b.classList.toggle('on', now); b.setAttribute('aria-checked', now); if (b.dataset.colcb) R.cols[S.view + b.dataset.colcb] = now; else R.pretty = now; }); } });
   }
   // Links: the table's columns, plus "Own column" for each parameter (pinned ones leave the chips)
+  // Links: show/hide every column, parameters included (custom ones tagged)
   function linkColsPop(anchor) {
-    const base = ['Created By', 'Created At', 'Template', 'Clicks', 'Short URL', 'Full URL'];
-    const html = () => `<div class="menu rk-cols" style="width:290px"><label class="mi" style="cursor:pointer">${cbHTML(R.pretty, 'data-pretty')}<span class="grow">Show pretty names</span></label><label class="mi" style="cursor:pointer">${cbHTML(R.pline, 'data-pline')}<span class="grow">Show parameters under each link</span></label><div class="sep"></div>
-      <div class="mh">Columns</div>${base.map(c => `<label class="mi" style="cursor:pointer">${cbHTML(R.cols['links' + c] !== false, `data-colcb="${esc(c)}"`)}<span class="grow">${esc(c)}</span></label>`).join('')}<div class="sep"></div>
-      <div class="mh">Give a parameter its own column</div>${LINK_PARAMS.map(p => `<label class="mi" style="cursor:pointer">${cbHTML(R.pcols.has(p[0]), `data-pcol="${p[0]}"`)}<span class="grow">${esc(p[1])}</span>${LINK_PARAMS.indexOf(p) > 4 ? '<span class="tag">Custom</span>' : ''}</label>`).join('')}</div>`;
-    openPop(anchor, html(), { align: 'right', onMount(el) { el.addEventListener('click', e => { const b = e.target.closest('.cb'); if (!b) return; e.preventDefault(); const now = !b.classList.contains('on'); b.classList.toggle('on', now); b.setAttribute('aria-checked', now);
-      if (b.dataset.colcb) R.cols['links' + b.dataset.colcb] = now; else if (b.hasAttribute('data-pline')) R.pline = now; else if (b.dataset.pcol) { if (now) R.pcols.add(b.dataset.pcol); else R.pcols.delete(b.dataset.pcol); } else R.pretty = now;
-      render(); }); } });
+    const item = (key, label, tag) => `<label class="mi" style="cursor:pointer">${cbHTML(R.cols['links' + key] !== false, `data-colcb="${esc(key)}"`)}<span class="grow">${esc(label)}</span>${tag ? '<span class="tag">Custom</span>' : ''}</label>`;
+    openPop(anchor, `<div class="menu rk-cols" style="width:260px"><label class="mi" style="cursor:pointer">${cbHTML(R.pretty, 'data-pretty')}<span class="grow">Show pretty names</span></label><div class="sep"></div>
+      <div class="mh">Columns</div>${LINK_BASE.map(c => item(c, c)).join('')}<div class="sep"></div>
+      <div class="mh">Parameters</div>${LINK_PARAMS.map((p, i) => item('p:' + p[0], p[1], i > 4)).join('')}</div>`, { align: 'right', onMount(el) { el.addEventListener('click', e => { const b = e.target.closest('.cb'); if (!b) return; e.preventDefault(); const now = !b.classList.contains('on'); b.classList.toggle('on', now); b.setAttribute('aria-checked', now);
+      if (b.dataset.colcb) R.cols['links' + b.dataset.colcb] = now; else R.pretty = now; render(); }); } });
   }
   function groupPop(anchor) {
     const opts = [['', 'Links'], ['by', 'Created By'], ['created', 'Created At'], ['campaign', 'Campaign Name'], ['medium', 'Medium'], ['source', 'Source'], ['term', 'Term'], ['content', 'Content'], ['template', 'Template']];
@@ -467,6 +473,7 @@
     $('#shell').classList.toggle('manage', manage);
     $$('.nav a').forEach(a => a.classList.toggle('active', a.dataset.nav === S.view));
     $('#topbar-title').textContent = MG_TITLES[S.view] || TITLES[S.view] || WS;
+    if (S.view === 'links') setupLinksScroll();
     document.title = `${MG_TITLES[S.view] || TITLES[S.view]} · UTM.io vReskin`;
     try { location.hash = S.view; } catch (e) { /* ignore */ }
     if (!manage && !S.view.startsWith('mg-')) R.lastWs = S.view;
@@ -494,6 +501,7 @@
     if (hit('[data-fakesel]')) { toast('Multi-select is outside this prototype'); return; }
     if ((el = hit('[data-export]'))) { toast(`Exported ${el.dataset.export} as CSV`); return; }
     if (hit('#rk-cols')) { columnsPop(hit('#rk-cols')); return; }
+    if (hit('#rk-more')) { const w = $('.rk-links'); w.scrollBy({ left: w.clientWidth * 0.7, behavior: 'smooth' }); return; }
     if (hit('#rq-clear')) { R.rq = ''; render({ focusSearch: true }); return; }
     if ((el = hit('.sortb'))) { toast('Sorting is outside this prototype'); return; }
     // Links / QR
