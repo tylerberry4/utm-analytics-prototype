@@ -325,26 +325,23 @@
 @media (max-width: 1100px) { .rd-grid { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 560px) { .rd-row:not(:has(.switch)) { flex-wrap: wrap; } .rd-row:has(.switch) .rd-c { width: auto; } .rd-c { width: 100%; justify-content: flex-start; } .rd-c .rd-ctl { width: 100%; } }
 
-/* Links: side scroll made easier (2026-11-09): pinned left columns, edge shadows, "N more columns" button */
+/* Side-scroll tables: Links, QR codes, Templates (2026-11-09): pinned left columns, edge shadows, "N more columns" button */
 .rk-scrollbox { position: relative; }
-.rk-links .rk-table { min-width: 100%; width: max-content; }
-.rk-links .pcol { max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
-.rk-links .rk-table .pin0, .rk-links .rk-table .pin1, .rk-links .rk-table .pin2 { position: sticky; z-index: 2; background: var(--card); }
-.rk-links .rk-table th.pin0, .rk-links .rk-table th.pin1, .rk-links .rk-table th.pin2 { z-index: 3; }
-.rk-links .rk-table .pin0 { left: 0; }
-.rk-links .rk-table .pin1 { left: 36px; }
-.rk-links .rk-table .pin2 { left: 158px; transition: box-shadow var(--dur) var(--ease); }
-.rk-links.scrolled .rk-table .pin2 { box-shadow: 8px 0 12px -8px rgba(17,24,39,.18), 1px 0 0 var(--border); }
-.rk-links .rk-table tbody tr:hover .pin0, .rk-links .rk-table tbody tr:hover .pin1, .rk-links .rk-table tbody tr:hover .pin2 { background: var(--hover); }
-.rk-links .rk-table tbody tr.sel .pin0, .rk-links .rk-table tbody tr.sel .pin1, .rk-links .rk-table tbody tr.sel .pin2 { background: var(--accent-faint); }
-.rk-links .rk-table tr.grp td { background: var(--sunken); }
-.rk-links .rk-table tr.grp .grp-t { position: sticky; left: 50px; }
+.rk-sx .rk-table { min-width: 100%; width: max-content; }
+.rk-sx .pcol { max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+.rk-sx .rk-table .pin { position: sticky; z-index: 2; background: var(--card); }
+.rk-sx .rk-table th.pin { z-index: 3; }
+.rk-sx .rk-table tbody tr:hover .pin { background: var(--hover); }
+.rk-sx .rk-table tbody tr.sel .pin { background: var(--accent-faint); }
+.rk-sx .rk-table tr.grp td { background: var(--sunken); }
+.rk-sx .rk-table tr.grp .grp-t { position: sticky; left: 50px; }
 .rk-scrollbox::after { content: ''; position: absolute; top: 0; right: 0; bottom: 0; width: 28px; pointer-events: none; border-radius: 0 var(--radius) var(--radius) 0; background: linear-gradient(to left, rgba(17,24,39,.07), transparent); opacity: 0; transition: opacity var(--dur) var(--ease); }
-.rk-scrollbox:has(.rk-links.more)::after { opacity: 1; }
+.rk-scrollbox:has(.rk-sx.more)::after { opacity: 1; }
 .rk-more { position: absolute; top: 7px; right: 10px; z-index: 4; display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 8px 0 12px; border-radius: 999px; background: var(--card); color: var(--accent-strong); font-size: 12.5px; font-weight: 500; box-shadow: var(--shadow-sm, 0 1px 3px rgba(17,24,39,.12)), 0 0 0 1px var(--border); }
 .rk-more:hover { background: var(--accent-faint); }
 .rk-more svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; transform: rotate(-90deg); }
 .rk-more[hidden] { display: none; }
 .rk-cols .mh { padding: 6px 10px 4px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-faint); }
-.rk-links .rk-table td.pin2::after, .rk-links .rk-table th.pin2::after { content: ""; position: absolute; top: 0; bottom: -1px; right: -14px; width: 14px; pointer-events: none; background: linear-gradient(to right, rgba(17,24,39,.09), transparent); border-left: 1px solid var(--border); opacity: 0; transition: opacity var(--dur) var(--ease); }
-.rk-links.scrolled .rk-table td.pin2::after, .rk-links.scrolled .rk-table th.pin2::after { opacity: 1; }
+.rk-sx .rk-table td.pin-last::after, .rk-sx .rk-table th.pin-last::after { content: ""; position: absolute; top: 0; bottom: -1px; right: -14px; width: 14px; pointer-events: none; background: linear-gradient(to right, rgba(17,24,39,.09), transparent); border-left: 1px solid var(--border); opacity: 0; transition: opacity var(--dur) var(--ease); }
+.rk-sx.scrolled .rk-table td.pin-last::after, .rk-sx.scrolled .rk-table th.pin-last::after { opacity: 1; }
+.rk-sx .rk-table .w-qr { width: 72px; }

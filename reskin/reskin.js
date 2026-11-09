@@ -123,35 +123,39 @@
   const LINK_BASE = ['Created By', 'Created At', 'Template', 'Clicks', 'Full URL'];
   function linksPage() {
     const rows = links().filter(l => matches([l.slug, l.dest, l.by, A.templateOf(l), ...LINK_PARAMS.map(p => paramVal(l, p[0]) || '')].join(' ')));
-    const vis = c => R.cols['links' + c] !== false;
-    const COLS = [
-      { l: '', cls: 'w-cb pin0', td: l => cbHTML(R.sel.has(l.slug), `data-sel="${esc(l.slug)}"`) },
-      { l: '', cls: 'w-acts pin1', td: l => acts([[I.edit, 'Edit link', `data-edit-link="${esc(l.slug)}"`], [X.trash, 'Delete link', `data-del-link="${esc(l.slug)}"`, 'del'], [I.analytics, 'Link analytics', `data-link-analytics="${esc(l.slug)}"`]]) },
-      { l: 'Short URL', cls: 'pin2', td: l => urlCell(shortUrl(l), true) },
+    const ALL = [
+      { l: '', cls: 'w-cb pin', td: l => cbHTML(R.sel.has(l.slug), `data-sel="${esc(l.slug)}"`) },
+      { l: '', cls: 'w-acts pin', td: l => acts([[I.edit, 'Edit link', `data-edit-link="${esc(l.slug)}"`], [X.trash, 'Delete link', `data-del-link="${esc(l.slug)}"`, 'del'], [I.analytics, 'Link analytics', `data-link-analytics="${esc(l.slug)}"`]]) },
+      { l: 'Short URL', cls: 'pin', td: l => urlCell(shortUrl(l), true) },
       { l: 'Created By', td: l => who(l.by) },
       { l: 'Created At', cls: 'muted', td: l => fdate(l.created) },
       { l: 'Template', td: l => esc(A.templateOf(l)) },
       { l: 'Clicks', cls: 'num', td: l => `<a href="#" class="clk" data-link-analytics="${esc(l.slug)}" title="Open analytics">${fmt.full(clicksOf(l.slug))}</a>` },
       { l: 'Full URL', td: l => urlCell(fullUrl(l), true) },
       ...LINK_PARAMS.map(p => ({ l: paramName(p), key: 'p:' + p[0], cls: 'pcol', td: l => paramVal(l, p[0]) ? `<span title="${esc(paramVal(l, p[0]))}">${esc(paramVal(l, p[0]))}</span>` : '' })),
-    ].filter(c => !c.l || c.cls === 'pin2' || vis(c.key || c.l));
+    ];
+    const COLS = sxVisible('links', ALL);
     const row = l => `<tr class="${R.sel.has(l.slug) ? 'sel' : ''}" data-row="${esc(l.slug)}">${COLS.map(c => `<td class="${c.cls || ''}">${c.td(l)}</td>`).join('')}</tr>`;
     let body;
     if (R.groupBy) {
       const g = R.groupBy; const key = l => g === 'by' ? l.by : g === 'created' ? fdate(l.created) : g === 'template' ? A.templateOf(l) : (paramVal(l, g) || 'Not set');
       const groups = {}; rows.forEach(l => (groups[key(l)] = groups[key(l)] || []).push(l));
-      body = Object.entries(groups).map(([k, ls]) => `<tr class="grp"><td class="pin0"></td><td colspan="${COLS.length - 1}" style="font-weight:600;color:var(--text-strong)"><span class="grp-t">${esc(k)} <span class="muted" style="font-weight:400">· ${ls.length} link${ls.length === 1 ? '' : 's'}</span></span></td></tr>` + ls.map(row).join(''));
+      body = Object.entries(groups).map(([k, ls]) => `<tr class="grp"><td class="pin"></td><td colspan="${COLS.length - 1}" style="font-weight:600;color:var(--text-strong)"><span class="grp-t">${esc(k)} <span class="muted" style="font-weight:400">· ${ls.length} link${ls.length === 1 ? '' : 's'}</span></span></td></tr>` + ls.map(row).join(''));
     } else body = rows.map(row);
     return `<div class="view rk-page">${head(`${WS} Activity History`, `<button type="button" class="btn lg" data-toast="Import links via CSV is outside this prototype">Import links via CSV</button>`)}
       <div class="rk-tools"><button type="button" class="btn primary lg" id="rk-create-link">Create link</button><button type="button" class="btn lg" id="rk-group">${R.groupBy ? 'Grouped by ' + ({ by: 'Created by', created: 'Created at', campaign: 'Campaign name', medium: 'Medium', source: 'Source', term: 'Term', content: 'Content', template: 'Template' })[R.groupBy] : 'Group by'}${caret}</button>${search('Search links')}${exportBtn('links')}${gear()}</div>
-      <div class="rk-scrollbox">${table(COLS, body, { cls: 'rk-links' })}<button type="button" class="rk-more" id="rk-more" hidden><span></span>${I.chev}</button></div>
+      ${sxTable(COLS, body)}
       ${recordsFoot(10)}</div>`;
   }
-  // After render: place the pinned Short URL column, then keep the edge shadow + "N more columns" button current
-  function setupLinksScroll() {
-    const w = $('.rk-links'); if (!w) return; const btn = $('#rk-more');
-    const p1 = $('th.pin1', w); const left = p1 ? p1.offsetLeft + p1.offsetWidth : 0;
-    $$('.pin2', w).forEach(c => c.style.left = left + 'px');
+  /* Side-scroll tables (Links, QR codes, Templates): cells with class "pin" stay on the left,
+     the last pinned column gets an edge shadow once scrolled, and "N more columns" shows what's
+     off to the right. Columns hide/show from the gear (R.cols[view + key]). */
+  const sxVisible = (view, COLS) => COLS.filter(c => !c.l || /\bpin\b/.test(c.cls || '') || R.cols[view + (c.key || c.l)] !== false);
+  const sxTable = (COLS, body) => `<div class="rk-scrollbox">${table(COLS, body, { cls: 'rk-sx' })}<button type="button" class="rk-more" id="rk-more" hidden><span></span>${I.chev}</button></div>`;
+  function setupScroll() {
+    const w = $('.rk-sx'); if (!w) return; const btn = $('#rk-more');
+    const ths = $$('thead th.pin', w); const lefts = ths.map(th => th.offsetLeft - (ths[0] ? ths[0].offsetLeft : 0));
+    $$('tr', w).forEach(tr => { const pins = $$(':scope > .pin', tr); pins.forEach((c, k) => { c.style.left = lefts[k] + 'px'; c.classList.toggle('pin-last', pins.length === lefts.length && k === lefts.length - 1); }); });
     const update = () => {
       const max = w.scrollWidth - w.clientWidth; w.classList.toggle('scrolled', w.scrollLeft > 2); w.classList.toggle('more', w.scrollLeft < max - 2);
       const edge = w.scrollLeft + w.clientWidth; const hidden = $$('thead th', w).filter(th => th.offsetLeft + th.offsetWidth / 2 > edge).length;
@@ -159,17 +163,28 @@
     };
     w.addEventListener('scroll', update, { passive: true }); update();
   }
-  window.addEventListener('resize', () => { if (S.view === 'links') setupLinksScroll(); });
+  window.addEventListener('resize', () => { if ($('.rk-sx')) setupScroll(); });
 
   /* ---------- QR codes ---------- */
+  const QR_BASE = ['Created By', 'Created At', 'Template', 'Clicks', 'Full URL'];
   function qrPage() {
-    const rows = links().filter(l => l.qr > 0).filter(l => matches([l.slug, l.dest, l.by, A.templateOf(l)].join(' ')));
-    const row = l => { const d = designOf(l.slug); return `<tr class="${R.sel.has(l.slug) ? 'sel' : ''}"><td class="w-cb">${cbHTML(R.sel.has(l.slug), `data-sel="${esc(l.slug)}"`)}</td><td style="width:72px"><img class="qrthumb" src="${qrURL(l.slug, d.fg, d.bg)}" alt="QR code for ${esc(l.slug)}" data-qr-open="${esc(l.slug)}" style="cursor:pointer"></td>
-      <td class="w-acts">${acts([[I.edit, 'Edit QR code', `data-edit-link="${esc(l.slug)}"`], [I.analytics, 'Link analytics', `data-link-analytics="${esc(l.slug)}"`]])}</td>
-      <td>${who(l.by)}</td><td class="muted">${fdate(l.created)}</td><td>${esc(A.templateOf(l))}</td><td>${urlCell(shortUrl(l))}</td><td class="num">${fmt.full(clicksOf(l.slug))}</td><td>${urlCell(fullUrl(l))}</td></tr>`; };
+    const rows = links().filter(l => l.qr > 0).filter(l => matches([l.slug, l.dest, l.by, A.templateOf(l), ...LINK_PARAMS.map(p => paramVal(l, p[0]) || '')].join(' ')));
+    const COLS = sxVisible('qr', [
+      { l: '', cls: 'w-cb pin', td: l => cbHTML(R.sel.has(l.slug), `data-sel="${esc(l.slug)}"`) },
+      { l: 'QR Code', cls: 'w-qr pin', td: l => { const d = designOf(l.slug); return `<img class="qrthumb" src="${qrURL(l.slug, d.fg, d.bg)}" alt="QR code for ${esc(l.slug)}" data-qr-open="${esc(l.slug)}" style="cursor:pointer">`; } },
+      { l: '', cls: 'w-acts pin', td: l => acts([[I.edit, 'Edit QR code', `data-edit-link="${esc(l.slug)}"`], [I.analytics, 'Link analytics', `data-link-analytics="${esc(l.slug)}"`]]) },
+      { l: 'Short URL', cls: 'pin', td: l => urlCell(shortUrl(l)) },
+      { l: 'Created By', td: l => who(l.by) },
+      { l: 'Created At', cls: 'muted', td: l => fdate(l.created) },
+      { l: 'Template', td: l => esc(A.templateOf(l)) },
+      { l: 'Clicks', cls: 'num', td: l => fmt.full(clicksOf(l.slug)) },
+      { l: 'Full URL', td: l => urlCell(fullUrl(l)) },
+      ...LINK_PARAMS.map(p => ({ l: paramName(p), key: 'p:' + p[0], cls: 'pcol', td: l => paramVal(l, p[0]) ? `<span title="${esc(paramVal(l, p[0]))}">${esc(paramVal(l, p[0]))}</span>` : '' })),
+    ]);
+    const row = l => `<tr class="${R.sel.has(l.slug) ? 'sel' : ''}">${COLS.map(c => `<td class="${c.cls || ''}">${c.td(l)}</td>`).join('')}</tr>`;
     return `<div class="view rk-page">${head(`${WS} Custom QR Codes`)}
       <div class="rk-tools"><button type="button" class="btn primary lg" id="rk-create-qr">Create QR code</button><button type="button" class="btn lg" data-toast="The QR designer is outside this prototype">Design QR template</button><button type="button" class="btn lg" data-toast="The QR designer is outside this prototype">Edit QR template</button>${search('Search QR codes')}${gear()}</div>
-      ${table([{ l: '', cls: 'w-cb' }, { l: 'QR Code' }, { l: '', cls: 'w-acts' }, { l: 'Created By' }, { l: 'Created At' }, { l: 'Template' }, { l: 'Short URL' }, { l: 'Clicks', cls: 'num' }, { l: 'Full URL' }], rows.map(row), { minw: 1060 })}</div>`;
+      ${sxTable(COLS, rows.map(row))}</div>`;
   }
 
   /* ---------- Templates ---------- */
@@ -178,10 +193,23 @@
       <td class="w-acts">${acts([[I.edit, 'Edit template', `data-edit-tpl="${t.key}"`], [I.copy, 'Duplicate template', `data-dup-tpl="${t.key}"`]])}</td>
       <td>${who(t.by)}</td><td class="muted">${fdate(t.created)}</td><td><b style="font-weight:500">${esc(t.name)}</b></td><td class="mono muted">${esc(t.slug)}</td><td class="mono">${esc(t.campaign)}</td><td class="mono">${esc(t.medium)}</td><td class="mono">${esc(t.source)}</td><td class="mono">${esc(t.term)}</td><td class="mono">${esc(t.content)}</td></tr>`;
   const TPL_COLS = [{ l: '', cls: 'w-cb' }, { l: '', cls: 'w-acts' }, { l: 'Created By' }, { l: 'Created At' }, { l: 'Name' }, { l: 'Template Slug' }, { l: 'Campaign Name' }, { l: 'Medium' }, { l: 'Source' }, { l: 'Term' }, { l: 'Content' }];
+  const TPL_BASE = ['Created By', 'Created At', 'Template Slug'];
+  const TPL_PARAMS = LINK_PARAMS.filter(p => p[0] !== 'ad_id');
   function templatesPage() {
+    const rows = tplRows();
+    const COLS = sxVisible('templates', [
+      { l: '', cls: 'w-cb pin', td: t => cbHTML(R.sel.has('t:' + t.key), `data-sel="t:${t.key}"`) },
+      { l: '', cls: 'w-acts pin', td: t => acts([[I.edit, 'Edit template', `data-edit-tpl="${t.key}"`], [I.copy, 'Duplicate template', `data-dup-tpl="${t.key}"`]]) },
+      { l: 'Name', cls: 'pin', td: t => `<b style="font-weight:500">${esc(t.name)}</b>` },
+      { l: 'Created By', td: t => who(t.by) },
+      { l: 'Created At', cls: 'muted', td: t => fdate(t.created) },
+      { l: 'Template Slug', cls: 'muted', td: t => `<span class="mono">${esc(t.slug)}</span>` },
+      ...TPL_PARAMS.map(p => ({ l: paramName(p), key: 'p:' + p[0], cls: 'pcol', td: t => t[p[0]] ? `<span class="mono" title="${esc(t[p[0]])}">${esc(t[p[0]])}</span>` : '' })),
+    ]);
+    const row = t => `<tr class="${R.sel.has('t:' + t.key) ? 'sel' : ''}">${COLS.map(c => `<td class="${c.cls || ''}">${c.td(t)}</td>`).join('')}</tr>`;
     return `<div class="view rk-page">${head(`${WS} UTM Templates`, `<button type="button" class="btn lg" data-toast="Import templates via CSV is outside this prototype">Import templates via CSV</button>`)}
       <div class="rk-tools"><button type="button" class="btn primary lg" id="rk-create-tpl">Create template</button>${search('Search templates')}${exportBtn('templates')}${gear()}</div>
-      ${table(TPL_COLS, tplRows().map(tplRow), { minw: 1240 })}</div>`;
+      ${sxTable(COLS, rows.map(row))}</div>`;
   }
 
   /* ---------- Parameters + Attributes boards ---------- */
@@ -444,18 +472,20 @@
   }
   function columnsPop(anchor) {
     const cols = { links: ['Created By', 'Created At', 'Template', 'Clicks', 'Short URL', 'Full URL', 'Campaign Name', 'Medium', 'Source', 'Term', 'Content', 'Notes'], qr: ['Created By', 'Created At', 'Template', 'Short URL', 'Clicks', 'Full URL'], templates: ['Created By', 'Created At', 'Name', 'Template Slug', 'Campaign Name', 'Medium', 'Source', 'Term', 'Content'], parameters: A.PARAMS.map(p => p.label) }[S.view] || ['Created By', 'Created At', 'Name', 'Status'];
-    if (S.view === 'links') return linkColsPop(anchor);
+    if (SX_MENU[S.view]) return sxColsPop(anchor);
     const on = c => R.cols[S.view + c] !== false;
     openPop(anchor, `<div class="menu rk-cols"><label class="mi" style="cursor:pointer">${cbHTML(R.pretty, 'data-pretty')}<span class="grow">Show pretty names</span></label><div class="sep"></div>${cols.map(c => `<label class="mi" style="cursor:pointer">${cbHTML(on(c), `data-colcb="${esc(c)}"`)}<span class="grow">${esc(c)}</span></label>`).join('')}</div>`, { align: 'right', onMount(el) { el.addEventListener('click', e => { const b = e.target.closest('.cb'); if (!b) return; const now = !b.classList.contains('on'); b.classList.toggle('on', now); b.setAttribute('aria-checked', now); if (b.dataset.colcb) R.cols[S.view + b.dataset.colcb] = now; else R.pretty = now; }); } });
   }
   // Links: the table's columns, plus "Own column" for each parameter (pinned ones leave the chips)
-  // Links: show/hide every column, parameters included (custom ones tagged)
-  function linkColsPop(anchor) {
-    const item = (key, label, tag) => `<label class="mi" style="cursor:pointer">${cbHTML(R.cols['links' + key] !== false, `data-colcb="${esc(key)}"`)}<span class="grow">${esc(label)}</span>${tag ? '<span class="tag">Custom</span>' : ''}</label>`;
+  // Links / QR codes / Templates: show or hide every column, parameters included (custom ones tagged)
+  const SX_MENU = { links: () => [LINK_BASE, LINK_PARAMS], qr: () => [QR_BASE, LINK_PARAMS], templates: () => [TPL_BASE, TPL_PARAMS] };
+  function sxColsPop(anchor) {
+    const v = S.view, [base, params] = SX_MENU[v]();
+    const item = (key, label, tag) => `<label class="mi" style="cursor:pointer">${cbHTML(R.cols[v + key] !== false, `data-colcb="${esc(key)}"`)}<span class="grow">${esc(label)}</span>${tag ? '<span class="tag">Custom</span>' : ''}</label>`;
     openPop(anchor, `<div class="menu rk-cols" style="width:260px"><label class="mi" style="cursor:pointer">${cbHTML(R.pretty, 'data-pretty')}<span class="grow">Show pretty names</span></label><div class="sep"></div>
-      <div class="mh">Columns</div>${LINK_BASE.map(c => item(c, c)).join('')}<div class="sep"></div>
-      <div class="mh">Parameters</div>${LINK_PARAMS.map((p, i) => item('p:' + p[0], p[1], i > 4)).join('')}</div>`, { align: 'right', onMount(el) { el.addEventListener('click', e => { const b = e.target.closest('.cb'); if (!b) return; e.preventDefault(); const now = !b.classList.contains('on'); b.classList.toggle('on', now); b.setAttribute('aria-checked', now);
-      if (b.dataset.colcb) R.cols['links' + b.dataset.colcb] = now; else R.pretty = now; render(); }); } });
+      <div class="mh">Columns</div>${base.map(c => item(c, c)).join('')}<div class="sep"></div>
+      <div class="mh">Parameters</div>${params.map(p => item('p:' + p[0], p[1], LINK_PARAMS.indexOf(p) > 4)).join('')}</div>`, { align: 'right', onMount(el) { el.addEventListener('click', e => { const b = e.target.closest('.cb'); if (!b) return; e.preventDefault(); const now = !b.classList.contains('on'); b.classList.toggle('on', now); b.setAttribute('aria-checked', now);
+      if (b.dataset.colcb) R.cols[v + b.dataset.colcb] = now; else R.pretty = now; render(); }); } });
   }
   function groupPop(anchor) {
     const opts = [['', 'Links'], ['by', 'Created By'], ['created', 'Created At'], ['campaign', 'Campaign Name'], ['medium', 'Medium'], ['source', 'Source'], ['term', 'Term'], ['content', 'Content'], ['template', 'Template']];
@@ -473,7 +503,7 @@
     $('#shell').classList.toggle('manage', manage);
     $$('.nav a').forEach(a => a.classList.toggle('active', a.dataset.nav === S.view));
     $('#topbar-title').textContent = MG_TITLES[S.view] || TITLES[S.view] || WS;
-    if (S.view === 'links') setupLinksScroll();
+    if ($('.rk-sx')) setupScroll();
     document.title = `${MG_TITLES[S.view] || TITLES[S.view]} · UTM.io vReskin`;
     try { location.hash = S.view; } catch (e) { /* ignore */ }
     if (!manage && !S.view.startsWith('mg-')) R.lastWs = S.view;
@@ -501,7 +531,7 @@
     if (hit('[data-fakesel]')) { toast('Multi-select is outside this prototype'); return; }
     if ((el = hit('[data-export]'))) { toast(`Exported ${el.dataset.export} as CSV`); return; }
     if (hit('#rk-cols')) { columnsPop(hit('#rk-cols')); return; }
-    if (hit('#rk-more')) { const w = $('.rk-links'); w.scrollBy({ left: w.clientWidth * 0.7, behavior: 'smooth' }); return; }
+    if (hit('#rk-more')) { const w = $('.rk-sx'); w.scrollBy({ left: w.clientWidth * 0.7, behavior: 'smooth' }); return; }
     if (hit('#rq-clear')) { R.rq = ''; render({ focusSearch: true }); return; }
     if ((el = hit('.sortb'))) { toast('Sorting is outside this prototype'); return; }
     // Links / QR
