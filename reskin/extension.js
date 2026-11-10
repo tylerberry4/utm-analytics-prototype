@@ -195,22 +195,30 @@
   /* ---------- Links (the current workspace) ---------- */
   function linkRows() {
     const q = st.q.trim().toLowerCase();
-    return wsLinks().filter(l => (!st.here || l.dest === TAB_URL) && (!q || [l.title, l.slug, l.dest, l.campaign, l.source, l.medium, l.content, l.by].join(' ').toLowerCase().includes(q)));
+    return wsLinks().filter(l => !q || [l.title, l.slug, l.dest, l.campaign, l.source, l.medium, l.content, l.by].join(' ').toLowerCase().includes(q));
   }
   function linksHTML() {
-    const here = wsLinks().filter(l => l.dest === TAB_URL), hereClicks = here.reduce((a, l) => a + clicks30(l), 0);
-    const rows = linkRows();
+    const rows = linkRows(), q = st.q.trim();
+    const here = rows.filter(l => l.dest === TAB_URL), rest = rows.filter(l => l.dest !== TAB_URL);
+    const hereClicks = here.reduce((a, l) => a + clicks30(l), 0);
     const rowH = l => { const v = daily(l, 30), c = clicks30(l); return `<div class="xp-row ${l.fresh ? 'fresh' : ''}" data-open="${esc(l.slug)}" tabindex="0">
         <div class="xp-row-t"><b title="${esc(l.title)}">${esc(l.title)}</b><span class="mono">${esc(l.slug)}</span><span class="xp-by">${A.avatar(l.by, 'xs')}${esc(l.by.split(' ')[0])} · ${fmt.d ? fmt.d(new Date(l.created + 'T00:00:00')) : esc(l.created)}</span></div>
         <svg class="xp-spark" viewBox="0 0 56 20" aria-hidden="true"><polyline points="${sparkPts(v, 56, 20)}"/></svg>
         <div class="xp-n"><b>${fmt.n(c)}</b><span>30 days</span></div>
         <div class="xp-row-a"><button type="button" class="icon-btn" data-copy="https://${esc(l.slug)}" title="Copy short link">${I.copy}</button><button type="button" class="icon-btn" data-more="${esc(l.slug)}" title="More">${I.more}</button></div>
       </div>`; };
+    const MAX = 3, shown = st.here ? here : here.slice(0, MAX);
+    const hereBlock = here.length ? `<section class="xp-onpage" aria-label="Links to the page you're on">
+        <div class="xp-onpage-hd">${X.page}<b>On this page</b><span class="mono" title="${esc(TAB_URL)}">${esc(TAB_URL)}</span><span class="xp-onpage-n">${here.length} · ${fmt.n(hereClicks)} clicks</span></div>
+        <div class="xp-list">${shown.map(rowH).join('')}</div>
+        ${here.length > MAX ? `<button type="button" class="xp-onpage-more" data-act="here">${st.here ? 'Show fewer' : `Show all ${here.length}`}</button>` : ''}
+      </section>`
+      : (!q ? `<div class="xp-onpage-empty">${X.page}<span class="grow">No links to <span class="mono">${esc(TAB_URL)}</span> yet</span><button type="button" class="btn lnk" data-tab="create">Create one</button></div>` : '');
     return `<div class="xp-links">
-      <button type="button" class="xp-here ${st.here ? 'on' : ''}" data-act="here">${X.page}<span class="grow"><b>This page</b> · ${here.length} link${here.length === 1 ? '' : 's'} · ${fmt.n(hereClicks)} clicks in 30 days</span><span class="xp-here-x">${st.here ? 'Show all' : 'Show'}</span></button>
       <div class="rk-search xp-search">${I.search}<input id="xp-q" placeholder="Search ${esc(E.WS)} links, campaigns, people…" value="${esc(st.q)}" aria-label="Search links"></div>
-      <div class="xp-count">${rows.length} link${rows.length === 1 ? '' : 's'} in ${esc(E.WS)}${st.here ? ' pointing at this page' : ''}</div>
-      <div class="xp-list">${rows.map(rowH).join('') || `<div class="rk-empty" style="padding:28px 8px">No links match “${esc(st.q)}”.</div>`}</div>
+      <div class="xp-results">${hereBlock}
+      ${rest.length ? `<div class="xp-count">${here.length ? 'Everything else' : 'All links'} in ${esc(E.WS)} · ${rest.length}</div><div class="xp-list">${rest.map(rowH).join('')}</div>`
+        : (!here.length ? `<div class="rk-empty" style="padding:28px 8px">No links match “${esc(q)}”.</div>` : '')}</div>
     </div>`;
   }
   function moreMenu(anchor, slug) {
@@ -289,7 +297,7 @@
       else if (act === 'back') { st.detail = null; paint(); }
       else if (act === 'dup') duplicate(D.LINKS.find(x => x.slug === st.detail));
       else if (act === 'report') report(st.detail);
-      else if (act === 'see-links') { st.created = null; st.tab = 'links'; st.q = ''; st.here = false; paint(); }
+      else if (act === 'see-links') { st.created = null; st.tab = 'links'; st.q = ''; paint(); }
       else if (act === 'another') { st.created = null; st.draft = X0(); paint(); }
       else if (act === 'same-again') { st.created = null; paint(); }
       return;
@@ -303,7 +311,7 @@
   });
   pop.addEventListener('input', e => {
     const f = e.target.dataset.f, d = st.draft;
-    if (e.target.id === 'xp-q') { st.q = e.target.value; const list = $('.xp-list', pop), cnt = $('.xp-count', pop); const tmp = document.createElement('div'); tmp.innerHTML = linksHTML(); list.replaceWith($('.xp-list', tmp)); cnt.replaceWith($('.xp-count', tmp)); return; }
+    if (e.target.id === 'xp-q') { st.q = e.target.value; const tmp = document.createElement('div'); tmp.innerHTML = linksHTML(); $('.xp-results', pop).replaceWith($('.xp-results', tmp)); return; }
     if (!f) return;
     if (f === 'url') d.url = e.target.value; else if (f === 'notes') d.notes = e.target.value; else if (f.startsWith('a:')) d.attrs[f.slice(2)] = e.target.value; else if (f.startsWith('v:')) d.vals[f.slice(2)] = e.target.value;
     refreshFoot();
