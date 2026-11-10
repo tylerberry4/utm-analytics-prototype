@@ -696,6 +696,8 @@
   }
   function go(view, opts = {}) { if (!PAGES[view]) return; closePop(); closeModal(); R.bd.grouping = null; R.bd.checked.clear(); S.view = view; S.slug = null; R.rq = ''; R.sel.clear(); R.addRow = null; if (view !== 'links') R.groupBy = null; A.compute(); render({ top: true, ...opts }); }
   window.RESKIN = { owns: v => OWN.includes(v), render, go };
+  // Shared with extension.js (the Chrome extension popup)
+  window.RESKIN.ext = { ATTRS, WORKSPACES, WS, qrURL, extraVals: k => R.extra[k] || [], ownsView: () => OWN.includes(S.view) };
 
   /* ---------- Events (capture, so app.js's handlers don't also run on these pages) ---------- */
   $('#view').addEventListener('click', e => {
